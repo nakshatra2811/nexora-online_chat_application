@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone } from "lucide-react";
+import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone, Eye, EyeOff, XCircle } from "lucide-react";
 import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
 import { nexoraFetch, APP_NAME, APP_LOGO } from "@/lib/config";
 
@@ -33,6 +33,8 @@ function AuthContent() {
   const [forgotNewPassword, setForgotNewPassword] = useState("");
   const [forgotError, setForgotError] = useState("");
   const [isSendingRecovery, setIsSendingRecovery] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Real-time Username Availability Check (Database)
   useEffect(() => {
@@ -397,32 +399,75 @@ function AuthContent() {
               )}
 
               <div className="space-y-1">
-                <div className="neumorphic-input flex items-center rounded-xl px-4 py-3">
+                <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
                   <User className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
                   <input 
                     type="text" 
                     required 
                     value={username} 
                     onChange={(e) => setUsername(e.target.value)} 
-                    className="ml-3 w-full bg-transparent outline-none" 
+                    className="ml-3 w-full bg-transparent outline-none pr-8" 
                     placeholder={isLogin ? "Username or Email" : "Username"} 
                     style={{ color: "var(--text-primary)" }} 
                   />
+                  <div className="absolute right-4 flex items-center">
+                    {usernameStatus === "checking" && <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
+                    {usernameStatus === "available" && <CheckCircle className="h-5 w-5 text-green-500" />}
+                    {usernameStatus === "taken" && <XCircle className="h-5 w-5 text-red-500" />}
+                  </div>
                 </div>
-                {usernameStatus === "checking" && <p className="text-[10px] ml-1 text-blue-400">Checking availability...</p>}
-                {usernameStatus === "taken" && <p className="text-[10px] ml-1 text-red-400">Username taken.</p>}
-                {usernameStatus === "available" && <p className="text-[10px] ml-1 text-green-400">Username available.</p>}
+                {!isLogin && (
+                  <div className="flex px-1">
+                    {usernameStatus === "checking" && <p className="text-[10px] text-blue-400">Checking availability...</p>}
+                    {usernameStatus === "taken" && <p className="text-[10px] text-red-400 font-bold uppercase tracking-tighter">Protocol Error: Handle Taken</p>}
+                    {usernameStatus === "available" && <p className="text-[10px] text-green-400 font-bold uppercase tracking-tighter">Identity Verified</p>}
+                  </div>
+                )}
               </div>
 
-              <div className="neumorphic-input flex items-center rounded-xl px-4 py-3">
+              <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
                 <Lock className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
-                <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="ml-3 w-full bg-transparent outline-none" placeholder="Password" style={{ color: "var(--text-primary)" }} />
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  required 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  className="ml-3 w-full bg-transparent outline-none pr-8" 
+                  placeholder="Password" 
+                  style={{ color: "var(--text-primary)" }} 
+                />
+                {password && (
+                  <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                )}
               </div>
 
               {!isLogin && (
-                <div className="neumorphic-input flex items-center rounded-xl px-4 py-3">
+                <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
                   <Shield className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
-                  <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="ml-3 w-full bg-transparent outline-none" placeholder="Confirm Password" style={{ color: "var(--text-primary)" }} />
+                  <input 
+                    type={showConfirmPassword ? "text" : "password"} 
+                    required 
+                    value={confirmPassword} 
+                    onChange={(e) => setConfirmPassword(e.target.value)} 
+                    className="ml-3 w-full bg-transparent outline-none pr-8" 
+                    placeholder="Confirm Password" 
+                    style={{ color: "var(--text-primary)" }} 
+                  />
+                  {confirmPassword && (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  )}
                 </div>
               )}
 
