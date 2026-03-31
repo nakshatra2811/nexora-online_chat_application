@@ -2294,7 +2294,7 @@ export default function ChatsPage() {
                       {user?.name?.[0]}
                     </div>
                     {isUserOnline && !hasStory && (
-                      <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-md z-10"
+                      <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
                         style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
                   </div>
@@ -2335,7 +2335,7 @@ export default function ChatsPage() {
                       {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.name[0]}
                     </div>
                     {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
-                      <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-md z-10"
+                      <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
                         style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
                   </div>
@@ -2387,7 +2387,7 @@ export default function ChatsPage() {
                     <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${myProfile.color} flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
                        {myProfile.name?.[0] || "M"}
                     </div>
-                    <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-md z-10" 
+                    <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573] z-10 animate-pulse" 
                          style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                  </div>
                  <div className="min-w-0">
@@ -2425,28 +2425,31 @@ export default function ChatsPage() {
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
                     onClick={() => setActiveThread(null)}
-                    className="p-2 rounded-full lg:hidden mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] border border-transparent active:border-[var(--border-subtle)]"
+                    className="p-2 md:p-2.5 rounded-2xl lg:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
-                    <ArrowLeft className="w-5 h-5" />
+                    <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </motion.button>
                   <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
-                    <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${activeThread.color} flex items-center justify-center text-white font-bold shadow-md cursor-pointer`}>
+                    <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color} flex items-center justify-center text-white font-black shadow-md cursor-pointer shrink-0`}>
                       {activeThread.name[0]}
                     </div>
                     {activeThread.online || liveOnlineUsers.includes(activeThread.username) ? (
-                      <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-md z-10"
+                      <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse"
                         style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     ) : null}
                   </div>
-                  <div className="cursor-pointer group" onClick={() => setSelectedProfileUser(activeThread)}>
-                    <h3 className="font-bold text-sm transition-all group-hover:text-[#6c5ce7]"
-                      style={{ color: "var(--text-primary)" }}>
-                      {activeThread.name}
-                    </h3>
-                    <div className="flex items-center gap-1.5">
-                      <div className={`h-2 w-2 rounded-full ${activeThread.online ? "bg-green-500" : "bg-gray-500"}`} />
-                      <span className="text-[9px] uppercase font-bold tracking-wider" style={{ color: activeThread.online ? "#2ed573" : "var(--text-muted)" }}>
-                        {activeThread.online ? "Online" : "Offline"}
+                  <div className="cursor-pointer group min-w-0 pr-2" onClick={() => setSelectedProfileUser(activeThread)}>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h3 className="font-extrabold text-[13px] md:text-base truncate max-w-[110px] xs:max-w-none transition-all group-hover:text-[#6c5ce7]"
+                        style={{ color: "var(--text-primary)" }}>
+                        {activeThread.name}
+                      </h3>
+                      <span className="hidden xs:inline-flex text-[7px] md:text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center">Verified</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className={`h-1.5 w-1.5 rounded-full ${activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "bg-green-500 shadow-[0_0_5px_#2ed573]" : "bg-gray-500"}`} />
+                      <span className="text-[9px] md:text-[10px] uppercase font-black tracking-wider truncate" style={{ color: activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "#2ed573" : "var(--text-muted)" }}>
+                        {peerTyping[activeThread.username] ? "Typing..." : (activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "Active Protocol" : "Offline")}
                       </span>
                     </div>
                   </div>
@@ -2603,7 +2606,7 @@ export default function ChatsPage() {
                 return (
                   <div key={m.id || idx} id={`msg-${m.id}`} className={`flex ${m.isSelf ? "justify-end" : "justify-start"} group/msg relative transition-all`}
                     style={isMatchHighlight ? { filter: "brightness(1.15)" } : isInSearchResults ? { opacity: 0.75 } : {}}>
-                    <div className={`max-w-[75%] lg:max-w-[60%] flex flex-col ${m.isSelf ? "items-end" : "items-start"}`}>
+                    <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] flex flex-col ${m.isSelf ? "items-end" : "items-start"}`}>
 
                       <div
                         onContextMenu={(e) => { e.preventDefault(); setMsgMenu(m.id); }}

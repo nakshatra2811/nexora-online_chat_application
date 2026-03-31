@@ -607,7 +607,7 @@ export default function ProfilePage() {
                 <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>{profile.name}</h2>
                 <div className="flex flex-col items-center gap-1 mb-3 w-full px-4">
                   <p className="text-sm font-bold text-[#6c5ce7]">@{profile.username}</p>
-                  <span className="inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-[#6c5ce7]/10 text-[#6c5ce7] shadow-sm whitespace-nowrap overflow-hidden text-ellipsis">
+                  <span className="flex items-center justify-center px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-[#6c5ce7]/10 text-[#6c5ce7] shadow-sm border border-[#6c5ce7]/20 min-w-0 max-w-full text-center">
                     {userRole}
                   </span>
                 </div>
@@ -619,8 +619,11 @@ export default function ProfilePage() {
                 <div className="w-full mt-5 space-y-2">
                   <div className="flex items-center gap-2 text-sm p-2.5 rounded-xl"
                     style={{ background: "var(--bg-card)", color: "var(--text-secondary)" }}>
-                    <Shield className="w-4 h-4 text-[#2ed573] shrink-0" />
-                    <span>Online &amp; Encrypted</span>
+                    <div className="relative">
+                      <Shield className="w-4 h-4 text-[#2ed573] shrink-0" />
+                      <div className="absolute inset-0 bg-[#2ed573]/40 blur-[4px] rounded-full animate-pulse" />
+                    </div>
+                    <span className="font-bold">Online &amp; Encrypted</span>
                   </div>
                 </div>
 
