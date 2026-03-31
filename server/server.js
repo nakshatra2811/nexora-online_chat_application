@@ -1179,6 +1179,94 @@ app.post('/api/admin/test-mail', async (req, res) => {
 });
 
 // ------------------------------------------------------------------
+// PROFILE EMAIL UPDATE ROUTES
+// ------------------------------------------------------------------
+
+// Request Email Change
+app.post('/api/profile/request-email-change', async (req, res) => {
+    const { username, newEmail } = req.body;
+    if (!username || !newEmail) return res.status(400).json({ error: "Username and new email required." });
+
+    try {
+        if (!db) return res.status(500).json({ error: "Database not ready." });
+        
+        // Check if new email is already taken
+        const existing = await db.get('SELECT * FROM users WHERE LOWER(email) = ?', [newEmail.toLowerCase()]);
+        if (existing) return res.status(400).json({ error: "This email is already linked to another account." });
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = Date.now() + 10 * 60 * 1000;
+        
+        // Use a specialized context key so password reset and email change don't clash,
+        // or just use newEmail as the key and store the context.
+        otpStore.set(newEmail.toLowerCase() + "_change", { otp, expiry, verified: false, username });
+
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f4f7fa; text-align: center; padding: 50px; }
+                    .code-box { font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #6c5ce7; margin: 30px 0; background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 24px; padding: 35px; }
+                    .container { background: #fff; padding: 50px; border-radius: 32px; max-width: 550px; margin: auto; box-shadow: 0 30px 60px rgba(108,92,231,0.08); }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h2 style="font-size: 26px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px;">Verify Your New Email</h2>
+                    <p style="color: #64748b; line-height: 1.8;">You requested to change your Nexora email address. Use this code to verify:</p>
+                    <div class="code-box">${otp}</div>
+                    <p style="color: #94a3b8; font-size: 13px;">Valid for the next 10 minutes.</p>
+                </div>
+            </body>
+            </html>
+        `;
+        const mailOptions = {
+            from: `"${process.env.GMAIL_NAME || 'Nexora Core'}" <${process.env.GMAIL_USER}>`,
+            to: newEmail,
+            subject: 'Nexora: Verify Email Update',
+            html: html
+        };
+        await emailTransporter.sendMail(mailOptions);
+        res.json({ status: "success", message: "OTP sent to new email." });
+    } catch (err) {
+        console.error("Email update request error:", err);
+        res.status(500).json({ error: "Failed to send OTP." });
+    }
+});
+
+// Verify Email Change
+app.post('/api/profile/verify-email-change', async (req, res) => {
+    const { username, newEmail, otp } = req.body;
+    if (!username || !newEmail || !otp) return res.status(400).json({ error: "Missing required fields." });
+
+    const key = newEmail.toLowerCase() + "_change";
+    const record = otpStore.get(key);
+    
+    if (!record || record.username !== username) {
+        return res.status(400).json({ error: "Invalid request. Please request a new OTP." });
+    }
+    if (Date.now() > record.expiry) {
+        otpStore.delete(key);
+        return res.status(400).json({ error: "OTP expired." });
+    }
+    if (record.otp !== otp.toString().trim()) {
+        return res.status(400).json({ error: "Incorrect OTP." });
+    }
+
+    try {
+        if (!db) return res.status(500).json({ error: "Database not ready." });
+        await db.run('UPDATE users SET email = ? WHERE username = ?', [newEmail.toLowerCase(), username]);
+        otpStore.delete(key);
+        res.json({ status: "success", message: "Email updated successfully. Identity graph resynced." });
+    } catch (err) {
+        console.error("Email update error:", err);
+        res.status(500).json({ error: "Failed to update email." });
+    }
+});
+
+
+// ------------------------------------------------------------------
 // DYNAMIC CMS CONFIGURATION (SEO & Brand)
 // ------------------------------------------------------------------
 

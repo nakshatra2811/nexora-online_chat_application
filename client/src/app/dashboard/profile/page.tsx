@@ -580,15 +580,31 @@ export default function ProfilePage() {
                     style={{ color: "var(--text-secondary)" }} placeholder="Phone Number" />
                 </div>
 
-                <button onClick={() => {
+                <button onClick={async () => {
                   const saved = localStorage.getItem("nexora_user_profile");
                   const oldProfile = saved ? JSON.parse(saved) : null;
-                  
+                  const myUsername = localStorage.getItem("nexora_signup_username");
+
                   if (oldProfile && oldProfile.email !== profile.email) {
                     setTempEmail(profile.email);
                     // Revert email in current state temporarily for OTP flow
                     setProfile({ ...profile, email: oldProfile.email });
-                    setShowOTPModal(true);
+                    
+                    try {
+                        const { nexoraFetch } = await import("@/lib/config");
+                        const res = await nexoraFetch('/api/profile/request-email-change', {
+                            method: "POST",
+                            body: JSON.stringify({ username: myUsername, newEmail: profile.email })
+                        });
+                        
+                        if (res && res.status === "success") {
+                            setShowOTPModal(true);
+                        } else {
+                            alert(res.error || "Failed to send verification code. Ensure email is not already in use.");
+                        }
+                    } catch (e) {
+                        alert("Network error while requesting verification.");
+                    }
                   } else {
                     localStorage.setItem("nexora_user_profile", JSON.stringify(profile));
                     setIsEditing(false);
@@ -961,23 +977,35 @@ export default function ProfilePage() {
                   className="neumorphic-input w-full p-4 text-center text-2xl font-black tracking-[0.5em] rounded-2xl bg-transparent outline-none border-2 border-[#6c5ce7]/20 focus:border-[#6c5ce7] transition-all"
                   style={{ color: "#1a1a2e" }} placeholder="000000" />
                 
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Experimental Account: Use 123456</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">A 6-digit code has been sent</p>
 
                 <div className="flex gap-3 pt-4">
                   <button onClick={() => setShowOTPModal(false)}
                     className="flex-1 py-3.5 rounded-2xl font-bold text-sm text-[#64748b] bg-gray-100 hover:bg-gray-200 transition-colors">
                     Discard
                   </button>
-                  <button onClick={() => {
-                    if (otpInput === "123456") {
-                      const updatedProfile = { ...profile, email: tempEmail };
-                      setProfile(updatedProfile);
-                      localStorage.setItem("nexora_user_profile", JSON.stringify(updatedProfile));
-                      setShowOTPModal(false);
-                      setIsEditing(false);
-                      setOtpInput("");
-                    } else {
-                      alert("Invalid Protocol Code.");
+                  <button onClick={async () => {
+                    const myUsername = localStorage.getItem("nexora_signup_username");
+                    try {
+                        const { nexoraFetch } = await import("@/lib/config");
+                        const res = await nexoraFetch('/api/profile/verify-email-change', {
+                            method: "POST",
+                            body: JSON.stringify({ username: myUsername, newEmail: tempEmail, otp: otpInput })
+                        });
+                        
+                        if (res && res.status === "success") {
+                            const updatedProfile = { ...profile, email: tempEmail };
+                            setProfile(updatedProfile);
+                            localStorage.setItem("nexora_user_profile", JSON.stringify(updatedProfile));
+                            localStorage.setItem("nexora_signup_email", tempEmail);
+                            setShowOTPModal(false);
+                            setIsEditing(false);
+                            setOtpInput("");
+                        } else {
+                            alert(res.error || "Invalid Protocol Code.");
+                        }
+                    } catch (e) {
+                        alert("Network error.");
                     }
                   }}
                     className="flex-1 py-3.5 rounded-2xl font-bold text-sm text-white bg-gradient-to-r from-[#6c5ce7] to-[#00d4ff] shadow-lg hover:opacity-90 transition-opacity">
