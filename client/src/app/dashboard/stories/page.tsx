@@ -470,13 +470,17 @@ export default function StoriesPage() {
                             <p className="text-xs text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No views yet</p>
                           ) : (
                             viewersList.map((v, idx) => (
-                              <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer" style={{ background: "transparent" }}
+                              <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all" 
+                                   style={{ background: "rgba(255,255,255,0.03)" }}
                                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-                                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                <div className={`w-7 h-7 rounded-full bg-gradient-to-tr flex items-center justify-center text-[11px] font-bold shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"}`} style={{ color: "#ffffff" }}>
-                                  {v.name[0]}
+                                   onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}>
+                                <div className={`w-9 h-9 rounded-full bg-gradient-to-tr flex items-center justify-center text-xs font-black shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"}`} style={{ color: "#ffffff" }}>
+                                  {(v.name || v.username)[0].toUpperCase()}
                                 </div>
-                                <span className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{v.name}</span>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-[13px] font-bold block truncate" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
+                                  <span className="text-[10px] opacity-50 block truncate" style={{ color: "#ffffff" }}>@{v.username}</span>
+                                </div>
                               </div>
                             ))
                           )}

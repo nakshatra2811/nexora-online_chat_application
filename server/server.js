@@ -277,28 +277,27 @@ const io = new Server(server, {
     }
 });
 
-// Track connected users for call routing
-const connectedUsers = new Map(); // socketId -> userId
-const userSockets = new Map();   // userId -> socketId
+// Track connected users for call routing and device sync
+const socketToUser = new Map(); // socketId -> userId
 
 io.on('connection', (socket) => {
     console.log(`[+] Node Connected: ${socket.id}`);
 
-    // User registers their identity
+    // User registers their identity — Joins a private room for cross-device sync
     socket.on('register', (userId) => {
-        connectedUsers.set(socket.id, userId);
-        userSockets.set(userId, socket.id);
-        console.log(`[+] Registered: ${userId} → ${socket.id}`);
+        if (!userId) return;
+        const normalizedId = userId.toLowerCase();
+        socketToUser.set(socket.id, normalizedId);
+        
+        // Joining a room named after the userId allows us to emit to all of their devices
+        socket.join(normalizedId);
+        console.log(`[+] Registered: ${normalizedId} → Channel Sync Active`);
 
         // 1. Broadcast online status to others
-        socket.broadcast.emit('user_status', { userId, status: 'online' });
-
-        // 2. Send current online users list to this user
-        const onlineUsers = Array.from(userSockets.keys());
-        socket.emit('current_online_users', onlineUsers);
+        socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
 
         // 3. Deliver any queued offline messages
-        deliverQueuedMessages(userId, socket);
+        deliverQueuedMessages(normalizedId, socket);
     });
 
     // Join an encrypted room tunnel
@@ -312,28 +311,41 @@ io.on('connection', (socket) => {
     // ═══════════════════════════════════════════════
     socket.on('dm:message', (data) => {
         // data: { to, from, ciphertext, iv, msgId, timestamp, replyTo? }
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        const enriched = { ...data, from: fromUserId || data.from };
+        const targetId = (data.to || '').toLowerCase();
+        const senderId = socketToUser.get(socket.id);
+        const enriched = { ...data, from: senderId || data.from };
 
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('dm:message', enriched);
+        // 1. Relay to target user's devices
+        const targetRoom = io.sockets.adapter.rooms.get(targetId);
+        if (targetRoom && targetRoom.size > 0) {
+            io.to(targetId).emit('dm:message', enriched);
         } else {
-            // Offline: queue for delivery when they reconnect
-            queueMessageForUser(data.to, enriched);
+            // Offline: queue for delivery when any of their devices reconnect
+            queueMessageForUser(targetId, enriched);
+        }
+
+        // 2. Sync to sender's OTHER devices
+        if (senderId) {
+            socket.to(senderId).emit('dm:message', enriched);
         }
     });
 
     // Media message relay (attachment)
     socket.on('dm:media', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        const enriched = { ...data, from: fromUserId || data.from, isMedia: true };
+        const targetId = (data.to || '').toLowerCase();
+        const senderId = socketToUser.get(socket.id);
+        const enriched = { ...data, from: senderId || data.from, isMedia: true };
 
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('dm:media', enriched);
+        const targetRoom = io.sockets.adapter.rooms.get(targetId);
+        if (targetRoom && targetRoom.size > 0) {
+            io.to(targetId).emit('dm:media', enriched);
         } else {
-            queueMessageForUser(data.to, enriched);
+            queueMessageForUser(targetId, enriched);
+        }
+
+        // Sync to sender's OTHER devices
+        if (senderId) {
+            socket.to(senderId).emit('dm:media', enriched);
         }
     });
 
@@ -341,69 +353,61 @@ io.on('connection', (socket) => {
     // TYPING INDICATOR (per-conversation)
     // ═══════════════════════════════════════════════
     socket.on('dm:typing', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:typing', { from: fromUserId, isTyping: data.isTyping });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:typing', { from: senderId, isTyping: data.isTyping });
         }
     });
 
     // ═══════════════════════════════════════════════
-    // MESSAGE DELETION RELAY (Delete for both)
+    // MESSAGE DELETION RELAY (Sync across all devices)
     // ═══════════════════════════════════════════════
     socket.on('dm:delete', (data) => {
-        // data: { to, from, msgId }
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:delete', { from: fromUserId, msgId: data.msgId });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            // Tell the receiver
+            io.to(data.to?.toLowerCase()).emit('dm:delete', { from: senderId, msgId: data.msgId });
+            // Tell sender's other devices
+            socket.to(senderId).emit('dm:delete', { from: senderId, msgId: data.msgId });
         }
     });
 
     socket.on('dm:wallpaper', (data) => {
-        // data: { to, from, wallpaper }
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:wallpaper', { from: fromUserId, wallpaper: data.wallpaper });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
+            socket.to(senderId).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
         }
     });
 
-    // ═══════════════════════════════════════════════
-    // MESSAGE SEEN RECEIPT
-    // ═══════════════════════════════════════════════
     socket.on('dm:seen', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:seen', { from: fromUserId, msgId: data.msgId });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:seen', { from: senderId, msgId: data.msgId });
         }
     });
 
     socket.on('dm:disappear_setting', (data) => {
-        // data: { to, timer }
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:disappear_setting', { from: fromUserId, timer: data.timer });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:disappear_setting', { from: senderId, timer: data.timer });
+            socket.to(senderId).emit('dm:disappear_setting', { from: senderId, timer: data.timer });
         }
     });
 
     socket.on('dm:clear_chat', (data) => {
-        // data: { to }
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:clear_chat', { from: fromUserId });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:clear_chat', { from: senderId });
+            socket.to(senderId).emit('dm:clear_chat', { from: senderId });
         }
     });
 
     socket.on('dm:reaction', (data) => {
-        // data: { to, msgId, emoji }
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:reaction', { from: fromUserId, msgId: data.msgId, emoji: data.emoji });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:reaction', { from: senderId, msgId: data.msgId, emoji: data.emoji });
+            socket.to(senderId).emit('dm:reaction', { from: senderId, msgId: data.msgId, emoji: data.emoji });
         }
     });
 
@@ -417,11 +421,10 @@ io.on('connection', (socket) => {
     // Server relays public keys — never stores or inspects them
     // ═══════════════════════════════════════════════
     socket.on('key:exchange', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        if (targetSocketId) {
-            const fromUserId = connectedUsers.get(socket.id);
-            io.to(targetSocketId).emit('key:exchange', {
-                from: fromUserId,
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('key:exchange', {
+                from: senderId,
                 publicKey: data.publicKey,
             });
         }
@@ -433,22 +436,22 @@ io.on('connection', (socket) => {
     // ═══════════════════════════════════════════════
 
     socket.on('call:offer', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        if (targetSocketId) {
-            const fromUserId = connectedUsers.get(socket.id);
-            io.to(targetSocketId).emit('call:offer', {
-                from: fromUserId,
+        const senderId = socketToUser.get(socket.id);
+        const targetId = data.to?.toLowerCase();
+        if (senderId) {
+            io.to(targetId).emit('call:offer', {
+                from: senderId,
                 sdp: data.sdp,
                 callType: data.callType,
                 callerName: data.callerName,
                 callerColor: data.callerColor,
             });
             // Push notification for incoming call
-            const sub = pushSubscriptions.get(data.to);
+            const sub = pushSubscriptions.get(targetId);
             if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
                 webpush.sendNotification(sub, JSON.stringify({
                     title: `Incoming ${data.callType} call`,
-                    body: `${data.callerName || fromUserId} is calling you on Nexora`,
+                    body: `${data.callerName || senderId} is calling you on Nexora`,
                     icon: '/icon.svg',
                     badge: '/icon.svg',
                 })).catch(() => {});
@@ -457,34 +460,30 @@ io.on('connection', (socket) => {
     });
 
     socket.on('call:answer', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        if (targetSocketId) {
-            const fromUserId = connectedUsers.get(socket.id);
-            io.to(targetSocketId).emit('call:answer', { from: fromUserId, sdp: data.sdp });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('call:answer', { from: senderId, sdp: data.sdp });
         }
     });
 
     socket.on('call:ice-candidate', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        if (targetSocketId) {
-            const fromUserId = connectedUsers.get(socket.id);
-            io.to(targetSocketId).emit('call:ice-candidate', { from: fromUserId, candidate: data.candidate });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('call:ice-candidate', { from: senderId, candidate: data.candidate });
         }
     });
 
     socket.on('call:hangup', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        if (targetSocketId) {
-            const fromUserId = connectedUsers.get(socket.id);
-            io.to(targetSocketId).emit('call:hangup', { from: fromUserId });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('call:hangup', { from: senderId });
         }
     });
 
     socket.on('call:reject', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        if (targetSocketId) {
-            const fromUserId = connectedUsers.get(socket.id);
-            io.to(targetSocketId).emit('call:reject', { from: fromUserId });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('call:reject', { from: senderId });
         }
     });
 
@@ -515,24 +514,29 @@ io.on('connection', (socket) => {
     });
 
     // ═══════════════════════════════════════════════
-    // VIEW-ONCE ACKNOWLEDGEMENT (both sides remove)
+    // VIEW-ONCE ACKNOWLEDGEMENT (both sides sync)
     // ═══════════════════════════════════════════════
     socket.on('dm:view_once_ack', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:view_once_ack', { from: fromUserId, msgId: data.msgId });
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:view_once_ack', { from: senderId, msgId: data.msgId });
+            socket.to(senderId).emit('dm:view_once_ack', { from: senderId, msgId: data.msgId });
         }
     });
 
 
 
     socket.on('disconnect', () => {
-        const userId = connectedUsers.get(socket.id);
+        const userId = socketToUser.get(socket.id);
         if (userId) {
-            userSockets.delete(userId);
-            connectedUsers.delete(socket.id);
-            io.emit('user_status', { userId, status: 'offline' });
+            socketToUser.delete(socket.id);
+            
+            // Check if this was the last device for this user
+            const userRoom = io.sockets.adapter.rooms.get(userId);
+            if (!userRoom || userRoom.size === 0) {
+                 io.emit('user_status', { userId, status: 'offline' });
+                 console.log(`[-] Registered Identity Fully Logged Off: ${userId}`);
+            }
         }
         console.log(`[-] Node Disconnected: ${socket.id}`);
     });
@@ -1321,8 +1325,20 @@ app.get('/api/notifications', async (req, res) => {
 app.post('/api/notifications/read', async (req, res) => {
     const { id } = req.body;
     try {
-        if (!db) return res.json({ success: false });
+        if (!db) return res.status(500).json({ success: false });
         await db.run('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false });
+    }
+});
+
+app.post('/api/notifications/clear', async (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.status(400).json({ error: "Username required" });
+    try {
+        if (!db) return res.status(500).json({ success: false });
+        await db.run('DELETE FROM notifications WHERE LOWER(owner_username) = LOWER(?)', [username]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false });
@@ -1424,26 +1440,45 @@ app.post('/api/stories/reply', async (req, res) => {
     if (!storyId || !username || !targetUsername || !message) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
+        
+        const sender = username.toLowerCase();
+        const receiver = targetUsername.toLowerCase();
+
+        // 1. Save as notification
         await db.run(
             'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
-            [targetUsername.toLowerCase(), username.toLowerCase(), 'story_reply', `Replied to your story: "${message}"`]
+            [receiver, sender, 'story_reply', `Replied to your story: "${message}"`]
         );
         
-        // Push notification for the reply
-        const sub = pushSubscriptions.get(targetUsername.toLowerCase());
+        // 2. Determine if we should also send it as a socket DM message
+        // Since Nexora is E2E, we emit a 'dm:message' but note it's from a story
+        const storyRelayPayload = {
+            to: receiver,
+            from: sender,
+            text: `💬 Replied to story: ${message}`,
+            msgId: Date.now().toString(),
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isSystem: false,
+            fromStory: true
+        };
+
+        // Notify via socket if online
+        const targetSocket = userSockets.get(receiver);
+        if (targetSocket) {
+             io.to(targetSocket).emit('new_notification', { type: 'story_reply', message: `Replied to your story: "${message}"`, from_username: sender });
+             io.to(targetSocket).emit('dm:message', storyRelayPayload);
+        } else {
+             queueMessageForUser(receiver, storyRelayPayload);
+        }
+
+        // Push notification
+        const sub = pushSubscriptions.get(receiver);
         if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
             webpush.sendNotification(sub, JSON.stringify({
                 title: `New story reply from ${username}`,
                 body: message,
-                icon: '/icon.svg',
-                badge: '/icon.svg',
+                icon: '/icon.svg'
             })).catch(() => {});
-        }
-        
-        // Notify via socket if online
-        const targetSocket = userSockets.get(targetUsername.toLowerCase());
-        if (targetSocket) {
-             io.to(targetSocket).emit('new_notification', { type: 'story_reply', message: `Replied to your story: "${message}"`, from_username: username.toLowerCase() });
         }
 
         res.json({ status: "success" });

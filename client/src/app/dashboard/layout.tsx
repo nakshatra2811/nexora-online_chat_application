@@ -374,77 +374,67 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <motion.nav
         initial={{ y: -80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="hidden md:flex items-center justify-between h-16 px-6 z-50 shrink-0"
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="hidden md:flex items-center justify-between h-[60px] px-8 z-50 shrink-0 sticky top-0"
         style={{
-          background: isDark
-            ? "rgba(14, 14, 19, 0.75)"
-            : "rgba(255, 255, 255, 0.65)",
-          backdropFilter: "blur(32px) saturate(1.8)",
-          WebkitBackdropFilter: "blur(32px) saturate(1.8)",
+          background: isDark ? "rgba(10, 10, 16, 0.75)" : "rgba(255, 255, 255, 0.65)",
+          backdropFilter: "blur(40px) saturate(2)",
+          WebkitBackdropFilter: "blur(40px) saturate(2)",
           borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}`,
-          boxShadow: isDark
-            ? "0 4px 30px rgba(108,92,231,0.06)"
-            : "0 4px 30px rgba(0,0,0,0.04)",
+          boxShadow: isDark ? "0 4px 30px rgba(0,0,0,0.5)" : "0 4px 30px rgba(0,0,0,0.04)",
         }}
       >
         <div className="flex items-center gap-4">
-          {/* Brand */}
+          {/* Brand Identity */}
           <motion.div
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            className="flex items-center gap-3 cursor-pointer select-none"
+            whileHover={{ scale: 1.01 }}
+            className="flex items-center gap-3.5 cursor-pointer select-none group"
             onClick={() => triggerAction("/dashboard/chats")}
           >
-            <img src="/logo.svg" alt="Nexora Logo" className="w-10 h-10 shrink-0 object-contain drop-shadow-md rounded-[12px]" />
-            <h1 className="text-xl font-extrabold tracking-tighter" style={{ color: "var(--text-primary)" }}>Nexora</h1>
+            <div className="relative">
+              <div className="absolute -inset-1.5 bg-[#6c5ce7] opacity-0 group-hover:opacity-20 blur-xl rounded-full transition-opacity duration-500" />
+              <img src="/logo.svg" alt="Nexora" className="w-8 h-8 shrink-0 object-contain drop-shadow-xl rounded-[10px] relative z-10" />
+            </div>
+            <div className="flex flex-col justify-center">
+              <h1 className="text-lg font-[900] tracking-tighter leading-none" style={{ color: "var(--text-primary)" }}>Nexora</h1>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#6c5ce7]">The Private Chat Protocol</span>
+                <span className="text-[7.5px] font-bold opacity-30 uppercase tracking-widest">v1.2</span>
+              </div>
+            </div>
           </motion.div>
         </div>
 
-        {/* Center Nav Items */}
-        <div className="flex items-center gap-1">
+        {/* Center Navigation Protocol */}
+        <div className="flex items-center gap-1.5 h-full">
           {navItems.map((item, i) => {
             const isActive = pathname === item.href;
             return (
               <motion.button
                 key={item.name}
-                initial={{ y: -20, opacity: 0 }}
+                initial={{ y: -10, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.1 + i * 0.04, ease: [0.16, 1, 0.3, 1] }}
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.95 }}
+                transition={{ delay: 0.1 + i * 0.05, ease: "easeOut" }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => triggerAction(item.href)}
-                className="relative flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200"
+                className="relative flex items-center gap-2.5 px-4 h-10 rounded-2xl transition-all duration-300"
                 style={{
                   color: isActive ? "#6c5ce7" : "var(--text-secondary)",
-                  background: isActive
-                    ? isDark ? "rgba(108,92,231,0.12)" : "rgba(108,92,231,0.08)"
-                    : "transparent",
+                  background: isActive ? (isDark ? "rgba(108,92,231,0.12)" : "rgba(108,92,231,0.08)") : "transparent",
                 }}
               >
-                <item.icon className="h-[16px] w-[16px]" />
-                <span className={`text-[13px] ${isActive ? "font-bold" : "font-medium"}`}>
+                <item.icon className="h-[15px] w-[15px]" strokeWidth={isActive ? 2.5 : 2} />
+                <span className={`text-[12.5px] tracking-tight ${isActive ? "font-black" : "font-semibold"}`}>
                   {item.name}
                 </span>
 
-                {/* Active underline glow */}
+                {/* Subtle Hover / Active Glow Indicator */}
                 {isActive && (
                   <motion.div
-                    layoutId="topNavIndicator"
-                    className="absolute -bottom-[9px] left-3 right-3 h-[2px] rounded-full"
-                    style={{ background: "linear-gradient(90deg, #6c5ce7, #00d4ff)" }}
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    layoutId="topNavActive"
+                    className="absolute inset-0 border border-[#6c5ce7]/20 rounded-2xl z-[-1]"
+                    transition={{ type: "spring", stiffness: 350, damping: 30 }}
                   />
-                )}
-
-                {item.name === "Requests" && (
-                  <motion.div
-                    animate={{ scale: [1, 1.15, 1] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                    className="h-4 min-w-4 rounded-full flex items-center justify-center text-[9px] text-white font-bold px-1"
-                    style={{ background: "#ff006e", boxShadow: "0 0 8px rgba(255,0,110,0.4)" }}
-                  >
-                    3
-                  </motion.div>
                 )}
               </motion.button>
             );

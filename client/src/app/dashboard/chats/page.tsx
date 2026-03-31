@@ -238,12 +238,16 @@ export default function ChatsPage() {
       }
 
       // Fetch Stories for Preview Rings
-      const stData = await nexoraFetch(`/api/stories?username=${encodeURIComponent(myUsername)}`);
-      if (stData && stData.stories) {
-        const mine = stData.stories.filter((s: any) => s.username === myUsername);
-        setMyStoryPreview(mine.length > 0);
-        const others = stData.stories.filter((s: any) => s.username !== myUsername).map((s: any) => s.username);
-        setFriendsWithStories(Array.from(new Set(others)));
+      try {
+        const stData = await nexoraFetch(`/api/stories?username=${encodeURIComponent(myUsername)}`);
+        if (stData && stData.stories) {
+          const mine = stData.stories.filter((s: any) => s.username === myUsername);
+          setMyStoryPreview(mine.length > 0);
+          const others = stData.stories.filter((s: any) => s.username !== myUsername).map((s: any) => s.username);
+          setFriendsWithStories(Array.from(new Set(others)));
+        }
+      } catch (err) {
+        console.error("Story preview fetch failed", err);
       }
     } catch (e) {
       console.error("Failed to sync connections:", e);
@@ -2027,25 +2031,39 @@ export default function ChatsPage() {
           {/* Activity/Notifications UI */}
           {notifications.length > 0 && (
              <div className="mb-4">
-                <motion.button 
-                  whileTap={{scale:0.98}}
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 relative">
-                      <Bell className="w-5 h-5" />
-                      {notifications.filter(n => !n.is_read).length > 0 && (
-                        <span className="absolute -top-1 -right-1 h-3 w-3 bg-purple-500 rounded-full border border-[var(--bg-surface)]" />
-                      )}
-                    </div>
-                    <div className="text-left">
-                      <h4 className="font-bold text-sm" style={{color: "var(--text-primary)"}}>Activity</h4>
-                      <p className="text-xs" style={{color: "var(--text-muted)"}}>{notifications.length} recent notifications</p>
-                    </div>
-                  </div>
-                  <ChevronRight className={`w-5 h-5 transition-transform ${showNotifications ? "rotate-90" : ""}`} style={{color: "var(--text-secondary)"}} />
-                </motion.button>
+                <div className="flex items-center justify-between mb-2">
+                   <motion.button 
+                     whileTap={{scale:0.98}}
+                     onClick={() => setShowNotifications(!showNotifications)}
+                     className="flex-1 flex items-center justify-between p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                   >
+                     <div className="flex items-center gap-3">
+                       <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 relative">
+                         <Bell className="w-5 h-5" />
+                         {notifications.filter(n => !n.is_read).length > 0 && (
+                           <span className="absolute -top-1 -right-1 h-3 w-3 bg-purple-500 rounded-full border border-[var(--bg-surface)]" />
+                         )}
+                       </div>
+                       <div className="text-left">
+                         <h4 className="font-bold text-sm" style={{color: "var(--text-primary)"}}>Activity</h4>
+                         <p className="text-xs" style={{color: "var(--text-muted)"}}>{notifications.length} recent notifications</p>
+                       </div>
+                     </div>
+                     <ChevronRight className={`w-5 h-5 transition-transform ${showNotifications ? "rotate-90" : ""}`} style={{color: "var(--text-secondary)"}} />
+                   </motion.button>
+                   {showNotifications && notifications.length > 0 && (
+                     <button 
+                       onClick={async () => {
+                         const user = localStorage.getItem("nexora_signup_username");
+                         if (user) await nexoraFetch(`/api/notifications/clear?username=${user}`, { method: 'POST' });
+                         setNotifications([]);
+                       }} 
+                       className="ml-2 px-3 py-1.5 rounded-lg text-[10px] font-black text-purple-500 bg-purple-500/5 hover:bg-purple-500/10 transition-all border border-purple-500/10 uppercase tracking-widest shrink-0"
+                     >
+                       Clear All
+                     </button>
+                   )}
+                </div>
  
                 {showNotifications && (
                   <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} className="mt-2 space-y-2 pl-2">
