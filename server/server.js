@@ -15,6 +15,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const webpush = require('web-push');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const server = http.createServer(app);
@@ -647,10 +648,21 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "Database not ready" });
         const identifier = username.toLowerCase().trim();
-        const user = await db.get('SELECT * FROM users WHERE (LOWER(username) = ? OR LOWER(email) = ?) AND password = ?', [identifier, identifier, password]);
+        const user = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [identifier, identifier]);
 
         if (user) {
-            return res.json({ status: "success", role: user.role, fullName: user.full_name, email: user.email, username: user.username, phoneNumber: user.phone_number, color: user.color, message: "Entered the Void." });
+            // Check if password matches (handling both bcrypt and legacy plain text)
+            let isMatch = false;
+            try {
+                isMatch = await bcrypt.compare(password, user.password);
+            } catch (e) {
+                // Fallback for legacy plain-text passwords
+                isMatch = (password === user.password);
+            }
+
+            if (isMatch) {
+                return res.json({ status: "success", role: user.role, fullName: user.full_name, email: user.email, username: user.username, phoneNumber: user.phone_number, color: user.color, message: "Entered the Void." });
+            }
         } else if (username.startsWith("Authorized_Account_")) {
             return res.json({ status: "success", role: "AuthorizedAccount", message: "Entered the Void." });
         }
@@ -815,21 +827,41 @@ app.post('/api/auth/signup', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ status: "error", error: "Database not ready" });
 
+        const finalEmail = email.toLowerCase().trim();
+        const finalUsername = username.trim();
+
         // 1. Check if username or email exists
-        const existing = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)', [username.trim(), email.toLowerCase().trim()]);
+        const existing = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [finalUsername.toLowerCase(), finalEmail]);
+        
         if (existing) {
-            return res.status(400).json({ status: "error", error: "Username or Email already associated with an account." });
+            // CHALLENGE: If account exists, log them in automatically IF the password matches
+            const isMatch = await bcrypt.compare(password, existing.password).catch(() => password === existing.password);
+            
+            if (isMatch) {
+                return res.json({ 
+                    status: "success", 
+                    role: existing.role, 
+                    fullName: existing.full_name, 
+                    email: existing.email, 
+                    username: existing.username, 
+                    phoneNumber: existing.phone_number, 
+                    color: existing.color, 
+                    message: "Identity recognized. Automatic login authorized." 
+                });
+            } else {
+                return res.status(400).json({ status: "error", error: "Username or Email already associated with an account." });
+            }
         }
 
-        // 2. Insert into database
+        // 2. Hash Password and Insert into database
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
         const role = isAuthorized ? 'PendingAuthorized' : 'Standard';
-        const finalEmail = email.trim();
-        const finalUsername = username.trim();
         
         await db.run(
             'INSERT INTO users (full_name, email, username, password, role, color, phone_number) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [fullName, finalEmail, finalUsername, password, role, color, phoneNumber || 'Not Set']
+            [fullName, finalEmail, finalUsername, hashedPassword, role, color, phoneNumber || 'Not Set']
         );
 
         const newUser = {

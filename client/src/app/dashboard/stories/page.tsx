@@ -676,17 +676,22 @@ export default function StoriesPage() {
 
                 {activeStory.username !== myUsername && (
                   <div className="flex items-center gap-2">
-                    {/* Like button */}
-                    <motion.button
-                      whileTap={{ scale: 0.8 }}
-                      onClick={(e) => handleLike(activeStory.id, e)}
-                      className="h-10 w-10 rounded-full flex items-center justify-center transition-all shrink-0"
-                      style={{ background: liked[activeStory.id] ? "rgba(255,0,110,0.25)" : "rgba(255,255,255,0.1)" }}>
-                      <motion.span animate={{ scale: liked[activeStory.id] ? [1, 1.5, 1] : 1 }} transition={{ duration: 0.3 }}>
-                        <Heart className="w-5 h-5" fill={liked[activeStory.id] ? "#ff006e" : "none"}
-                               color={liked[activeStory.id] ? "#ff006e" : "white"} />
-                      </motion.span>
-                    </motion.button>
+                    {/* Like button with count */}
+                    <div className="flex flex-col items-center gap-1">
+                      <motion.button
+                        whileTap={{ scale: 0.8 }}
+                        onClick={(e) => handleLike(activeStory.id, e)}
+                        className="h-10 w-10 rounded-full flex items-center justify-center transition-all shrink-0 shadow-lg"
+                        style={{ background: liked[activeStory.id] ? "rgba(255,0,110,0.3)" : "rgba(255,255,255,0.15)", backdropFilter: "blur(10px)" }}>
+                        <motion.span animate={{ scale: liked[activeStory.id] ? [1, 1.6, 1] : 1 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
+                          <Heart className="w-5 h-5 transition-all" fill={liked[activeStory.id] ? "#ff006e" : "none"}
+                                 color={liked[activeStory.id] ? "#ff006e" : "white"} />
+                        </motion.span>
+                      </motion.button>
+                      <span className="text-[9px] font-black tracking-tighter text-white/90 drop-shadow-md">
+                        {likeCount[activeStory.id] || 0} Likes
+                      </span>
+                    </div>
 
                     {/* Emoji reaction */}
                     <motion.button whileTap={{ scale: 0.9 }}
