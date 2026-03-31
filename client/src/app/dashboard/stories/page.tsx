@@ -10,6 +10,10 @@ const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
 
 export default function StoriesPage() {
   const { isDark } = useTheme();
+  const [activeStory, setActiveStory] = useState<any | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [liked, setLiked] = useState<Record<number, boolean>>({});
+  const [likeCount, setLikeCount] = useState<Record<number, number>>({});
   const [otherStories, setOtherStories] = useState<any[]>([]);
   
   // Your story state
