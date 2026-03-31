@@ -32,10 +32,14 @@ let pgPool;
         const databaseUrl = process.env.DATABASE_URL;
 
         if (databaseUrl) {
-            console.log("[DATABASE] Mode: PostgreSQL (Supabase)");
+            console.log("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
             dbType = 'postgres';
+            
+            // Clean database URL to avoid SSL alias warnings
+            const cleanUrl = databaseUrl.split('?')[0];
+
             pgPool = new Pool({
-                connectionString: databaseUrl,
+                connectionString: cleanUrl,
                 ssl: { rejectUnauthorized: false }
             });
             
@@ -198,10 +202,28 @@ let pgPool;
                 const checkSql = dbType === 'postgres' ? 'SELECT id FROM users WHERE username = $1' : 'SELECT id FROM users WHERE username = ?';
                 const existing = await db.get(checkSql, [user[2]]);
                 if (!existing) {
-                    await db.run('INSERT INTO users (full_name, email, username, password, color, role) VALUES (?, ?, ?, ?, ?, ?)', user);
+                    const saltRounds = 10;
+                    const hashed = await bcrypt.hash(user[3], saltRounds);
+                    await db.run('INSERT INTO users (full_name, email, username, password, color, role) VALUES (?, ?, ?, ?, ?, ?)', [user[0], user[1], user[2], hashed, user[4], user[5]]);
                 }
             } catch (err) { }
         }
+
+        // SEED CONNECTIONS for Nexora_31
+        const connectionsToSeed = [
+            ['nexora_31', 'aarav_vibe'],
+            ['nexora_31', 'isha_creative'],
+            ['nexora_31', 'rohan_nex'],
+            ['nexora_31', 'zoya_style'],
+            ['nexora_31', 'kabir_code']
+        ];
+        for (const [u1, u2] of connectionsToSeed) {
+            const [first, second] = [u1.toLowerCase(), u2.toLowerCase()].sort();
+            try {
+                await db.run('INSERT INTO connections (user_a, user_b) VALUES (?, ?)', [first, second]);
+            } catch (e) { /* already exists */ }
+        }
+
         console.log(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
     } catch (e) {
     }
