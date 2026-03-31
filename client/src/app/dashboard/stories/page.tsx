@@ -18,6 +18,7 @@ export default function StoriesPage() {
   
   // Your story state
   const [myStory, setMyStory] = useState<any | null>(null);
+  const [myUsername, setMyUsername] = useState("");
 
   const [reply, setReply] = useState("");
   const [showSnapReactions, setShowSnapReactions] = useState(false);
@@ -46,6 +47,8 @@ export default function StoriesPage() {
   const [threads, setThreads] = useState<any[]>([]);
 
   useEffect(() => {
+    const username = localStorage.getItem("nexora_signup_username") || "";
+    setMyUsername(username);
     const blocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
     setBlockedThreads(blocked);
     
@@ -419,7 +422,7 @@ export default function StoriesPage() {
                     <img src={myStory.content} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-                       <span className="font-extrabold text-3xl text-white/20">{(localStorage.getItem("nexora_signup_username") || "Y")[0].toUpperCase()}</span>
+                       <span className="font-extrabold text-3xl text-white/20">{(myUsername || "Y")[0].toUpperCase()}</span>
                     </div>
                   )}
                   
@@ -550,15 +553,17 @@ export default function StoriesPage() {
                 </div>
                 <div className="flex items-center gap-2 relative">
                   {/* Viewers Trigger Button (Only for My Story) */}
-                  {activeStory.username === localStorage.getItem("nexora_signup_username") && (
+                  {activeStory.username === myUsername && (
                     <button onClick={() => setShowViewers(!showViewers)}
                             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md text-white/90 text-[11px] font-bold border border-white/10 shadow-xl transition-colors hover:bg-black/60 cursor-pointer">
+                       <Eye className="w-3.5 h-3.5 text-green-400" />
+                       <span>{activeStory.views || 0}</span>
                     </button>
                   )}
                   
                   {/* Viewers Dropdown Modal (ONLY for own story) */}
                   <AnimatePresence>
-                    {activeStory.username === localStorage.getItem("nexora_signup_username") && showViewers && (
+                    {activeStory.username === myUsername && showViewers && (
                       <motion.div key="viewers-modal" initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
                         className="absolute right-0 top-12 w-64 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-white/10"
                         style={{ backgroundColor: "rgba(13,13,26,0.95)", backdropFilter: "blur(20px)" }}
@@ -599,7 +604,7 @@ export default function StoriesPage() {
                   </button>
 
                   {/* OWN STORY DELETE ACTION */}
-                  {activeStory.username === localStorage.getItem("nexora_signup_username") && (
+                  {activeStory.username === myUsername && (
                     <motion.button 
                       whileHover={{ scale: 1.1, backgroundColor: "rgba(255,0,0,0.2)" }}
                       whileTap={{ scale: 0.9 }}
@@ -649,7 +654,7 @@ export default function StoriesPage() {
                   )}
                 </AnimatePresence>
 
-                {activeStory.username !== localStorage.getItem("nexora_signup_username") && (
+                {activeStory.username !== myUsername && (
                   <div className="flex items-center gap-2">
                     {/* Like button */}
                     <motion.button
@@ -692,7 +697,7 @@ export default function StoriesPage() {
 
                 {/* Like count & Viewers Dropdown */}
                 <div className="relative flex flex-col items-center mt-3">
-                  {activeStory.username === localStorage.getItem("nexora_signup_username") && (
+                  {activeStory.username === myUsername && (
                     <>
                       <p className="text-center text-[11px] text-white/50 font-medium cursor-pointer hover:text-white/70 transition-colors"
                          onClick={() => setShowLikers(!showLikers)}>
