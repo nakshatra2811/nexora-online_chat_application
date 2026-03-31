@@ -61,6 +61,7 @@ export default function StoriesPage() {
   const [likersList, setLikersList] = useState<any[]>([]);
 
   // Profile Modal State
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [selectedProfileUser, setSelectedProfileUser] = useState<any>(null);
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -73,7 +74,27 @@ export default function StoriesPage() {
     const blocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
     setBlockedThreads(blocked);
     
-    // Fetch threads to check connections for calling
+    // Fetch current user's own profile (once on mount) for avatar
+    const fetchMe = async () => {
+      try {
+        const u = localStorage.getItem("nexora_signup_username");
+        // Fast path: use cached avatar first
+        const cachedAvatar = localStorage.getItem("nexora_avatar_url");
+        if (cachedAvatar) setCurrentUser((prev: any) => ({ ...(prev || {}), avatarUrl: cachedAvatar }));
+        // Then fetch fresh from server
+        const res = await nexoraFetch(`/api/users/profile?username=${u}`);
+        if (res && res.user) {
+          setCurrentUser(res.user);
+          if (res.user.avatarUrl) localStorage.setItem("nexora_avatar_url", res.user.avatarUrl);
+        }
+      } catch (e) { console.error(e); }
+    };
+    
+    fetchMe();
+  }, []); // Run only once on mount
+
+  useEffect(() => {
+    // Fetch threads to check connections for calling (re-runs when selectedProfileUser changes)
     const fetchThreads = async () => {
       try {
         const username = localStorage.getItem("nexora_signup_username");
@@ -81,6 +102,7 @@ export default function StoriesPage() {
         if (res && res.threads) setThreads(res.threads);
       } catch (e) { console.error(e); }
     };
+
     fetchThreads();
   }, [selectedProfileUser]);
 
@@ -460,13 +482,10 @@ export default function StoriesPage() {
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#f0f0f0", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
 
-                  {/* Show uploaded story image or placeholder */}
-                  {myStory ? (
-                    <img src={myStory.content} alt="Your story" className="w-full h-full object-cover" />
+                  {currentUser?.avatarUrl ? (
+                    <img src={currentUser.avatarUrl} alt="Your story" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-[#6c5ce7]/20 to-[#00d4ff]/10">
-                      <Camera className="w-7 h-7" style={{ color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.2)" }} />
-                    </div>
+                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(myUsername || "?")[0].toUpperCase()}</span>
                   )}
 
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
@@ -516,8 +535,8 @@ export default function StoriesPage() {
               <div className={`p-[3px] rounded-full bg-gradient-to-tr ${story.isViewed ? 'from-gray-400 to-gray-600' : 'from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888]'} shadow-lg group-hover:shadow-2xl transition-shadow`}>
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#ffffff", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
-                  {story.type === "image" ? (
-                    <img src={story.content} alt="" className="w-full h-full object-cover" />
+                  {story.avatarUrl ? (
+                    <img src={story.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(story.user || story.username || "?")[0].toUpperCase()}</span>
                   )}

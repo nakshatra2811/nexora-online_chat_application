@@ -8,8 +8,8 @@ import { nexoraFetch, API_BASE_URL, APP_NAME, APP_LOGO } from "@/lib/config";
 
 // MOCK PENDING REQUESTS FOR AUTHORIZED NODES
 const INITIAL_REQUESTS = [
-  { id: "req_01", username: "Clearance_Account_99", email: "hiralchudasama2811@gmail.com", status: "pending", date: "2026-03-29" },
-  { id: "req_02", username: "Clearance_Account_Alpha", email: "admin@nexora.io", status: "pending", date: "2026-03-29" }
+  { id: "req_01", username: "Clearance_Account_99", email: "hiralchudasama2811@gmail.com", status: "pending", date: "2026-03-29", avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" },
+  { id: "req_02", username: "Clearance_Account_Alpha", email: "admin@nexora.io", status: "pending", date: "2026-03-29", avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop" }
 ];
 
 export default function AdminPanel() {
@@ -336,9 +336,12 @@ export default function AdminPanel() {
                          className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl shadow-sm"
                          style={{ background: isDark ? "rgba(255,255,255,0.03)" : "#fff", border: `1px solid var(--border-subtle)` }}>
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-white shadow-lg uppercase"
-                               style={{ background: "linear-gradient(135deg, #ffbe0b, #ff006e)" }}>
-                            {(req.username?.[0] || "?").toUpperCase()}
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-white shadow-lg uppercase overflow-hidden ${!req.avatarUrl ? 'bg-gradient-to-br from-[#ffbe0b] to-[#ff006e]' : ""}`}>
+                             {req.avatarUrl ? (
+                               <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" />
+                             ) : (
+                               (req.username?.[0] || "?").toUpperCase()
+                             )}
                           </div>
                           <div>
                             <p className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>@{req.username}</p>

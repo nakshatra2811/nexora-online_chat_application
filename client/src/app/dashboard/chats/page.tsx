@@ -183,7 +183,7 @@ export default function ChatsPage() {
   const [sharingLocation, setSharingLocation] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string }>({ name: "", username: "", color: "" });
+  const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string; avatarUrl?: string }>({ name: "", username: "", color: "", avatarUrl: "" });
 
   const handleBlockUser = (threadId: number) => {
     if (!threadId) return;
@@ -235,11 +235,20 @@ export default function ChatsPage() {
   // ═══ Initialize Self Profile ═══
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const username = localStorage.getItem("nexora_signup_username") || "me";
       setMyProfile({
         name: localStorage.getItem("nexora_signup_name") || "Nexora User",
-        username: localStorage.getItem("nexora_signup_username") || "me",
-        color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500"
+        username,
+        color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500",
+        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
       });
+      // Also fetch fresh from server in background to get latest avatar
+      nexoraFetch(`/api/users/profile?username=${encodeURIComponent(username)}`).then((res: any) => {
+        if (res?.user?.avatarUrl) {
+          localStorage.setItem("nexora_avatar_url", res.user.avatarUrl);
+          setMyProfile(prev => ({ ...prev, avatarUrl: res.user.avatarUrl }));
+        }
+      }).catch(() => {});
     }
   }, []);
 
@@ -2141,8 +2150,8 @@ export default function ChatsPage() {
                      {pendingRequests.map((req) => (
                        <div key={req.id} className="p-3 rounded-xl border flex items-center justify-between gap-3" style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)" }}>
                          <div className="flex items-center gap-2 min-w-0">
-                           <div className={`h-8 w-8 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-xs uppercase shadow-sm`}>
-                             {(req.fromName?.[0] || "?").toUpperCase()}
+                           <div className={`h-8 w-8 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-xs uppercase shadow-sm overflow-hidden`}>
+                             {req.avatarUrl ? <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" /> : (req.fromName?.[0] || "?").toUpperCase()}
                            </div>
                            <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
                          </div>
@@ -2218,9 +2227,9 @@ export default function ChatsPage() {
                 onClick={() => { window.location.href = '/dashboard/stories'; }}
                 className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                 <div className="relative">
-                <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase`}
+                <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
                      style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                    {(myProfile.name?.[0] || "M").toUpperCase()}
+                    {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
                 </div>
                 {!myStoryPreview && (
                   <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center"
@@ -2323,8 +2332,8 @@ export default function ChatsPage() {
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                  <div className="relative">
-                    <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${myProfile.color?.includes('from-') ? myProfile.color : "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/10 uppercase`}>
-                       {(myProfile.name?.[0] || "M").toUpperCase()}
+                    <div className={`h-10 w-10 rounded-full ${myProfile.color?.includes('from-') ? 'bg-gradient-to-tr ' + myProfile.color : "bg-gradient-to-tr from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/10 uppercase overflow-hidden`}>
+                       {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
                     </div>
                     <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573] z-10 animate-pulse" 
                          style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
@@ -2953,8 +2962,8 @@ export default function ChatsPage() {
                           className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-colors hover:bg-[rgba(108,92,231,0.05)]"
                           style={{ background: "transparent" }}
                         >
-                          <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-bold text-base shadow-md shrink-0`}>
-                            {user.fullName?.[0]?.toUpperCase()}
+                          <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-bold text-base shadow-md shrink-0 overflow-hidden`}>
+                            {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : user.fullName?.[0]?.toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
@@ -3442,10 +3451,14 @@ export default function ChatsPage() {
 
               <div className="px-10 pb-10 -mt-20 relative z-10">
                 <div className="flex flex-col items-center">
-                  <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
-                    <span className="group-hover/avatar:scale-110 transition-transform duration-500 text-white uppercase drop-shadow-2xl">
-                      {(selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || "?").toUpperCase()}
-                    </span>
+                  <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar overflow-hidden`}>
+                    {selectedProfileUser.avatarUrl ? (
+                      <img src={selectedProfileUser.avatarUrl} alt="" className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500" />
+                    ) : (
+                      <span className="group-hover/avatar:scale-110 transition-transform duration-500 text-white uppercase drop-shadow-2xl">
+                        {(selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || "?").toUpperCase()}
+                      </span>
+                    )}
                     {(selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)) && (
                       <motion.div 
                         initial={{ scale: 0 }} animate={{ scale: 1 }}

@@ -362,6 +362,8 @@ export default function ProfilePage() {
                 currentProfile.email = data.user.email || currentProfile.email;
                 currentProfile.phone = data.user.phoneNumber || currentProfile.phone;
                 currentProfile.avatarUrl = data.user.avatarUrl || "";
+                // Cache avatar separately for quick cross-page access
+                if (data.user.avatarUrl) localStorage.setItem("nexora_avatar_url", data.user.avatarUrl);
                 if (data.user.created_at) {
                     const d = new Date(data.user.created_at);
                     currentProfile.joinedDate = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
@@ -404,16 +406,19 @@ export default function ProfilePage() {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        // Resize exactly to 320x320 and crop to square
+        // Resize exactly to 320x320 and center-crop to square
         const size = 320;
         canvas.width = size;
         canvas.height = size;
         
+        // Center-crop: cover the 320x320 canvas
         const scale = Math.max(size / img.width, size / img.height);
-        const x = (size / scale - img.width) / 2;
-        const y = (size / scale - img.height) / 2;
+        const scaledW = img.width * scale;
+        const scaledH = img.height * scale;
+        const dx = (size - scaledW) / 2;
+        const dy = (size - scaledH) / 2;
         
-        ctx.drawImage(img, x, y, img.width, img.height, 0, 0, img.width * scale, img.height * scale);
+        ctx.drawImage(img, dx, dy, scaledW, scaledH);
         
         const avatarBase64 = canvas.toDataURL("image/webp", 0.9);
 
@@ -427,7 +432,9 @@ export default function ProfilePage() {
           
           if (resp && resp.status === "success") {
             setProfile(prev => ({ ...prev, avatarUrl: avatarBase64 }));
-            // Also update local cache so it persists locally
+            // Cache in dedicated key for all pages to read quickly
+            localStorage.setItem("nexora_avatar_url", avatarBase64);
+            // Also update main profile cache
             const cached = localStorage.getItem("nexora_user_profile");
             if (cached) {
                const p = JSON.parse(cached);

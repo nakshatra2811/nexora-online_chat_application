@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Notifications
   const [showNotifPanel, setShowNotifPanel] = useState(false);
-  const [pendingRequests, setPendingRequests] = useState<{id:number;from:string;fromName:string;fromColor:string;time:string}[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<{ id: number; from: string; fromName: string; fromColor: string; time: string; avatarUrl?: string }[]>([]);
   const [sentRequests, setSentRequests] = useState<any[]>([]);
   const [generalNotifications, setGeneralNotifications] = useState<any[]>([]);
   const [actionedIds, setActionedIds] = useState<number[]>([]);
@@ -259,7 +259,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setAppForgotMode(false);
       setAppForgotStep("answer");
       setAppForgotAnswer(""); setAppForgotNewPin("");
-      setAppLockError(""); setAppLockPin("");
+      setAppForgotError(""); setAppLockError(""); setAppLockPin("");
     }
   };
 
@@ -570,7 +570,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           {pendingRequests.map((req) => (
                             <motion.div key={`req-${req.id}`} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: actionedIds.includes(req.id) ? 0 : 1, x: 0 }} exit={{ opacity: 0 }}
                               className="px-4 py-4 border-b flex items-center gap-3" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                              <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${req.fromColor} flex items-center justify-center text-white font-black shadow-lg`}>{(req.fromName || req.from)[0].toUpperCase()}</div>
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black shadow-lg overflow-hidden shrink-0 ${!req.avatarUrl ? 'bg-gradient-to-br ' + (req.fromColor || "from-purple-500 to-indigo-500") : ""}`}>
+                              {req.avatarUrl ? (
+                                <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                (req.fromName || req.from)?.[0]?.toUpperCase()
+                              )}
+                           </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[11px] font-bold"><span className="text-[#6c5ce7]">@{req.from}</span> requested.</p>
                                 <p className="text-[8px] opacity-30 uppercase font-black">{req.time}</p>
@@ -774,8 +780,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             className="flex items-center gap-3 px-4 py-3 border-b last:border-0"
                             style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}
                           >
-                            <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${req.fromColor || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
-                              {(req.fromName || req.from)?.[0]?.toUpperCase()}
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden ${!req.avatarUrl ? 'bg-gradient-to-br ' + (req.fromColor || "from-purple-500 to-indigo-500") : ""}`}>
+                               {req.avatarUrl ? (
+                                 <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" />
+                               ) : (
+                                 (req.fromName || req.from)?.[0]?.toUpperCase()
+                               )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-xs truncate" style={{ color: "var(--text-primary)" }}>
