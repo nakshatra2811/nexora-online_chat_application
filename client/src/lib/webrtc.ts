@@ -361,17 +361,32 @@ export class WebRTCService {
   public async flipCamera(): Promise<MediaStream | null> {
     if (!this.localStream || this.callType !== "video") return null;
 
-    this.currentFacingMode =
-      this.currentFacingMode === "user" ? "environment" : "user";
+    const nextFacing = this.currentFacingMode === "user" ? "environment" : "user";
 
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: this.currentFacingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
+      // Use { exact } to FORCE the back/front camera on mobile.
+      // { ideal } is a soft hint that browsers often ignore.
+      let newStream: MediaStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: nextFacing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+      } catch {
+        // Fallback: if exact fails (e.g. desktop with only one camera), try ideal
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: nextFacing,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+      }
+
+      this.currentFacingMode = nextFacing;
 
       const newVideoTrack = newStream.getVideoTracks()[0];
       const oldVideoTrack = this.localStream.getVideoTracks()[0];
@@ -393,8 +408,6 @@ export class WebRTCService {
       return new MediaStream(this.localStream.getTracks());
     } catch (e) {
       console.error("[WebRTC] Flip camera failed:", e);
-      this.currentFacingMode =
-        this.currentFacingMode === "user" ? "environment" : "user";
       return null;
     }
   }
