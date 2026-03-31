@@ -19,6 +19,7 @@ import { webRTCService, type CallType } from "@/lib/webrtc";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 import { pushService } from "@/lib/push";
+import { LoadingAnimation } from "@/components/LoadingAnimation";
 
 const TUNNEL_ID = "nexora_secure_room_1";
 const TUNNEL_PASSWORD = "super_secret_e2e_password_123";
@@ -3388,11 +3389,11 @@ export default function ChatsPage() {
                       @{selectedProfileUser.username}
                     </p>
                     
-                    <div className="flex items-center justify-center gap-2 mt-4">
-                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
+                      <span className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm max-w-full text-center leading-tight">
                         Official Node
                       </span>
-                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm">
+                      <span className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm max-w-full text-center leading-tight">
                         Encrypted
                       </span>
                     </div>
@@ -3405,7 +3406,9 @@ export default function ChatsPage() {
                      </div>
                      <p className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                       {loadingProfile ? (
-                        <span className="opacity-30 italic animate-pulse">Decrypting protocol memo...</span>
+                        <div className="py-2">
+                           <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Decrypting memo..." />
+                        </div>
                       ) : profileData?.bio || "No secure bio established for this node yet."}
                     </p>
                     <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between opacity-50 font-black text-[10px] tracking-widest uppercase">

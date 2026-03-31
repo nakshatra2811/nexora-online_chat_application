@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone } from "lucide-react";
+import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
 import { nexoraFetch, APP_NAME } from "@/lib/config";
 
 function AuthContent() {
@@ -279,8 +280,8 @@ function AuthContent() {
                 <input type="email" placeholder="Email Address" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
                   className="neumorphic-input w-full p-4 rounded-2xl outline-none" style={{ color: "var(--text-primary)" }} />
                 <button onClick={handleRecovery} disabled={isSendingRecovery}
-                  className="w-full py-4 rounded-2xl bg-[#6c5ce7] text-white font-bold shadow-xl active:scale-95 transition-all opacity-100 disabled:opacity-50">
-                  {isSendingRecovery ? "Transmitting..." : "Initialize Recovery"}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#6c5ce7] py-4 font-bold text-white shadow-xl transition-all active:scale-95 disabled:opacity-50">
+                  {isSendingRecovery ? <><ButtonLoader /> <span>Transmitting...</span></> : "Initialize Recovery"}
                 </button>
               </div>
             )}
@@ -289,16 +290,18 @@ function AuthContent() {
                 <input type="text" placeholder="######" maxLength={6} value={forgotOTP} onChange={e => setForgotOTP(e.target.value)}
                   className="neumorphic-input w-full p-4 rounded-2xl outline-none text-center font-black tracking-widest text-2xl uppercase" style={{ color: "#6c5ce7", textTransform: "uppercase" }} />
                 <p className="text-[10px] text-center font-bold text-gray-400 uppercase">Check your email for the verification code.</p>
-                <button onClick={handleVerifyOTP} disabled={isSendingRecovery} className="w-full py-4 rounded-2xl bg-[#6c5ce7] text-white font-bold shadow-xl active:scale-95 transition-all opacity-100 disabled:opacity-50">
-                  {isSendingRecovery ? "Verifying..." : "Verify Account Identity"}
+                <button onClick={handleVerifyOTP} disabled={isSendingRecovery} 
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#6c5ce7] py-4 font-bold text-white shadow-xl transition-all active:scale-95 disabled:opacity-50">
+                  {isSendingRecovery ? <><ButtonLoader /> <span>Verifying...</span></> : "Verify Account Identity"}
                 </button>
               </div>
             )}
             {forgotStep === 3 && (
               <div className="space-y-4">
                 <input type="password" placeholder="New Password Anchor" value={forgotNewPassword} onChange={e => setForgotNewPassword(e.target.value)} className="neumorphic-input w-full p-4 rounded-2xl outline-none" style={{ color: "var(--text-primary)" }} />
-                <button onClick={handleResetPassword} disabled={isSendingRecovery} className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#6c5ce7] to-[#00d4ff] text-white font-bold shadow-xl active:scale-95 transition-all opacity-100 disabled:opacity-50">
-                  {isSendingRecovery ? "Finalizing..." : "Finalize Reset"}
+                <button onClick={handleResetPassword} disabled={isSendingRecovery}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#6c5ce7] to-[#00d4ff] py-4 font-bold text-white shadow-xl transition-all active:scale-95 disabled:opacity-50">
+                  {isSendingRecovery ? <><ButtonLoader /> <span>Finalizing...</span></> : "Finalize Reset"}
                 </button>
               </div>
             )}
@@ -423,9 +426,9 @@ function AuthContent() {
               )}
 
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} type="submit" disabled={isLoading}
-                className="mt-6 w-full rounded-xl py-4 text-sm font-bold text-white shadow-lg disabled:opacity-60"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold text-white shadow-lg disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                {isLoading ? "Establishing Tunnel..." : isLogin ? "Enter Void" : "Sign Up"}
+                {isLoading ? <><ButtonLoader /> <span>{isLogin ? "Establishing Tunnel..." : "Generating Vault..."}</span></> : (isLogin ? "Enter Void" : "Sign Up")}
               </motion.button>
             </form>
           </div>
@@ -437,7 +440,7 @@ function AuthContent() {
 
 export default function AuthPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center text-white bg-black">Loading...</div>}>
+    <Suspense fallback={<div className="flex h-screen w-screen items-center justify-center" style={{ background: "var(--bg-base)" }}><Loader size="lg" text="Initializing Secure Link..." /></div>}>
       <AuthContent />
     </Suspense>
   );

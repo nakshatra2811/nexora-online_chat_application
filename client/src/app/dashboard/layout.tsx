@@ -12,6 +12,7 @@ import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { NotificationSkeleton } from "@/components/Skeleton";
+import { LoadingAnimation } from "@/components/LoadingAnimation";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -547,7 +548,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </div>
 
                   <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                    {(pendingRequests.length === 0 && generalNotifications.length === 0) ? (
+                    {isLoadingNotifs ? (
+                      <div className="py-12">
+                         <LoadingAnimation variant="spinner" size="md" color="#6c5ce7" text="Syncing Activity..." />
+                      </div>
+                    ) : (pendingRequests.length === 0 && generalNotifications.length === 0) ? (
                       <div className="flex flex-col items-center justify-center py-12 gap-3 opacity-40">
                          <Bell className="w-6 h-6 text-muted-foreground" />
                          <p className="text-[10px] font-black uppercase tracking-widest">No Activity</p>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
+import { LoadingAnimation } from "@/components/LoadingAnimation";
 
 /* ─── Mock contacts ─── */
 const MOCK_CONTACTS: any[] = [];
@@ -597,12 +598,16 @@ export default function ProfilePage() {
                   Save Changes
                 </button>
               </div>
+            ) : profile.name === "Loading..." ? (
+              <div className="py-8">
+                <LoadingAnimation variant="dots" size="md" color="#6c5ce7" text="Fetching Profile..." />
+              </div>
             ) : (
               <>
                 <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>{profile.name}</h2>
-                <div className="flex flex-col items-center gap-1 mb-3">
+                <div className="flex flex-col items-center gap-1 mb-3 w-full px-4">
                   <p className="text-sm font-bold text-[#6c5ce7]">@{profile.username}</p>
-                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-[#6c5ce7]/10 text-[#6c5ce7]">
+                  <span className="text-[10px] uppercase font-black px-3 py-1 rounded-full bg-[#6c5ce7]/10 text-[#6c5ce7] max-w-full text-center leading-tight shadow-sm md:max-w-none">
                     {userRole}
                   </span>
                 </div>
