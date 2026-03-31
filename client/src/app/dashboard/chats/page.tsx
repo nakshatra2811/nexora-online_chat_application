@@ -251,7 +251,17 @@ export default function ChatsPage() {
   const [sharingLocation, setSharingLocation] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string; avatarUrl?: string }>({ name: "", username: "", color: "", avatarUrl: "" });
+  const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string; avatarUrl?: string }>(() => {
+    if (typeof window !== "undefined") {
+      return {
+        name: localStorage.getItem("nexora_signup_name") || "Nexora User",
+        username: localStorage.getItem("nexora_signup_username") || "me",
+        color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500",
+        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
+      };
+    }
+    return { name: "", username: "", color: "", avatarUrl: "" };
+  });
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
@@ -313,13 +323,7 @@ export default function ChatsPage() {
   // ═══ Initialize Self Profile ═══
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const username = localStorage.getItem("nexora_signup_username") || "me";
-      setMyProfile({
-        name: localStorage.getItem("nexora_signup_name") || "Nexora User",
-        username,
-        color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500",
-        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
-      });
+      const username = myProfile.username;
       // Also fetch fresh from server in background to get latest avatar
       nexoraFetch(`/api/users/profile?username=${encodeURIComponent(username)}`).then((res: any) => {
         if (res?.user?.avatarUrl) {

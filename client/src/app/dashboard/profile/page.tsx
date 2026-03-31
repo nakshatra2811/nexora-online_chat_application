@@ -250,14 +250,28 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
 export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [userRole, setUserRole] = useState("Standard Account");
-  const [profile, setProfile] = useState({
-    name: "Loading...",
-    username: "...",
-    email: "...",
-    phone: "Not Set",
-    bio: "Nexora Privacy Account",
-    joinedDate: "March 2026",
-    avatarUrl: "",
+  const [profile, setProfile] = useState(() => {
+    if (typeof window !== "undefined") {
+      const signupEmail = localStorage.getItem("nexora_signup_email") || "user@nexora.io";
+      return {
+        name: localStorage.getItem("nexora_signup_name") || signupEmail.split("@")[0],
+        username: localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0],
+        email: signupEmail,
+        phone: localStorage.getItem("nexora_signup_phone") || "+91 00000 00000",
+        bio: "Protocol Enthusiast.",
+        joinedDate: "March 2026",
+        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
+      };
+    }
+    return {
+      name: "Loading...",
+      username: "...",
+      email: "...",
+      phone: "Not Set",
+      bio: "Nexora Privacy Account",
+      joinedDate: "March 2026",
+      avatarUrl: "",
+    };
   });
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
