@@ -9,10 +9,11 @@ import {
   Bell, Check, UserPlus
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
-import { nexoraFetch } from "@/lib/config";
+import { nexoraFetch, APP_LOGO } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { NotificationSkeleton } from "@/components/Skeleton";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
+import { PermissionGate } from "@/components/PermissionGate";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -319,7 +320,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full overflow-hidden" style={{ backgroundColor: "var(--bg-base)", color: "var(--text-primary)" }}>
+    <PermissionGate>
+      <div className="flex flex-col h-[100dvh] w-full overflow-hidden" style={{ backgroundColor: "var(--bg-base)", color: "var(--text-primary)" }}>
 
       {/* ═══ APP LOCK SCREEN ═══ */}
       <AnimatePresence>
@@ -450,7 +452,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <div className="relative">
               <div className="absolute -inset-1.5 bg-[#6c5ce7] opacity-0 group-hover:opacity-20 blur-xl rounded-full transition-opacity duration-500" />
-              <img src="/logo.svg" alt="Nexora" className="w-8 h-8 shrink-0 object-contain drop-shadow-xl rounded-[10px] relative z-10" />
+              <img src={APP_LOGO} alt="Nexora" className="w-8 h-8 shrink-0 object-contain drop-shadow-xl rounded-[10px] relative z-10" />
             </div>
             <div className="flex flex-col justify-center">
               <h1 className="text-lg font-[900] tracking-tighter leading-none" style={{ color: "var(--text-primary)" }}>Nexora</h1>
@@ -907,6 +909,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </PermissionGate>
   );
 }

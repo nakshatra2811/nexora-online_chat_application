@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone } from "lucide-react";
 import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
-import { nexoraFetch, APP_NAME } from "@/lib/config";
+import { nexoraFetch, APP_NAME, APP_LOGO } from "@/lib/config";
 
 function AuthContent() {
   const router = useRouter();
@@ -325,7 +325,7 @@ function AuthContent() {
           style={{ background: "var(--bg-surface)", backdropFilter: "blur(20px)", borderRight: "1px solid var(--border-subtle)" }}>
           <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
             <div className="flex items-center gap-3">
-              <img src="/logo.svg" alt="Nexora Logo" className="w-12 h-12 shrink-0 object-contain drop-shadow-lg rounded-[14px]" />
+              <img src={APP_LOGO} alt="Nexora Logo" className="w-12 h-12 shrink-0 object-contain drop-shadow-lg rounded-[14px]" />
               <h1 className="text-4xl font-extrabold tracking-tighter" style={{ color: "var(--text-primary)" }}>Nexora.</h1>
             </div>
             <p className="mt-2 font-medium" style={{ color: "var(--text-secondary)" }}>The Premium Privacy Protocol</p>
@@ -347,7 +347,7 @@ function AuthContent() {
           {/* Mobile Top Logo (lg:hidden) */}
           <div className="lg:hidden flex flex-col items-center mb-8">
             <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="flex items-center gap-2">
-              <img src="/logo.svg" alt="Nexora Logo" className="w-10 h-10 object-contain drop-shadow-lg rounded-xl" />
+              <img src={APP_LOGO} alt="Nexora Logo" className="w-10 h-10 object-contain drop-shadow-lg rounded-xl" />
               <h1 className="text-2xl font-extrabold tracking-tighter" style={{ color: "var(--text-primary)" }}>{APP_NAME}.</h1>
             </motion.div>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] mt-1 opacity-40">Privacy Protocol</p>

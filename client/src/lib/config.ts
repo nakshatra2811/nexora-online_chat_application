@@ -9,6 +9,7 @@ export const SOCKET_URL = API_BASE_URL;
 
 export const APP_NAME = "Nexora";
 export const BRAND_TAGLINE = "The Privacy Protocol";
+export const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
 
 /**
  * Enhanced fetch wrapper with error handling for Nexora services.

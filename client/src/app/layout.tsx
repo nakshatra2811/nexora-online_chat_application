@@ -52,6 +52,12 @@ export default function RootLayout({
         </ThemeProvider>
         <SpeedInsights />
         <Analytics />
+        {/* Umami Analytics */}
+        <script 
+          async 
+          src={process.env.NEXT_PUBLIC_UMAMI_URL || "https://analytics.umami.is/script.js"} 
+          data-website-id={process.env.NEXT_PUBLIC_UMAMI_ID || "PASTE_YOUR_UMAMI_ID_HERE"}
+        />
       </body>
     </html>
   );

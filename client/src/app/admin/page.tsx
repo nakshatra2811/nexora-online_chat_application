@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Lock, Unlock, CheckCircle, XCircle, Mail, Key, Settings, Upload, Save, Globe, Zap } from "lucide-react";
 import { useTheme } from "@/lib/theme";
-import { nexoraFetch, API_BASE_URL, APP_NAME } from "@/lib/config";
+import { nexoraFetch, API_BASE_URL, APP_NAME, APP_LOGO } from "@/lib/config";
 
 // MOCK PENDING REQUESTS FOR AUTHORIZED NODES
 const INITIAL_REQUESTS = [
@@ -126,26 +126,50 @@ export default function AdminPanel() {
 
     if (action === "approve") {
       const defaultHtml = `
-            <div style="font-family: sans-serif; background: #0a0a12; color: #f0eeff; padding: 40px; border-radius: 20px;">
-                <h1 style="color: #6c5ce7; border-bottom: 2px solid #6c5ce7; padding-bottom: 10px;">Nexora Protocol Authorized</h1>
-                <p>Greetings @${req.username},</p>
-                <p>Your administrative clearance has been verified. You now have full access to the Nexora Private Chat ecosystem.</p>
-                
-                <div style="background: rgba(108, 92, 231, 0.1); border-left: 4px solid #6c5ce7; padding: 20px; margin: 20px 0;">
-                    <p style="margin: 0; font-weight: bold; color: #00d4ff;">AUTHENTICATION STATUS: ACTIVE</p>
-                    <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.8;">Node ID: NEX-AUTH-DEMO</p>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+                    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 32px; overflow: hidden; box-shadow: 0 40px 100px rgba(0,0,0,0.06); border: 1px solid #eef2f7; }
+                    .header { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); padding: 60px 40px; text-align: center; position: relative; }
+                    .logo-box { width: 90px; height: 90px; background: #fff; border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+                    .brand-name { color: #ffffff; font-size: 32px; font-weight: 900; letter-spacing: -1.5px; margin: 0; }
+                    .content { padding: 40px; text-align: center; }
+                    .title { font-size: 32px; font-weight: 900; color: #1a1a2e; margin-bottom: 12px; }
+                    .greeting { font-size: 18px; font-weight: 700; color: #6c5ce7; margin-bottom: 20px; }
+                    .message { color: #64748b; font-size: 15px; line-height: 1.8; margin-bottom: 40px; margin-left: auto; margin-right: auto; }
+                    .button { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 20px 45px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 20px 40px rgba(108,92,231,0.3); transition: all 0.3s ease; }
+                    .footer { background: #f8fafc; padding: 40px; text-align: center; color: #94a3b8; border-top: 1px solid #f1f5f9; }
+                    .copyright { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <div class="logo-box">
+                            <img src="${APP_LOGO}" alt="Nexora" style="width: 70px; height: 70px; object-fit: contain; border-radius: 16px;" />
+                        </div>
+                        <h1 class="brand-name">Nexora</h1>
+                    </div>
+                    <div class="content">
+                        <h2 class="title">Authorization Granted.</h2>
+                        <div class="greeting">Clearing: @${req.username} &bull; SECURE</div>
+                        <p class="message">
+                            Your administrative clearance has been verified. You now have full access to the Nexora Private Chat ecosystem. You may now log in using your registered credentials.
+                        </p>
+                        <a href="${window.location.origin}/auth" class="button">ACCESS SECURE TERMINAL</a>
+                    </div>
+                    <div class="footer">
+                        <div class="copyright">&copy; 2026 NEXORA SYSTEMS &bull; PRIVACY PROTOCOL</div>
+                        <p style="font-size: 10px; color: #94a3b8; line-height: 1.6; margin: 0; text-align: left;">
+                            This is an automated encrypted transmission. If you did not request this authorization, please secure your account immediately.
+                        </p>
+                    </div>
                 </div>
-
-                <p>You may now log in using your registered credentials. Secure P2P tunnels are waiting for your signature.</p>
-                
-                <div style="margin-top: 30px; text-align: center;">
-                    <a href="http://localhost:3000/auth" style="background: linear-gradient(135deg, #6c5ce7, #00d4ff); color: white; padding: 15px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block;">Access Secure Terminal</a>
-                </div>
-
-                <p style="margin-top: 40px; font-size: 12px; opacity: 0.5; text-align: center;">
-                    This is an automated encrypted transmission. Reply to this email if you encounter terminal linkage errors.
-                </p>
-            </div>
+            </body>
+            </html>
       `;
       setSelectedReq(req);
       setEmailDraft({

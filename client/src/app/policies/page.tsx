@@ -5,6 +5,7 @@ import { Shield, FileText, Scale, ArrowLeft, ExternalLink, Mail, ShieldCheck } f
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
+import { APP_LOGO } from "@/lib/config";
 
 export default function PoliciesPage() {
   const router = useRouter();
@@ -176,7 +177,7 @@ You acknowledge that Nexora does not actively monitor private communications. Yo
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
-                <img src="/logo.svg" alt="Nexora" className="w-6 h-6" />
+                <img src={APP_LOGO} alt="Nexora" className="w-6 h-6" />
                 <span className="font-black text-xl tracking-tighter">Nexora</span>
               </div>
               <p className="text-sm text-[#64748b] leading-relaxed max-w-sm font-medium">

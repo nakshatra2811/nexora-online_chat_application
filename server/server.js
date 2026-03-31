@@ -1,4 +1,14 @@
 require('dotenv').config();
+const Sentry = require("@sentry/node");
+const { nodeProfilingIntegration } = require("@sentry/profiling-node");
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  integrations: [
+    nodeProfilingIntegration(),
+  ],
+  tracesSampleRate: 1.0,
+});
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -16,6 +26,45 @@ const fs = require('fs');
 const path = require('path');
 const webpush = require('web-push');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+
+// ------------------------------------------------------------------
+// PII ENCRYPTION ENGINE (Zero-Leak Strategy)
+// ------------------------------------------------------------------
+const DATABASE_SECRET = process.env.DATABASE_SECRET || 'nexora_private_protocol_internal_encryption_key_31';
+const algorithm = 'aes-256-cbc';
+const key = crypto.createHash('sha256').update(DATABASE_SECRET).digest();
+
+function encryptField(text) {
+    if (!text || text === 'Not Set' || text.startsWith('e:')) return text;
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return `e:${iv.toString('hex')}:${encrypted}`;
+}
+
+function decryptField(encryptedText) {
+    if (!encryptedText || !encryptedText.startsWith('e:')) return encryptedText;
+    try {
+        const parts = encryptedText.split(':');
+        const iv = Buffer.from(parts[1], 'hex');
+        const encrypted = parts[2];
+        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch (e) {
+        return encryptedText; // Fallback to raw if decryption fails
+    }
+}
+
+function hashPhone(phone) {
+    if (!phone || phone === 'Not Set') return null;
+    const normalized = phone.replace(/\D/g, '');
+    if (normalized.length < 5) return null;
+    return crypto.createHash('sha256').update(normalized + DATABASE_SECRET).digest('hex');
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -124,7 +173,8 @@ let pgPool;
                 status TEXT DEFAULT 'Active',
                 color TEXT NOT NULL,
                 created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
-                phone_number TEXT DEFAULT 'Not Set'
+                phone_number TEXT DEFAULT 'Not Set',
+                phone_hash TEXT
             );
 
             CREATE TABLE IF NOT EXISTS connection_requests (
@@ -181,21 +231,22 @@ let pgPool;
             );
         `);
 
-        // Migration for phone_number
+        // Migration for phone_number and phone_hash
         if (dbType === 'sqlite') {
             try { await db.exec('ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT "Not Set"'); } catch (e) { }
+            try { await db.exec('ALTER TABLE users ADD COLUMN phone_hash TEXT'); } catch (e) { }
         }
 
         // SEED DATA
         const seedUsers = [
-            ['Nexora Root', 'root@nexora.app', 'Nexora_31', 'Nexora@31', 'from-[#6c5ce7] to-[#00d4ff]', 'Admin'],
-            ['Aarav Shah', 'aarav@nexora.app', 'aarav_vibe', 'Nexora@31', 'from-amber-500 to-orange-600', 'Standard'],
-            ['Isha Sharma', 'isha@nexora.app', 'isha_creative', 'Nexora@31', 'from-rose-500 to-pink-600', 'Standard'],
-            ['Rohan Mehta', 'rohan@nexora.app', 'rohan_nex', 'Nexora@31', 'from-emerald-500 to-teal-600', 'Standard'],
-            ['Zoya Khan', 'zoya@nexora.app', 'zoya_style', 'Nexora@31', 'from-fuchsia-500 to-purple-600', 'Standard'],
-            ['Kabir Das', 'kabir@nexora.app', 'kabir_code', 'Nexora@31', 'from-blue-500 to-indigo-600', 'Standard'],
-            ['Myra Goel', 'myra@nexora.app', 'myra_art', 'Nexora@31', 'from-sky-400 to-blue-500', 'Standard'],
-            ['Dev Patel', 'dev@nexora.app', 'dev_protocol', 'Nexora@31', 'from-violet-500 to-purple-800', 'Standard']
+            ['Nexora Root', 'root@nexora.app', 'Nexora_31', 'Nexora@31', 'from-[#6c5ce7] to-[#00d4ff]', 'Admin', '0000000031'],
+            ['Aarav Shah', 'aarav@nexora.app', 'aarav_vibe', 'Nexora@31', 'from-amber-500 to-orange-600', 'Standard', '9876543210'],
+            ['Isha Sharma', 'isha@nexora.app', 'isha_creative', 'Nexora@31', 'from-rose-500 to-pink-600', 'Standard', '9876543211'],
+            ['Rohan Mehta', 'rohan@nexora.app', 'rohan_nex', 'Nexora@31', 'from-emerald-500 to-teal-600', 'Standard', '9876543212'],
+            ['Zoya Khan', 'zoya@nexora.app', 'zoya_style', 'Nexora@31', 'from-fuchsia-500 to-purple-600', 'Standard', '9876543213'],
+            ['Kabir Das', 'kabir@nexora.app', 'kabir_code', 'Nexora@31', 'from-blue-500 to-indigo-600', 'Standard', '9876543214'],
+            ['Myra Goel', 'myra@nexora.app', 'myra_art', 'Nexora@31', 'from-sky-400 to-blue-500', 'Standard', '9876543215'],
+            ['Dev Patel', 'dev@nexora.app', 'dev_protocol', 'Nexora@31', 'from-violet-500 to-purple-800', 'Standard', '9876543216']
         ];
         for (const user of seedUsers) {
             try {
@@ -204,7 +255,10 @@ let pgPool;
                 if (!existing) {
                     const saltRounds = 10;
                     const hashed = await bcrypt.hash(user[3], saltRounds);
-                    await db.run('INSERT INTO users (full_name, email, username, password, color, role) VALUES (?, ?, ?, ?, ?, ?)', [user[0], user[1], user[2], hashed, user[4], user[5]]);
+                    await db.run(
+                        'INSERT INTO users (full_name, email, username, password, color, role, phone_number, phone_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                        [encryptField(user[0]), user[1], user[2], hashed, user[4], user[5], encryptField(user[6] || 'Not Set'), hashPhone(user[6])]
+                    );
                 }
             } catch (err) { }
         }
@@ -318,6 +372,8 @@ cloudinary.config({
     api_key: process.env.CLOUDINARY_API_KEY || '',
     api_secret: process.env.CLOUDINARY_API_SECRET || '',
 });
+
+const APP_LOGO_URL = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
 
 // ------------------------------------------------------------------
 // WEB PUSH VAPID SETUP
@@ -670,23 +726,24 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "Database not ready" });
         const identifier = username.toLowerCase().trim();
+        // Search by username or email (raw comparison for index)
         const user = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [identifier, identifier]);
 
         if (user) {
-            // Check if password matches (handling both bcrypt and legacy plain text)
-            let isMatch = false;
-            try {
-                isMatch = await bcrypt.compare(password, user.password);
-            } catch (e) {
-                // Fallback for legacy plain-text passwords
-                isMatch = (password === user.password);
-            }
+            const isMatch = await bcrypt.compare(password, user.password).catch(() => password === user.password);
 
             if (isMatch) {
-                return res.json({ status: "success", role: user.role, fullName: user.full_name, email: user.email, username: user.username, phoneNumber: user.phone_number, color: user.color, message: "Entered the Void." });
+                return res.json({ 
+                    status: "success", 
+                    role: user.role, 
+                    fullName: decryptField(user.full_name), 
+                    email: user.email, 
+                    username: user.username, 
+                    phoneNumber: decryptField(user.phone_number), 
+                    color: user.color, 
+                    message: "Identity recognized. Protocol access granted." 
+                });
             }
-        } else if (username.startsWith("Authorized_Account_")) {
-            return res.json({ status: "success", role: "AuthorizedAccount", message: "Entered the Void." });
         }
         res.status(401).json({ status: "error", message: "Authentication failed. Invalid identity." });
     } catch (err) {
@@ -750,27 +807,43 @@ app.post('/api/auth/recovery', async (req, res) => {
             <html>
             <head>
                 <style>
-                    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
-                    .container { max-width: 500px; margin: 50px auto; background: #ffffff; border-radius: 24px; padding: 40px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
-                    .logo { font-size: 24px; font-weight: 900; color: #6c5ce7; margin-bottom: 30px; }
-                    .title { font-size: 20px; font-weight: 700; color: #1a1a2e; margin-bottom: 12px; }
-                    .desc { font-size: 14px; color: #64748b; line-height: 1.6; margin-bottom: 30px; }
-                    .code-box { background: #f1f5f9; border-radius: 16px; padding: 24px; font-size: 32px; font-weight: 900; letter-spacing: 10px; color: #6c5ce7; border: 1px dashed #cbd5e1; }
-                    .expire { font-size: 12px; color: #94a3b8; margin-top: 16px; }
-                    .footer { font-size: 11px; color: #94a3b8; margin-top: 40px; line-height: 1.5; }
+                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
+                    .container { max-width: 550px; margin: 60px auto; background: #ffffff; border-radius: 32px; padding: 50px; border: 1px solid #eef2f7; box-shadow: 0 30px 60px rgba(108,92,231,0.08); text-align: center; }
+                    .logo-img { width: 90px; height: 90px; object-fit: contain; margin-bottom: 30px; border-radius: 22px; box-shadow: 0 15px 35px rgba(108,92,231,0.2); }
+                    .title { font-size: 26px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; letter-spacing: -1px; }
+                    .desc { font-size: 15px; color: #64748b; line-height: 1.8; margin-bottom: 35px; }
+                    .code-container { background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 24px; padding: 35px; margin-bottom: 35px; position: relative; overflow: hidden; }
+                    .code-box { font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #6c5ce7; margin: 0; }
+                    .code-label { font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; display: block; }
+                    .expire { font-size: 13px; color: #94a3b8; margin-top: 20px; font-weight: 500; }
+                    .footer { font-size: 12px; color: #94a3b8; margin-top: 50px; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 30px; }
+                    .protocol-badge { display: inline-block; background: rgba(108,92,231,0.06); color: #6c5ce7; padding: 8px 16px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; }
+                    .social-links { margin-top: 25px; }
+                    .security-note { font-size: 11px; font-weight: 700; color: #2ed573; margin-top: 15px; border: 1px solid rgba(46,213,115,0.2); padding: 10px; border-radius: 12px; background: rgba(46,213,115,0.03); }
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <img src="https://drive.google.com/uc?id=1cDmOorgwIHnDSPCq7cWODP4ZZMmBhXxn" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 24px; border-radius: 20px; box-shadow: 0 10px 20px rgba(108,92,231,0.2);" />
-                    <h2 class="title" style="margin-top:0;">Verification Protocol</h2>
-                    <p class="desc">A request was made to reset your Nexora password. Use the authorization code below to proceed.</p>
-                    <div class="code-box">${otp}</div>
-                    <p class="expire">This code expires in <strong>10 minutes</strong>.</p>
-                    <p class="footer">
-                        If you did not initiate this, please ignore this transmission.<br>
-                        Never share this code with anyone.
-                    </p>
+                    <img src="${APP_LOGO_URL}" alt="Nexora Logo" class="logo-img" />
+                    <div class="protocol-badge">Security Protocol Active</div>
+                    <h2 class="title">Verify Your Identity</h2>
+                    <p class="desc">A request was made to unlock the recovery vault for your Nexora account. Use the encrypted authorization code below to establish a secure link.</p>
+                    
+                    <div class="code-container">
+                        <span class="code-label">One-Time Security Code</span>
+                        <div class="code-box">${otp}</div>
+                        <p class="expire">Valid for the next <strong>10 minutes</strong> only.</p>
+                    </div>
+
+                    <div class="security-note">
+                        🔒 END-TO-END ENCRYPTED TRANSMISSION
+                    </div>
+
+                    <div class="footer">
+                        This is an automated security transmission from Nexora Core.<br>
+                        If you did not initiate this request, your account remains secure. No action is required.<br><br>
+                        <strong>&copy; ${new Date().getFullYear()} Nexora Systems &bull; Deeply Encrypted.</strong>
+                    </div>
                 </div>
             </body>
             </html>
@@ -823,9 +896,11 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
     try {
         if (!db) return res.status(500).json({ error: "Database not ready" });
-        await db.run('UPDATE users SET password = ? WHERE LOWER(email) = LOWER(?)', [newPassword, email]);
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        await db.run('UPDATE users SET password = ? WHERE LOWER(email) = LOWER(?)', [hashedPassword, email]);
         otpStore.delete(email.toLowerCase()); // Clear OTP after use
-        res.json({ status: "success", message: "Password reset successfully." });
+        res.json({ status: "success", message: "Password reset successfully. Your identity is now secured." });
     } catch (err) {
         console.error("Reset password error:", err);
         res.status(500).json({ error: "Failed to reset password." });
@@ -863,10 +938,10 @@ app.post('/api/auth/signup', async (req, res) => {
                 return res.json({ 
                     status: "success", 
                     role: existing.role, 
-                    fullName: existing.full_name, 
+                    fullName: decryptField(existing.full_name), 
                     email: existing.email, 
                     username: existing.username, 
-                    phoneNumber: existing.phone_number, 
+                    phoneNumber: decryptField(existing.phone_number), 
                     color: existing.color, 
                     message: "Identity recognized. Automatic login authorized." 
                 });
@@ -882,8 +957,8 @@ app.post('/api/auth/signup', async (req, res) => {
         const role = isAuthorized ? 'PendingAuthorized' : 'Standard';
         
         await db.run(
-            'INSERT INTO users (full_name, email, username, password, role, color, phone_number) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [fullName, finalEmail, finalUsername, hashedPassword, role, color, phoneNumber || 'Not Set']
+            'INSERT INTO users (full_name, email, username, password, role, color, phone_number, phone_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [encryptField(fullName), finalEmail, finalUsername, hashedPassword, role, color, encryptField(phoneNumber || 'Not Set'), hashPhone(phoneNumber)]
         );
 
         const newUser = {
@@ -897,18 +972,21 @@ app.post('/api/auth/signup', async (req, res) => {
 
         if (isAuthorized) {
             const adminHtml = `
-                <div style="font-family: 'Inter', sans-serif; padding: 40px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 24px; max-width: 500px; margin: auto; text-align: center;">
-                    <img src="https://drive.google.com/uc?id=1cDmOorgwIHnDSPCq7cWODP4ZZMmBhXxn" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 24px; border-radius: 20px; box-shadow: 0 10px 20px rgba(108,92,231,0.2);" />
-                    <div style="color: #6c5ce7; font-weight: 900; font-size: 20px; margin-bottom: 24px;">NEXORA ADMIN</div>
-                    <h2 style="color: #1a1a2e; margin-bottom: 20px; font-size: 22px; font-weight: 800;">New Access Request</h2>
-                    <div style="background: #f8fafc; border-radius: 16px; padding: 24px; border: 1px solid #f1f5f9;">
-                        <p style="margin: 0 0 12px 0; font-size: 14px; color: #64748b;"><strong>Subject Identity:</strong> <span style="color: #1a1a2e;">${fullName}</span></p>
-                        <p style="margin: 0 0 12px 0; font-size: 14px; color: #64748b;"><strong>Network Identifier:</strong> <span style="color: #6c5ce7;">@${username}</span></p>
-                        <p style="margin: 0; font-size: 14px; color: #64748b;"><strong>Email Archive:</strong> <span style="color: #1a1a2e;">${email}</span></p>
+                <div style="font-family: 'Inter', -apple-system, sans-serif; padding: 50px; background: #ffffff; border: 1px solid #eef2f7; border-radius: 32px; max-width: 550px; margin: auto; text-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.05);">
+                    <img src="${APP_LOGO_URL}" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 30px; border-radius: 22px; box-shadow: 0 15px 30px rgba(108,92,231,0.2);" />
+                    <div style="color: #6c5ce7; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;">NEXORA CORE ADMIN</div>
+                    <h2 style="color: #1a1a2e; margin-bottom: 25px; font-size: 26px; font-weight: 900; letter-spacing: -1px;">New Access Request</h2>
+                    <div style="background: #f8fafc; border-radius: 24px; padding: 35px; border: 1px solid #f1f5f9; text-align: left;">
+                        <p style="margin: 0 0 15px 0; font-size: 15px; color: #64748b;"><strong>Subject Identity:</strong> <span style="color: #1a1a2e; font-weight: 700;">${fullName}</span></p>
+                        <p style="margin: 0 0 15px 0; font-size: 15px; color: #64748b;"><strong>Network Identifier:</strong> <span style="color: #6c5ce7; font-weight: 700;">@${username}</span></p>
+                        <p style="margin: 0; font-size: 15px; color: #64748b;"><strong>Email Archive:</strong> <span style="color: #1a1a2e; font-weight: 700;">${email}</span></p>
                     </div>
-                    <p style="color: #94a3b8; font-size: 12px; margin-top: 30px; line-height: 1.6;">
-                        This identity requires manual clearance before protocol access is granted. Please review this request in the Secure Admin Console.
+                    <p style="color: #94a3b8; font-size: 13px; margin-top: 35px; line-height: 1.8;">
+                        This identity requires manual clearance before protocol access is granted. Please review this request in the Secure Admin Console immediately.
                     </p>
+                    <div style="margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 25px; font-size: 11px; color: #94a3b8; font-weight: 700;">
+                        REFERENCE ID: SEC-ACL-${Math.random().toString(36).substring(7).toUpperCase()}
+                    </div>
                 </div>
             `;
             const mailOptions = {
@@ -919,93 +997,68 @@ app.post('/api/auth/signup', async (req, res) => {
             };
             await emailTransporter.sendMail(mailOptions);
 
-            // Send notification to the user themselves
-            const userPendingHtml = `
-                <div style="font-family: 'Inter', sans-serif; padding: 40px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 24px; max-width: 500px; margin: auto; text-align: center;">
-                    <img src="https://drive.google.com/uc?id=1cDmOorgwIHnDSPCq7cWODP4ZZMmBhXxn" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 24px; border-radius: 20px; box-shadow: 0 10px 20px rgba(108,92,231,0.2);" />
-                    <div style="color: #6c5ce7; font-weight: 900; font-size: 20px; margin-bottom: 24px;">NEXORA</div>
-                    <h2 style="color: #1a1a2e; margin-bottom: 20px; font-size: 22px; font-weight: 800;">Account Under Review</h2>
-                    <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin-bottom: 30px;">
-                        Hello <strong>${fullName}</strong>,<br><br>
-                        Your request to join the Nexora protocol has been successfully received. 
-                        Your identity (<strong>@${username}</strong>) is currently undergoing the mandatory clearance process.
-                    </p>
-                    <div style="background: #f8fafc; border-radius: 12px; padding: 16px; border: 1px solid #f1f5f9; display: inline-block;">
-                        <span style="color: #f59e0b; font-weight: 700; font-size: 14px;">STATUS: PENDING APPROVAL</span>
-                    </div>
-                    <p style="color: #94a3b8; font-size: 12px; margin-top: 30px; line-height: 1.6;">
-                        You will receive another transmission once your access is granted.
-                    </p>
-                </div>
-            `;
-            const userMailOptions = {
-                from: `"${process.env.GMAIL_NAME || 'Nexora Core'}" <${process.env.GMAIL_USER}>`,
-                to: email,
-                subject: 'Nexora Protocol: Account Under Review',
-                html: userPendingHtml
-            };
-            await emailTransporter.sendMail(userMailOptions);
-
-            return res.json({ status: "pending", message: "Request submitted. Awaiting Admin Approval." });
-        }
-        // NEW: WELCOME MAIL FOR STANDARD USERS
-        const welcomeHtml = `
+            // Send welcome notification to the user
+            const welcomeHtml = `
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
                     body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
-                    .wrapper { padding: 40px 20px; text-align: center; }
-                    .main { max-width: 550px; margin: 0 auto; background: #ffffff; border-radius: 32px; padding: 50px 40px; box-shadow: 0 20px 40px rgba(108,92,231,0.06); border: 1px solid #eef2f7; }
-                    .logo { font-size: 28px; font-weight: 900; letter-spacing: -1px; color: #6c5ce7; margin-bottom: 40px; }
-                    .welcome-text { font-size: 24px; font-weight: 800; color: #1a1a2e; margin-bottom: 15px; }
-                    .body-text { font-size: 15px; color: #64748b; line-height: 1.7; margin-bottom: 35px; }
-                    .feature-box { background: #f8fafc; border-radius: 20px; padding: 25px; margin-bottom: 35px; text-align: left; border: 1px solid #f1f5f9; }
-                    .feature-title { font-size: 13px; font-weight: 900; color: #6c5ce7; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; display: block; }
-                    .feature-item { font-size: 14px; color: #475569; margin-bottom: 8px; display: flex; align-items: center; }
-                    .btn { display: inline-block; background: linear-gradient(135deg, #6c5ce7, #00d4ff); color: #ffffff; padding: 16px 35px; border-radius: 18px; text-decoration: none; font-weight: 700; font-size: 15px; box-shadow: 0 10px 20px rgba(108,92,231,0.25); transition: transform 0.2s; }
-                    .footer-note { font-size: 11px; color: #94a3b8; margin-top: 45px; border-top: 1px solid #f1f5f9; pt: 25px; }
+                    .wrapper { padding: 50px 20px; text-align: center; }
+                    .main { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 40px; padding: 60px 40px; box-shadow: 0 40px 80px rgba(108,92,231,0.08); border: 1px solid #eef2f7; }
+                    .logo-img { width: 90px; height: 90px; object-fit: contain; margin-bottom: 35px; border-radius: 20px; box-shadow: 0 15px 35px rgba(108,92,231,0.2); }
+                    .welcome-text { font-size: 28px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; letter-spacing: -1.5px; }
+                    .body-text { font-size: 16px; color: #64748b; line-height: 1.8; margin-bottom: 40px; }
+                    .feature-box { background: #f8fafc; border-radius: 24px; padding: 35px; margin-bottom: 40px; text-align: left; border: 1px solid #f1f5f9; position: relative; overflow: hidden; }
+                    .feature-title { font-size: 11px; font-weight: 900; color: #6c5ce7; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; display: block; }
+                    .feature-item { font-size: 14px; color: #475569; margin-bottom: 12px; display: flex; align-items: center; font-weight: 600; }
+                    .feature-icon { margin-right: 12px; font-size: 18px; }
+                    .btn { display: inline-block; background: linear-gradient(135deg, #6c5ce7, #00d4ff); color: #ffffff !important; padding: 20px 45px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 15px; box-shadow: 0 20px 40px rgba(108,92,231,0.25); transition: all 0.3s ease; letter-spacing: 1px; }
+                    .footer-note { font-size: 11px; color: #94a3b8; margin-top: 50px; border-top: 1px solid #f1f5f9; padding-top: 30px; line-height: 1.6; }
                 </style>
             </head>
             <body>
                 <div class="wrapper">
                     <div class="main">
-                        <img src="https://drive.google.com/uc?id=1cDmOorgwIHnDSPCq7cWODP4ZZMmBhXxn" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 24px; border-radius: 20px; box-shadow: 0 10px 20px rgba(108,92,231,0.2);" />
-                        <h1 class="welcome-text" style="margin-top:0;">Connected to the Void</h1>
-                        <p class="body-text">Welcome, <strong>${fullName}</strong>. Your identity <strong>@${username}</strong> has been successfully linked to the Nexora Private Chat protocol.</p>
+                        <img src="${APP_LOGO_URL}" alt="Nexora Logo" class="logo-img" />
+                        <h1 class="welcome-text">Protocol Established</h1>
+                        <p class="body-text">Welcome to the Void, <strong>${fullName}</strong>. Your identity <strong>@${username}</strong> has been successfully synchronized with the Nexora Private Protocol.</p>
                         
                         <div class="feature-box">
-                            <span class="feature-title">Protocol Features Active</span>
-                            <div class="feature-item">🔒 End-to-End P2P Encryption</div>
-                            <div class="feature-item">⏳ Ephemeral Persistence Logs</div>
-                            <div class="feature-item">📞 Secure Voice/Video Tunnels</div>
+                            <span class="feature-title">Active Capabilities</span>
+                            <div class="feature-item"><span class="feature-icon">🔒</span> End-to-End P2P Encryption</div>
+                            <div class="feature-item"><span class="feature-icon">⏳</span> Ephemeral Data Persistence</div>
+                            <div class="feature-item"><span class="feature-icon">📞</span> Secure Voice & Video Tunnels</div>
+                            <div class="feature-item"><span class="feature-icon">🌑</span> Deep-Dark Glass Interface</div>
                         </div>
-
-                        <a href="https://nexora.app" class="btn">Enter Protocol</a>
+ 
+                        <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="btn">Enter Protocol</a>
 
                         <div class="footer-note">
-                            This is an automated transmission from Nexora Core.<br>
-                            Identity synchronization completed at ${new Date().toUTCString()}.
+                            This is an automated transmission confirming successful link establishment.<br>
+                            Synchronization completed at ${new Date().toUTCString()}.<br><br>
+                            &copy; ${new Date().getFullYear()} Nexora Global Systems &bull; Deeply Encrypted.
                         </div>
                     </div>
                 </div>
             </body>
             </html>
-        `;
+            `;
 
-        const welcomeMailOptions = {
-            from: `"${process.env.GMAIL_NAME || 'Nexora Private Chat'}" <${process.env.GMAIL_USER}>`,
-            to: email,
-            subject: 'Welcome to Nexora: Protocol Established',
-            html: welcomeHtml
-        };
-        await emailTransporter.sendMail(welcomeMailOptions);
+            const welcomeMailOptions = {
+                from: `"${process.env.GMAIL_NAME || 'Nexora Private Chat'}" <${process.env.GMAIL_USER}>`,
+                to: email,
+                subject: 'Welcome to Nexora: Protocol Established',
+                html: welcomeHtml
+            };
+            await emailTransporter.sendMail(welcomeMailOptions);
 
-        res.status(201).json({ 
-            status: "success", 
-            user: newUser,
-            message: "User identity initialized. Welcome transmission sent." 
-        });
+            res.status(201).json({ 
+                status: "success", 
+                user: newUser,
+                message: "User identity initialized. Welcome transmission sent." 
+            });
+        }
     } catch (err) {
         console.error("Signup error:", err);
         res.status(500).json({ error: "Server Error: Failed to process signup." });
@@ -1021,45 +1074,45 @@ app.post('/api/admin/approve', async (req, res) => {
             <head>
                 <meta charset="utf-8">
                 <style>
-                    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
-                    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 32px; overflow: hidden; box-shadow: 0 40px 100px rgba(0,0,0,0.1); border: 1px solid rgba(108,92,231,0.1); }
-                    .header { background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%); padding: 60px 40px; text-align: center; position: relative; }
-                    .logo-circle { width: 80px; height: 80px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
-                    .brand-name { color: #ffffff; font-size: 32px; font-weight: 900; letter-spacing: -2px; margin: 0; }
-                    .content { padding: 60px 40px; text-align: center; }
-                    .title { font-size: 36px; font-weight: 900; color: #1a1a2e; margin-bottom: 16px; letter-spacing: -1.5px; }
-                    .greeting { font-size: 20px; font-weight: 600; color: #6c5ce7; margin-bottom: 24px; }
-                    .message { color: #64748b; font-size: 16px; line-height: 1.8; margin-bottom: 48px; max-width: 440px; margin-left: auto; margin-right: auto; }
-                    .button { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 22px 50px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 16px; display: inline-block; box-shadow: 0 25px 50px -12px rgba(108,92,231,0.5); transition: all 0.3s ease; letter-spacing: 1px; }
-                    .footer { background: #f1f5f9; padding: 40px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; }
-                    .copyright { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; }
-                    .disclaimer-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; text-align: left; margin-top: 20px; }
-                    .disclaimer-text { font-size: 10px; color: #94a3b8; line-height: 1.6; margin: 0; }
+                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+                    .container { max-width: 600px; margin: 60px auto; background: #ffffff; border-radius: 40px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; }
+                    .header { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); padding: 70px 40px; text-align: center; position: relative; }
+                    .logo-box { width: 95px; height: 95px; background: #fff; border-radius: 24px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+                    .brand-name { color: #ffffff; font-size: 34px; font-weight: 900; letter-spacing: -2px; margin: 0; }
+                    .content { padding: 60px 45px; text-align: center; }
+                    .title { font-size: 32px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; letter-spacing: -1px; }
+                    .greeting { font-size: 18px; font-weight: 700; color: #6c5ce7; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; }
+                    .message { color: #64748b; font-size: 16px; line-height: 1.8; margin-bottom: 50px; }
+                    .button { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 22px 50px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 20px 40px rgba(108,92,231,0.3); transition: all 0.3s ease; letter-spacing: 1.5px; text-transform: uppercase; }
+                    .footer { background: #f8fafc; padding: 45px; text-align: center; color: #94a3b8; border-top: 1px solid #f1f5f9; }
+                    .copyright { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 25px; }
+                    .disclaimer-box { background: #ffffff; border: 1px solid #eef2f7; border-radius: 20px; padding: 25px; text-align: left; }
+                    .disclaimer-text { font-size: 11px; color: #94a3b8; line-height: 1.8; margin: 0; font-weight: 500; }
                 </style>
             </head>
             <body>
                 <div class="container">
                     <div class="header">
-                        <div class="logo-circle" style="background:transparent; border:none; box-shadow:none;">
-                            <img src="https://drive.google.com/uc?id=1cDmOorgwIHnDSPCq7cWODP4ZZMmBhXxn" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+                        <div class="logo-box">
+                            <img src="${APP_LOGO_URL}" alt="Nexora" style="width: 75px; height: 75px; object-fit: contain; border-radius: 18px;" />
                         </div>
-                        <h1 class="brand-name">Nexora.</h1>
+                        <h1 class="brand-name">Nexora</h1>
                     </div>
                     <div class="content">
                         <h2 class="title">Welcome to the Void.</h2>
-                        <div class="greeting">Access Granted: ${username}</div>
+                        <div class="greeting">Clearing: ${username} &bull; SUCCESS</div>
                         <p class="message">
                             Your identity has been verified. You are now authorized to use the Nexora Private Protocol. Enter the unified communication hub to start your deeply encrypted journey.
                         </p>
-                        <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/auth" class="button">START SURFING</a>
+                        <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="button">START SURFING</a>
                     </div>
                     <div class="footer">
-                        <div class="copyright">&copy; 2026 NEXORA SYSTEMS &bull; ALL RIGHTS RESERVED</div>
+                        <div class="copyright">&copy; ${new Date().getFullYear()} NEXORA SYSTEMS &bull; PRIVACY PROTOCOL</div>
                         <div class="disclaimer-box">
                             <p class="disclaimer-text">
-                                <strong>SECURITY DISCLAIMER:</strong> This is an automated protocol transmission. Nexora is a zero-knowledge relay service. We do not store, monitor, or have decryption keys for your communications. You are solely responsible for managing your Private Vault keys and session security. 
+                                <strong>IDENTITY VERIFIED:</strong> This is a secure transmission from Nexora Core. All sessions are protected by industry-leading end-to-end encryption.
                                 <br><br>
-                                If you did not request this access, please ignore this transmission. Reference-ID: SEC-NODE-${Math.random().toString(36).substring(7).toUpperCase()}
+                                Reference-ID: SEC-ACL-${Math.random().toString(36).substring(7).toUpperCase()}
                             </p>
                         </div>
                     </div>
@@ -1086,9 +1139,9 @@ app.post('/api/admin/approve', async (req, res) => {
 app.post('/api/admin/test-mail', async (req, res) => {
     try {
         const testHtml = `
-            <div style="font-family: 'Inter', sans-serif; padding: 40px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 24px; max-width: 500px; margin: auto; text-align: center;">
-                <img src="https://drive.google.com/uc?id=1cDmOorgwIHnDSPCq7cWODP4ZZMmBhXxn" alt="Nexora Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 24px; border-radius: 20px; box-shadow: 0 10px 20px rgba(108,92,231,0.2);" />
-                <div style="color: #6c5ce7; font-weight: 900; font-size: 24px; margin-bottom: 24px;">NEXORA</div>
+            <div style="font-family: 'Inter', -apple-system, sans-serif; padding: 50px; background: #ffffff; border: 1px solid #eef2f7; border-radius: 32px; max-width: 550px; margin: auto; text-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.05);">
+                <img src="${APP_LOGO_URL}" alt="Nexora Logo" style="width: 90px; height: 90px; object-fit: contain; margin-bottom: 30px; border-radius: 24px; box-shadow: 0 20px 40px rgba(108,92,231,0.2);" />
+                <div style="color: #6c5ce7; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 25px;">NEXORA CORE</div>
                 <h2 style="color: #2ed573; margin-bottom: 12px; font-size: 20px;">SMTP Protocol Operational</h2>
                 <p style="color: #64748b; font-size: 14px; line-height: 1.6;">This is a test transmission confirming your Nexora communication relay is fully functional.</p>
                 <div style="border-top: 1px solid #f1f5f9; margin-top: 30px; padding-top: 20px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">
@@ -1250,11 +1303,50 @@ app.get('/api/users/search', async (req, res) => {
             LIMIT 20
         `, [`%${q}%`, `%${q}%`, me]);
 
-        const mappedUsers = users.map(u => ({ ...u, online: true }));
+        const mappedUsers = users.map(u => ({ 
+            ...u, 
+            fullName: decryptField(u.fullName),
+            online: true 
+        }));
         res.json({ users: mappedUsers });
     } catch (err) {
         console.error("Search error:", err);
         res.status(500).json({ users: [] });
+    }
+});
+
+// NEW: Contact Sync & Friend Suggestions
+app.post('/api/users/sync-contacts', async (req, res) => {
+    const { contacts, me } = req.body; // contacts: array of phone numbers
+    if (!contacts || !Array.isArray(contacts)) return res.json({ suggestions: [] });
+    
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        
+        // 1. Hash incoming contact numbers for deterministic matching
+        const contactHashes = contacts.map(p => hashPhone(p)).filter(h => h !== null);
+        if (contactHashes.length === 0) return res.json({ suggestions: [] });
+
+        // 2. Find matches (excluding self)
+        const placeholders = contactHashes.map(() => '?').join(',');
+        const users = await db.all(`
+            SELECT username, full_name AS "fullName", color 
+            FROM users 
+            WHERE phone_hash IN (${placeholders})
+              AND LOWER(username) != LOWER(?)
+            LIMIT 15
+        `, [...contactHashes, me || '']);
+
+        const result = users.map(u => ({
+            ...u,
+            fullName: decryptField(u.fullName),
+            reason: 'In your contacts'
+        }));
+
+        res.json({ suggestions: result });
+    } catch (err) {
+        console.error("Sync Error:", err);
+        res.status(500).json({ suggestions: [] });
     }
 });
 
@@ -1263,8 +1355,13 @@ app.get('/api/users/profile', async (req, res) => {
     const username = (req.query.username || '').toLowerCase();
     try {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS fullName, email, role, created_at, color, phone_number AS phoneNumber FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber" FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: "User not found" });
+        
+        // Decrypt sensitive info for the client
+        user.fullName = decryptField(user.fullName);
+        user.phoneNumber = decryptField(user.phoneNumber);
+        
         res.json({ user });
     } catch (err) {
         res.status(500).json({ error: "Server error" });
@@ -1352,9 +1449,13 @@ app.get('/api/connections/requests', async (req, res) => {
     if (!username) return res.json({ requests: [] });
     try {
         if (!db) return res.json({ requests: [] });
-        const reqs = await db.all('SELECT id, from_username AS "from", from_name AS fromName, from_color AS fromColor, created_at AS time FROM connection_requests WHERE LOWER(to_username) = LOWER(?) AND status = "pending"', [username]);
+        const reqs = await db.all('SELECT id, from_username AS "from", from_name AS "fromName", from_color AS "fromColor", created_at AS "time" FROM connection_requests WHERE LOWER(to_username) = LOWER(?) AND status = "pending"', [username]);
+        
+        // Decrypt sender names if they were encrypted (older requests might be raw)
+        const decryptedReqs = reqs.map(r => ({ ...r, fromName: decryptField(r.fromName) }));
+        
         // Format time
-        const formatted = reqs.map(r => ({
+        const formatted = decryptedReqs.map(r => ({
             ...r,
             time: new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
@@ -1382,6 +1483,7 @@ app.get('/api/connections', async (req, res) => {
             const room = io.sockets.adapter.rooms.get(r.username);
             return {
                 ...r,
+                name: decryptField(r.name),
                 online: room && room.size > 0,
                 preview: 'Secure tunnel established',
                 unread: 0,
@@ -1727,6 +1829,8 @@ app.delete('/api/stories/:id', async (req, res) => {
         res.status(500).json({ error: "Server Error" });
     }
 });
+
+Sentry.setupExpressErrorHandler(app);
 
 // ------------------------------------------------------------------
 // START SERVER

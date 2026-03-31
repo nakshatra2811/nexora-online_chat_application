@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { Mail, ShieldCheck, HelpCircle } from "lucide-react";
+import { APP_LOGO } from "@/lib/config";
+import { SuggestedUsers } from "@/components/SuggestedUsers";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -13,7 +15,7 @@ export default function Dashboard() {
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto z-10 relative">
       <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-[500px]">
-        <div className="glass-panel p-12 text-center max-w-2xl w-full relative shadow-2xl">
+        <div className="glass-panel p-12 text-center max-w-2xl w-full relative shadow-2xl overflow-hidden">
           {/* Soft decorative spheres */}
           <div className="absolute -left-10 -top-20 h-64 w-64 rounded-full bg-[#6c5ce7] opacity-10 blur-3xl mix-blend-multiply flex-shrink-0 z-0"></div>
           <div className="absolute left-20 top-10 h-72 w-72 rounded-full bg-[#00d4ff] opacity-10 blur-3xl mix-blend-multiply flex-shrink-0 z-0"></div>
@@ -22,7 +24,7 @@ export default function Dashboard() {
             <h1 className="text-4xl font-extrabold gradient-text tracking-tighter mb-4">Nexora Dashboard</h1>
             <p className="text-[#64748b] leading-relaxed mb-8 font-medium">
               Welcome to the void. This represents the main unified communication hub. 
-              The full Chat, Stories, Calls, and Vault UI will be implemented here.
+              Find and connect with your contacts to begin your encrypted journey.
             </p>
 
             <button
@@ -33,6 +35,9 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
+        {/* SUGGESTIONS SECTION */}
+        <SuggestedUsers />
       </div>
 
       {/* FULL DASHBOARD FOOTER */}
@@ -42,7 +47,7 @@ export default function Dashboard() {
           {/* Logo and About */}
           <div className="space-y-4 lg:col-span-2">
             <div className="flex items-center gap-3 mb-4">
-              <img src="/logo.svg" alt="Nexora" className="w-8 h-8 drop-shadow-lg" />
+              <img src={APP_LOGO} alt="Nexora" className="w-8 h-8 drop-shadow-lg" />
               <span className="font-extrabold text-2xl tracking-tighter text-[#1a1a2e] dark:text-white">Nexora.</span>
             </div>
             <p className="text-sm font-medium leading-relaxed max-w-md text-[#64748b]">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Shield, Zap, EyeOff, Lock, MessageSquare, Video, ArrowRight, X, CheckCircle, UserPlus, LogIn } from "lucide-react";
+import { APP_LOGO } from "@/lib/config";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
 import { Scene3D } from "@/components/Scene3D";
 import { Tilt3DCard } from "@/components/Tilt3DCard";
@@ -55,7 +56,7 @@ export default function LandingPage() {
         }}
       >
         <div className="flex items-center gap-2 sm:gap-3 cursor-pointer" onClick={() => router.push("/")}>
-          <img src="/logo.svg" alt="Nexora Logo" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 object-contain drop-shadow-lg rounded-[10px]" />
+          <img src={APP_LOGO} alt="Nexora Logo" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 object-contain drop-shadow-lg rounded-[10px]" />
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tighter select-none" style={{ color: "var(--text-primary)" }}>Nexora</h1>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
@@ -211,7 +212,7 @@ export default function LandingPage() {
       <footer className="relative z-10 py-12 px-6 flex flex-col md:flex-row justify-between items-center gap-6 text-[#94a3b8] text-sm font-semibold border-t border-white/30"
               style={{ background: "rgba(255,255,255,0.3)", backdropFilter: "blur(10px)" }}>
         <div className="flex items-center gap-3">
-          <img src="/logo.svg" alt="Nexora Logo" className="w-6 h-6 opacity-60" />
+          <img src={APP_LOGO} alt="Nexora Logo" className="w-6 h-6 opacity-60" />
           <p>&copy; 2026 Nexora Systems. Secure &bull; Privacy by Design.</p>
         </div>
         <div className="flex items-center gap-6">
