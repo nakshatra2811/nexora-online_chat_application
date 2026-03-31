@@ -319,7 +319,11 @@ export default function ProfilePage() {
     phone: "Not Set",
     bio: "Nexora Privacy Account",
     joinedDate: "March 2026",
+    avatarUrl: "",
   });
+
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tempEmail, setTempEmail] = useState("");
   const [showOTPModal, setShowOTPModal] = useState(false);
@@ -345,6 +349,7 @@ export default function ProfilePage() {
         phone: signupPhone,
         bio: role === "Authorized Account" ? "Chief Protocol Officer." : "Protocol Enthusiast.",
         joinedDate: "March 2026",
+        avatarUrl: "",
       };
 
       // 3. Try fetching from server
@@ -356,6 +361,7 @@ export default function ProfilePage() {
                 currentProfile.name = data.user.fullName || currentProfile.name;
                 currentProfile.email = data.user.email || currentProfile.email;
                 currentProfile.phone = data.user.phoneNumber || currentProfile.phone;
+                currentProfile.avatarUrl = data.user.avatarUrl || "";
                 if (data.user.created_at) {
                     const d = new Date(data.user.created_at);
                     currentProfile.joinedDate = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
@@ -384,6 +390,65 @@ export default function ProfilePage() {
 
     loadProfile();
   }, []);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        // Resize exactly to 320x320 and crop to square
+        const size = 320;
+        canvas.width = size;
+        canvas.height = size;
+        
+        const scale = Math.max(size / img.width, size / img.height);
+        const x = (size / scale - img.width) / 2;
+        const y = (size / scale - img.height) / 2;
+        
+        ctx.drawImage(img, x, y, img.width, img.height, 0, 0, img.width * scale, img.height * scale);
+        
+        const avatarBase64 = canvas.toDataURL("image/webp", 0.9);
+
+        // Upload to server
+        try {
+          const { nexoraFetch } = await import("@/lib/config");
+          const resp = await nexoraFetch("/api/users/avatar", {
+            method: "POST",
+            body: JSON.stringify({ username: profile.username, avatarBase64 })
+          });
+          
+          if (resp && resp.status === "success") {
+            setProfile(prev => ({ ...prev, avatarUrl: avatarBase64 }));
+            // Also update local cache so it persists locally
+            const cached = localStorage.getItem("nexora_user_profile");
+            if (cached) {
+               const p = JSON.parse(cached);
+               p.avatarUrl = avatarBase64;
+               localStorage.setItem("nexora_user_profile", JSON.stringify(p));
+            }
+          } else {
+             alert(resp.error || "Failed to update profile picture");
+          }
+        } catch (e) {
+          console.error("Avatar upload failed:", e);
+          alert("Network error.");
+        } finally {
+          setIsUploadingAvatar(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const [friends, setFriends] = useState<any[]>([]);
   const [pendingSent, setPendingSent] = useState<any[]>([]);
@@ -545,11 +610,18 @@ export default function ProfilePage() {
 
             {/* Avatar */}
             <div className="relative mb-5">
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white text-4xl font-extrabold shadow-xl border-4"
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange} />
+              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white text-4xl font-extrabold shadow-xl border-4 overflow-hidden relative"
                 style={{ borderColor: "var(--bg-surface-solid)" }}>
-                {(profile.name?.[0] || 'N').toUpperCase()}
+                {isUploadingAvatar ? (
+                   <span className="text-sm font-semibold animate-pulse">Wait...</span>
+                ) : profile.avatarUrl ? (
+                   <img src={profile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                   (profile.name?.[0] || 'N').toUpperCase()
+                )}
               </div>
-              <button className="absolute bottom-1 right-1 p-2 rounded-full shadow-lg border hover:scale-110 transition-transform cursor-pointer"
+              <button onClick={() => fileInputRef.current?.click()} className="absolute bottom-1 right-1 p-2 rounded-full shadow-lg border hover:scale-110 transition-transform cursor-pointer z-10"
                 style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)", color: "#6c5ce7" }}>
                 <Camera className="w-4 h-4" />
               </button>

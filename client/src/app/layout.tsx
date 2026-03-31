@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 import { NavigationProgressBar } from "@/components/NavigationProgressBar";
+import { ToastProvider } from "@/components/ToastProvider";
 import Script from "next/script";
 
 const inter = Inter({
@@ -53,6 +54,7 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <NavigationProgressBar />
         </Suspense>
+        <ToastProvider />
         <ThemeProvider>
           {children}
         </ThemeProvider>

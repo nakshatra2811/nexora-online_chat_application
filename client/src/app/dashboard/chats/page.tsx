@@ -78,6 +78,7 @@ export interface Thread {
   online: boolean;
   preview: string;
   unread: number;
+  avatarUrl?: string;
 }
 
 export default function ChatsPage() {
@@ -2248,9 +2249,9 @@ export default function ChatsPage() {
                   onClick={() => hasStory ? (window.location.href = '/dashboard/stories') : handleOpenThread(user)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                   <div className="relative">
-                    <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase`}
+                    <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
                          style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                      {(user?.name?.[0] || user?.username?.[0] || "?").toUpperCase()}
+                      {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : (user?.name?.[0] || user?.username?.[0] || "?").toUpperCase()}
                     </div>
                     {isUserOnline && !hasStory && (
                       <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
@@ -2285,9 +2286,9 @@ export default function ChatsPage() {
                   className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all relative group/thread"
                   style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
                   <div className="relative shrink-0">
-                    <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color?.includes('from-') ? thread.color : "from-[#6c5ce7] to-[#00d4ff]"}`} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/5 uppercase`}
+                    <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color?.includes('from-') ? thread.color : "from-[#6c5ce7] to-[#00d4ff]"}`} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/5 uppercase overflow-hidden`}
                       onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
-                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : (thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
+                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
                       <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
@@ -2368,9 +2369,9 @@ export default function ChatsPage() {
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </motion.button>
                   <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
-                    <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm md:text-base shadow-xl border border-white/10 cursor-pointer shrink-0 transition-transform active:scale-90 uppercase`}
-                         onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color })}>
-                      {(activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
+                    <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm md:text-base shadow-xl border border-white/10 cursor-pointer shrink-0 transition-transform active:scale-90 uppercase overflow-hidden`}
+                         onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}>
+                      {activeThread.avatarUrl ? <img src={activeThread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {activeThread.online || liveOnlineUsers.includes(activeThread.username) ? (
                       <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse"

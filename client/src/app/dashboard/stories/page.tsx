@@ -587,8 +587,8 @@ export default function StoriesPage() {
               {/* Header */}
               <div className="absolute top-8 md:top-8 left-0 w-full px-5 flex justify-between items-center z-20 safe-top">
                 <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedProfileUser({ username: activeStory.username, name: activeStory.user, color: activeStory.color })}>
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color?.includes('from-') ? activeStory.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105 uppercase`}>
-                    {(activeStory.user?.[0] || '?').toUpperCase()}
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color?.includes('from-') ? activeStory.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105 uppercase overflow-hidden`}>
+                    {activeStory.avatar_url ? <img src={activeStory.avatar_url} alt="" className="w-full h-full object-cover" /> : (activeStory.user?.[0] || '?').toUpperCase()}
                   </div>
                   <div>
                     <p className="font-bold text-sm text-white group-hover:text-white transition-colors">{activeStory.user}</p>

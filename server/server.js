@@ -248,6 +248,8 @@ let pgPool;
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
         try { await db.run("ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT 'Not Set'"); } catch (e) { }
         try { await db.run("ALTER TABLE users ADD COLUMN phone_hash TEXT"); } catch (e) { }
+        // Migration for avatar_url
+        try { await db.run("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL"); } catch (e) { }
 
         // SEED DATA
         const seedUsers = [
@@ -1508,7 +1510,7 @@ app.get('/api/users/search', async (req, res) => {
         if (!db) return res.json({ users: [] });
         console.log(`[SEARCH] Query: "${q}" by User: "${me}"`);
         const users = await db.all(`
-            SELECT username, full_name AS fullName, color 
+            SELECT username, full_name AS fullName, color, avatar_url AS avatarUrl
             FROM users 
             WHERE (LOWER(username) LIKE ? OR LOWER(full_name) LIKE ?) 
               AND LOWER(username) != LOWER(?)
@@ -1567,7 +1569,7 @@ app.get('/api/users/profile', async (req, res) => {
     const username = (req.query.username || '').toLowerCase();
     try {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber" FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl" FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: "User not found" });
         
         // Decrypt sensitive info for the client
@@ -1577,6 +1579,20 @@ app.get('/api/users/profile', async (req, res) => {
         res.json({ user });
     } catch (err) {
         res.status(500).json({ error: "Server error" });
+    }
+});
+
+// Upload / Update profile picture
+app.post('/api/users/avatar', async (req, res) => {
+    const { username, avatarBase64 } = req.body;
+    if (!username || !avatarBase64) return res.status(400).json({ error: "username and avatarBase64 required" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('UPDATE users SET avatar_url = ? WHERE LOWER(username) = LOWER(?)', [avatarBase64, username]);
+        res.json({ status: "success", message: "Profile picture updated." });
+    } catch (err) {
+        console.error("Avatar update error:", err);
+        res.status(500).json({ error: "Failed to update avatar." });
     }
 });
 
@@ -1647,6 +1663,8 @@ app.post('/api/connections/request', async (req, res) => {
         );
 
         // Notify via socket if target is online
+        // Also we don't send avatar here, but it can be fetched by the client via profile if needed,
+        // or we could look it up. For now, keep it simple.
         io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor });
         res.json({ status: 'sent' });
     } catch (err) {
@@ -1684,7 +1702,7 @@ app.get('/api/connections', async (req, res) => {
     try {
         if (!db) return res.json({ connections: [] });
         const rows = await db.all(`
-            SELECT u.id, u.username, u.full_name as name, u.color
+            SELECT u.id, u.username, u.full_name as name, u.color, u.avatar_url as avatarUrl
             FROM connections c
             JOIN users u ON
                 (c.user_a = LOWER(u.username) AND c.user_b = ?) OR
@@ -1846,7 +1864,7 @@ app.get('/api/stories', async (req, res) => {
         const placeholders = friends.map(() => '?').join(',');
 
         const stories = await db.all(`
-            SELECT s.*, u.full_name as name, u.color,
+            SELECT s.*, u.full_name as name, u.color, u.avatar_url as avatar_url,
             (SELECT COUNT(*) FROM story_views WHERE story_id = s.id) as views_count,
             (SELECT EXISTS(SELECT 1 FROM story_views WHERE story_id = s.id AND viewer_username = ?)) as is_viewed,
             (SELECT COUNT(*) FROM story_likes WHERE story_id = s.id) as likes_count,
