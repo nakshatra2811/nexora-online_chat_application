@@ -412,19 +412,125 @@ async function nexoraMailProtocol(type, to, data) {
     if (type === 'welcome') {
         subject = "Welcome to Nexora: Protocol Established";
         html = `
-            <!DOCTYPE html><html><head>${sharedStyles}</head>
-            <body><div class="container">
-                <div class="header">
-                    <div class="logo-box"><img src="${APP_LOGO}" style="width: 70px; height: 70px;" /></div>
-                    <div style="color: #fff; font-weight: 900; letter-spacing: 2px; font-size: 11px; text-transform: uppercase;">Identity Verified</div>
-                </div>
-                <div class="content">
-                    <h1 class="title">Welcome to the Void.</h1>
-                    <p class="text">Subject <span class="highlight">@${data.username}</span>, your identity has been successfully registered on the Nexora private chat network. Your link is now secured with end-to-end P2P encryption.</p>
-                    <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="button">ESTABLISH SECURE LINK</a>
-                </div>
-                <div class="footer"><p class="footer-text">&copy; ${new Date().getFullYear()} NEXORA GLOBAL &bull; SECURITY PROTOCOL ACTIVE</p></div>
-            </div></body></html>`;
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin:0; padding:0; background:linear-gradient(135deg,#eef2ff,#e0f2fe,#f8fafc); font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+                <tr>
+                  <td align="center">
+                    <!-- Main Card -->
+                    <table width="600" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.85); border-radius:32px; border:1px solid rgba(255,255,255,0.5); box-shadow:0 30px 60px rgba(108,92,231,0.12); overflow:hidden;">
+                      
+                      <!-- Top Badge -->
+                      <tr>
+                        <td align="center" style="padding:30px 20px 10px;">
+                          <span style="background:rgba(108,92,231,0.08); color:#6c5ce7; padding:8px 18px; border-radius:100px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:2px;">
+                            🔐 Military-Grade Privacy
+                          </span>
+                        </td>
+                      </tr>
+
+                      <!-- Logo -->
+                      <tr>
+                        <td align="center" style="padding:20px 0;">
+                          <div style="width:70px; height:70px; background:#ffffff; border-radius:20px; box-shadow:0 15px 35px rgba(108,92,231,0.15); display:inline-flex; align-items:center; justify-content:center;">
+                             <img src="${APP_LOGO}" alt="Nexora" style="width:50px; height:50px;" />
+                          </div>
+                        </td>
+                      </tr>
+
+                      <!-- Welcome Text -->
+                      <tr>
+                        <td align="center" style="padding:10px 45px;">
+                          <h1 style="margin:0; font-size:36px; font-weight:900; color:#1a1a2e; letter-spacing:-1px; line-height:1.1;">
+                            Welcome to Nexora 🎉
+                          </h1>
+
+                          <p style="margin-top:15px; color:#64748b; font-size:16px; line-height:1.8; font-weight:500;">
+                            Subject <span style="color:#6c5ce7; font-weight:800;">@${data.username}</span>, you are now part of a new era of private communication.  
+                            Experience secure messaging, vault storage, and zero-knowledge privacy.
+                          </p>
+                        </td>
+                      </tr>
+
+                      <!-- Gradient Title -->
+                      <tr>
+                        <td align="center" style="padding:10px 20px;">
+                          <h2 style="margin:0; font-size:24px; font-weight:900; background:linear-gradient(90deg,#6c5ce7,#00d4ff); -webkit-background-clip:text; color:#6c5ce7; letter-spacing:-0.5px;">
+                            Private. Secure. Powerful.
+                          </h2>
+                        </td>
+                      </tr>
+
+                      <!-- CTA -->
+                      <tr>
+                        <td align="center" style="padding:35px;">
+                          <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" 
+                             style="background:linear-gradient(135deg,#6c5ce7 0%,#00d4ff 100%); color:#ffffff; padding:22px 50px; border-radius:100px; text-decoration:none; font-size:16px; font-weight:800; display:inline-block; box-shadow:0 20px 40px rgba(108,92,231,0.25); letter-spacing:0.5px;">
+                            🚀 LAUNCH YOUR ACCOUNT
+                          </a>
+                        </td>
+                      </tr>
+
+                      <!-- Divider -->
+                      <tr>
+                        <td style="padding:0 50px;">
+                          <hr style="border:none; border-top:1px solid #f1f5f9;">
+                        </td>
+                      </tr>
+
+                      <!-- Features -->
+                      <tr>
+                        <td style="padding:35px 50px;">
+                          <table width="100%">
+                            <tr>
+                              <td style="padding:15px; font-size:14px; color:#1a1a2e; font-weight:700;">
+                                🔐 End-to-end encrypted chats
+                              </td>
+                              <td style="padding:15px; font-size:14px; color:#1a1a2e; font-weight:700;">
+                                ⚡ Lightning-fast messaging
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding:15px; font-size:14px; color:#1a1a2e; font-weight:700;">
+                                ☁️ Secure vault storage
+                              </td>
+                              <td style="padding:15px; font-size:14px; color:#1a1a2e; font-weight:700;">
+                                🎯 Zero-knowledge system
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+
+                      <!-- Bottom CTA -->
+                      <tr>
+                        <td align="center" style="padding:10px 20px 30px;">
+                          <a href="#" style="color:#6c5ce7; text-decoration:none; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px;">
+                            📄 Explore Documentation
+                          </a>
+                        </td>
+                      </tr>
+
+                      <!-- Footer -->
+                      <tr>
+                        <td align="center" style="padding:45px; background:#fafbfc; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; line-height:1.8; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
+                          © 2026 Nexora • The Private Chat Protocol  
+                          <br><br>
+                          You received this email because you initialized a connection with Nexora Core.
+                        </td>
+                      </tr>
+
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>`;
     } else if (type === 'otp') {
         subject = "Nexora Recovery: Verification Code";
         html = `

@@ -69,12 +69,15 @@ export default function StoriesPage() {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [blockedThreads, setBlockedThreads] = useState<number[]>([]);
   const [threads, setThreads] = useState<any[]>([]);
+  const [nicknames, setNicknames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const username = localStorage.getItem("nexora_signup_username") || "";
     setMyUsername(username);
     const blocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
     setBlockedThreads(blocked);
+    const savedNicknames = localStorage.getItem("nexora_nicknames");
+    if (savedNicknames) setNicknames(JSON.parse(savedNicknames));
     
     // Fetch current user's own profile (once on mount) for avatar
     const fetchMe = async () => {
@@ -599,7 +602,7 @@ export default function StoriesPage() {
                   {group.avatarUrl ? (
                     <img src={group.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(group.user || group.username || "?")[0].toUpperCase()}</span>
+                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(nicknames[group.username]?.[0] || group.user?.[0] || group.username?.[0] || "?").toUpperCase()}</span>
                   )}
                   {/* Play hover */}
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
@@ -611,7 +614,7 @@ export default function StoriesPage() {
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
-              {group.user}
+              {nicknames[group.username] || group.user}
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
               <Clock className="w-2.5 h-2.5" /> {getTimeAgo(group.stories[0].created_at, now)}
@@ -666,10 +669,10 @@ export default function StoriesPage() {
               <div className="absolute top-8 md:top-8 left-0 w-full px-5 flex justify-between items-center z-20 safe-top">
                 <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedProfileUser({ username: activeStory.username, name: activeStory.user, color: activeStory.color })}>
                   <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color?.includes('from-') ? activeStory.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105 uppercase overflow-hidden`}>
-                    {activeStory.avatar_url ? <img src={activeStory.avatar_url} alt="" className="w-full h-full object-cover" /> : (activeStory.user?.[0] || '?').toUpperCase()}
+                    {activeStory.avatar_url ? <img src={activeStory.avatar_url} alt="" className="w-full h-full object-cover" /> : (nicknames[activeStory.username]?.[0] || activeStory.user?.[0] || '?').toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-white group-hover:text-white transition-colors">{activeStory.user}</p>
+                    <p className="font-bold text-sm text-white group-hover:text-white transition-colors">{nicknames[activeStory.username] || activeStory.user}</p>
                     <p className="text-[10px] text-white/50 font-black uppercase tracking-widest">{getTimeAgo(activeStory.created_at, now)}</p>
                   </div>
                 </div>
@@ -962,13 +965,13 @@ export default function StoriesPage() {
                 <div className="flex flex-col items-center">
                   <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color?.includes('from-') ? selectedProfileUser.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
                     <span className="group-hover/avatar:scale-110 transition-transform duration-500 uppercase">
-                      {(selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?').toUpperCase()}
+                      {(nicknames[selectedProfileUser.username]?.[0] || selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?').toUpperCase()}
                     </span>
                   </div>
 
                   <div className="text-center mb-8">
                     <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>
-                      {selectedProfileUser.name || selectedProfileUser.username}
+                      {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
                     </h2>
                     <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
                       @{selectedProfileUser.username}

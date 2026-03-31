@@ -349,7 +349,7 @@ export default function ProfilePage() {
         phone: signupPhone,
         bio: role === "Authorized Account" ? "Chief Protocol Officer." : "Protocol Enthusiast.",
         joinedDate: "March 2026",
-        avatarUrl: "",
+        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
       };
 
       // 3. Try fetching from server

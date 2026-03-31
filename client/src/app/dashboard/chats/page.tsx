@@ -2339,12 +2339,11 @@ export default function ChatsPage() {
                      style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
                     {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
                 </div>
-                {!myStoryPreview && (
-                  <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center"
-                      style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}>
-                      <Plus className="w-3 h-3 text-white font-bold" />
-                  </div>
-                )}
+                <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center cursor-pointer"
+                    style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}
+                    onClick={(e) => { e.stopPropagation(); window.location.href = '/dashboard/stories?action=camera'; }}>
+                    <Plus className="w-3 h-3 text-white font-bold" />
+                </div>
                 </div>
                 <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>Your Story</span>
             </motion.div>
@@ -2368,14 +2367,14 @@ export default function ChatsPage() {
                   <div className="relative">
                     <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
                          style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                      {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : (user?.name?.[0] || user?.username?.[0] || "?").toUpperCase()}
+                      {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[user.username]?.[0] || user.name?.[0] || user.username?.[0] || "?").toUpperCase()}
                     </div>
                     {isUserOnline && !hasStory && (
                       <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
                         style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
                   </div>
-                  <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>{(nicknames[user?.username] || user?.name || "").split(" ")[0]}</span>
+                  <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>{(nicknames[user.username] || user.name || user.username || "").split(" ")[0]}</span>
                 </motion.div>
               );
             })}
@@ -2405,7 +2404,7 @@ export default function ChatsPage() {
                   <div className="relative shrink-0">
                     <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color?.includes('from-') ? thread.color : "from-[#6c5ce7] to-[#00d4ff]"}`} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/5 uppercase overflow-hidden`}
                       onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
-                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
+                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[thread.username]?.[0] || thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
                       <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
@@ -2488,7 +2487,7 @@ export default function ChatsPage() {
                   <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
                     <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm md:text-base shadow-xl border border-white/10 cursor-pointer shrink-0 transition-transform active:scale-90 uppercase overflow-hidden`}
                          onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}>
-                      {activeThread.avatarUrl ? <img src={activeThread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
+                      {activeThread.avatarUrl ? <img src={activeThread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[activeThread.username]?.[0] || activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {activeThread.online || liveOnlineUsers.includes(activeThread.username) ? (
                       <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse"
@@ -2667,7 +2666,8 @@ export default function ChatsPage() {
                 const isMatchHighlight = chatSearchResults[chatSearchIndex] === m.id;
                 const isInSearchResults = chatSearchResults.includes(m.id);
                 const isMedia = m.attachment && (m.attachment.type.startsWith("image/") || m.attachment.type.startsWith("video/"));
-                const isFile = m.attachment && !isMedia && m.attachment.type !== "location";
+                const isAudio = m.attachment && m.attachment.type.startsWith("audio/");
+                const isFile = m.attachment && !isMedia && !isAudio && m.attachment.type !== "location";
                 const isLocation = m.attachment?.type === "location";
 
                 return (
@@ -2787,6 +2787,26 @@ export default function ChatsPage() {
                           </div>
                         )}
 
+                        {isAudio && (
+                          <div className="flex items-center gap-3 p-2 rounded-[1.5rem] mb-2 shadow-inner" style={{ background: "rgba(0,0,0,0.15)", minWidth: "220px" }}>
+                            <div className="w-10 h-10 rounded-full flex flex-shrink-0 items-center justify-center shadow-lg" style={{ background: m.isSelf ? "#ffffff" : "#6c5ce7", color: m.isSelf ? "#6c5ce7" : "#ffffff" }}>
+                              <Mic className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1 min-w-0 pr-2">
+                              {/* Native audio player with tailored filters to look in-line */}
+                              <audio 
+                                src={m.attachment!.url} 
+                                controls 
+                                controlsList="nodownload"
+                                className={`w-full h-8 opacity-90 target-audio-player`} 
+                                style={{
+                                  filter: m.isSelf ? 'invert(1) grayscale(1) contrast(1.5)' : 'contrast(1.2) saturate(1.5) hue-rotate(-20deg) brightness(1.2)'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {isFile && (
                           <div className="flex items-center gap-3 p-3 rounded-xl mb-2 bg-black/10">
                             <FileText className="w-8 h-8 opacity-70" />
@@ -2836,6 +2856,34 @@ export default function ChatsPage() {
                 );
               })
             )}
+            
+            {/* ─── IN-CHAT REAL-TIME TYPING INDICATOR ─── */}
+            <AnimatePresence>
+              {peerTyping[activeThread.username] && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                  className="flex justify-start mb-6 px-1"
+                >
+                  <div className="flex flex-col gap-1 items-start max-w-[85%]">
+                    <div className="flex items-center gap-2 mb-1 pl-2">
+                       <span className="text-[10px] uppercase font-black tracking-widest text-[#2ed573] flex items-center gap-1.5 drop-shadow-sm">
+                         <div className="w-1.5 h-1.5 rounded-full bg-[#2ed573] animate-pulse" />
+                         {nicknames[activeThread.username] || activeThread.name || activeThread.username} is typing
+                       </span>
+                    </div>
+                    <div className="p-5 py-4 rounded-[2rem] rounded-bl-none shadow-lg border flex items-center gap-2"
+                         style={{ background: isDark ? "rgba(26,26,46,0.8)" : "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)", borderColor: "var(--border-subtle)" }}>
+                      <span className="w-[5px] h-[5px] rounded-full bg-[#6c5ce7] animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-[5px] h-[5px] rounded-full bg-[#00d4ff] animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-[5px] h-[5px] rounded-full bg-[#6c5ce7] animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -3375,7 +3423,7 @@ export default function ChatsPage() {
                       <img src={selectedProfileUser.avatarUrl} alt="" className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500" />
                     ) : (
                       <span className="group-hover/avatar:scale-110 transition-transform duration-500 text-white uppercase drop-shadow-2xl">
-                        {(selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || "?").toUpperCase()}
+                        {(nicknames[selectedProfileUser.username]?.[0] || selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || "?").toUpperCase()}
                       </span>
                     )}
                     {(selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)) && (
@@ -3389,7 +3437,7 @@ export default function ChatsPage() {
                   <div className="text-center mb-8">
                     <div className="flex items-center justify-center gap-2 mb-1">
                       <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
-                        {selectedProfileUser.name || selectedProfileUser.username}
+                        {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
                       </h2>
                       <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10">Verified</span>
                     </div>
