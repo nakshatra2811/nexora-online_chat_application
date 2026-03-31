@@ -566,10 +566,17 @@ export default function StoriesPage() {
                   {/* Viewers Trigger Button (Only for My Story) */}
                   {activeStory.username === myUsername && (
                     <button onClick={(e) => { e.stopPropagation(); setShowViewers(!showViewers); setShowLikers(false); }}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-[40px] text-[13px] font-black border border-white/20 shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-3xl text-[13px] font-black border border-white/30 shadow-2xl transition-all hover:bg-white/20 hover:scale-105 active:scale-95 cursor-pointer group/seen"
                             style={{ color: "white" }}>
-                       <Eye className="w-4 h-4" style={{ color: "white" }} />
-                       <span style={{ color: "white" }}>{activeStory.views || 0} Viewers</span>
+                       <div className="flex -space-x-2 mr-1">
+                          {viewersList.slice(0, 3).map((v, i) => (
+                             <div key={i} className={`w-5 h-5 rounded-full border-2 border-[#12121c] bg-gradient-to-tr ${v.color || "from-purple-500 to-blue-500"} flex items-center justify-center text-[6px] font-black shadow-lg`}>
+                                {v.name?.[0] || v.username[0]}
+                             </div>
+                          ))}
+                       </div>
+                       <Eye className="w-4 h-4 text-white group-hover/seen:animate-pulse" />
+                       <span className="text-white drop-shadow-md">{activeStory.views || 0} Seen</span>
                     </button>
                   )}
                   

@@ -11,24 +11,106 @@ const { v2: cloudinary } = require('cloudinary');
 const { Readable } = require('stream');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite');
+const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 const webpush = require('web-push');
 
 const app = express();
 const server = http.createServer(app);
 
 // ------------------------------------------------------------------
-// DATABASE INITIALIZATION
+// DATABASE INITIALIZATION (SQLite + PostgreSQL Support)
 // ------------------------------------------------------------------
 let db;
+let dbType = 'sqlite'; // 'sqlite' or 'postgres'
+let pgPool;
+
 (async () => {
     try {
-        db = await open({
-            filename: './database.sqlite',
-            driver: sqlite3.Database
-        });
+        const databaseUrl = process.env.DATABASE_URL;
+
+        if (databaseUrl) {
+            console.log("[DATABASE] Mode: PostgreSQL (Supabase)");
+            dbType = 'postgres';
+            pgPool = new Pool({
+                connectionString: databaseUrl,
+                ssl: { rejectUnauthorized: false }
+            });
+            
+            // Mock sqlite methods for pg
+            db = {
+                exec: async (sql) => {
+                    const pgSql = sql
+                        .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY')
+                        .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/gi, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                        .replace(/DATETIME/gi, 'TIMESTAMP')
+                        .replace(/BOOLEAN DEFAULT 0/gi, 'BOOLEAN DEFAULT FALSE')
+                        .replace(/BOOLEAN DEFAULT 1/gi, 'BOOLEAN DEFAULT TRUE');
+                    return pgPool.query(pgSql);
+                },
+                get: async (sql, params = []) => {
+                    let pgSql = sql.replace(/\?/g, (_, i, s) => {
+                        let count = (s.slice(0, i).match(/\?/g) || []).length + 1;
+                        return '$' + count;
+                    }).replace(/datetime\('now',\s*'-(\d+)\s+day'\)/gi, "NOW() - INTERVAL '$1 day'")
+                      .replace(/datetime\('now'\)/gi, "NOW()");
+
+                    // Handle INSERT OR IGNORE and REPLACE (basic regex)
+                    pgSql = pgSql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO').replace(/INSERT OR REPLACE INTO/gi, 'INSERT INTO');
+                    const res = await pgPool.query(pgSql, params);
+                    return res.rows[0];
+                },
+                all: async (sql, params = []) => {
+                    let pgSql = sql.replace(/\?/g, (_, i, s) => {
+                        let count = (s.slice(0, i).match(/\?/g) || []).length + 1;
+                        return '$' + count;
+                    }).replace(/datetime\('now',\s*'-(\d+)\s+day'\)/gi, "NOW() - INTERVAL '$1 day'")
+                      .replace(/datetime\('now'\)/gi, "NOW()");
+
+                    const res = await pgPool.query(pgSql, params);
+                    return res.rows;
+                },
+                run: async (sql, params = []) => {
+                    let pgSql = sql.replace(/\?/g, (_, i, s) => {
+                        let count = (s.slice(0, i).match(/\?/g) || []).length + 1;
+                        return '$' + count;
+                    }).replace(/datetime\('now',\s*'-(\d+)\s+day'\)/gi, "NOW() - INTERVAL '$1 day'")
+                      .replace(/datetime\('now'\)/gi, "NOW()");
+                    
+                    if (pgSql.toLowerCase().includes('insert or ignore')) {
+                        pgSql = pgSql.replace(/insert or ignore into/gi, 'INSERT INTO') + ' ON CONFLICT DO NOTHING';
+                    } else if (pgSql.toLowerCase().includes('insert or replace')) {
+                        // Very basic replace handling
+                        pgSql = pgSql.replace(/insert or replace into/gi, 'INSERT INTO') + ' ON CONFLICT DO UPDATE SET id=EXCLUDED.id'; 
+                    } else if (pgSql.toLowerCase().includes('insert into story_views')) {
+                         pgSql = pgSql + ' ON CONFLICT ON CONSTRAINT story_views_story_id_viewer_username_key DO NOTHING';
+                    } else if (pgSql.toLowerCase().includes('insert into story_likes')) {
+                         pgSql = pgSql + ' ON CONFLICT ON CONSTRAINT story_likes_story_id_liker_username_key DO NOTHING';
+                    } else if (pgSql.toLowerCase().includes('insert into connections')) {
+                         pgSql = pgSql + ' ON CONFLICT ON CONSTRAINT connections_user_a_user_b_key DO NOTHING';
+                    }
+
+                    const res = await pgPool.query(pgSql, params);
+                    return { lastID: res.oid, changes: res.rowCount };
+                }
+            };
+        } else {
+            console.log("[DATABASE] Mode: Local SQLite");
+            dbType = 'sqlite';
+            const dbPath = process.env.DATABASE_PATH || './database.sqlite';
+            const dbDir = path.dirname(dbPath);
+            if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+            
+            db = await open({
+                filename: dbPath,
+                driver: sqlite3.Database
+            });
+        }
+
         await db.exec(`
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 full_name TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 username TEXT UNIQUE NOT NULL,
@@ -36,82 +118,91 @@ let db;
                 role TEXT DEFAULT 'Standard',
                 status TEXT DEFAULT 'Active',
                 color TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 phone_number TEXT DEFAULT 'Not Set'
             );
 
             CREATE TABLE IF NOT EXISTS connection_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 from_username TEXT NOT NULL,
                 to_username TEXT NOT NULL,
                 from_name TEXT NOT NULL,
                 from_color TEXT NOT NULL,
-                status TEXT DEFAULT 'pending', -- pending, accepted, declined
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                status TEXT DEFAULT 'pending',
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS connections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 user_a TEXT NOT NULL,
                 user_b TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(user_a, user_b)
             );
 
             CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 owner_username TEXT NOT NULL,
                 from_username TEXT NOT NULL,
                 type TEXT NOT NULL,
                 message TEXT NOT NULL,
-                is_read BOOLEAN DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                is_read ${dbType==='postgres' ? 'BOOLEAN DEFAULT FALSE' : 'BOOLEAN DEFAULT 0'},
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS stories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 username TEXT NOT NULL,
                 media_url TEXT NOT NULL,
-                media_type TEXT DEFAULT 'image', -- image, video
+                media_type TEXT DEFAULT 'image',
                 caption TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS story_views (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 story_id INTEGER NOT NULL,
                 viewer_username TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(story_id, viewer_username)
             );
 
             CREATE TABLE IF NOT EXISTS story_likes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 story_id INTEGER NOT NULL,
                 liker_username TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(story_id, liker_username)
             );
         `);
-        // Ensure phone_number exists in case table was created before the schema update
-        try { await db.exec('ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT "Not Set"'); } catch (e) { }
 
-        // SEED DATA FOR TESTING (SEARCH SUGGESTIONS)
+        // Migration for phone_number
+        if (dbType === 'sqlite') {
+            try { await db.exec('ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT "Not Set"'); } catch (e) { }
+        }
+
+        // SEED DATA
         const seedUsers = [
-            ['Alice Network', 'alice@nexora.app', 'alice', 'password123', 'from-purple-500 to-indigo-500', 'Standard'],
-            ['Bob Protocol', 'bob@nexora.app', 'bob', 'password123', 'from-cyan-500 to-blue-500', 'Standard'],
-            ['Charlie Terminal', 'charlie@nexora.app', 'charlie', 'password123', 'from-green-400 to-teal-500', 'Standard'],
-            ['Nexora Support', 'support@nexora.app', 'nexora', 'password123', 'from-pink-500 to-rose-500', 'Admin']
+            ['Nexora Root', 'root@nexora.app', 'Nexora_31', 'Nexora@31', 'from-[#6c5ce7] to-[#00d4ff]', 'Admin'],
+            ['Aarav Shah', 'aarav@nexora.app', 'aarav_vibe', 'Nexora@31', 'from-amber-500 to-orange-600', 'Standard'],
+            ['Isha Sharma', 'isha@nexora.app', 'isha_creative', 'Nexora@31', 'from-rose-500 to-pink-600', 'Standard'],
+            ['Rohan Mehta', 'rohan@nexora.app', 'rohan_nex', 'Nexora@31', 'from-emerald-500 to-teal-600', 'Standard'],
+            ['Zoya Khan', 'zoya@nexora.app', 'zoya_style', 'Nexora@31', 'from-fuchsia-500 to-purple-600', 'Standard'],
+            ['Kabir Das', 'kabir@nexora.app', 'kabir_code', 'Nexora@31', 'from-blue-500 to-indigo-600', 'Standard'],
+            ['Myra Goel', 'myra@nexora.app', 'myra_art', 'Nexora@31', 'from-sky-400 to-blue-500', 'Standard'],
+            ['Dev Patel', 'dev@nexora.app', 'dev_protocol', 'Nexora@31', 'from-violet-500 to-purple-800', 'Standard']
         ];
         for (const user of seedUsers) {
             try {
-                await db.run('INSERT INTO users (full_name, email, username, password, color, role) VALUES (?, ?, ?, ?, ?, ?)', user);
-            } catch (err) { /* already exists */ }
+                const checkSql = dbType === 'postgres' ? 'SELECT id FROM users WHERE username = $1' : 'SELECT id FROM users WHERE username = ?';
+                const existing = await db.get(checkSql, [user[2]]);
+                if (!existing) {
+                    await db.run('INSERT INTO users (full_name, email, username, password, color, role) VALUES (?, ?, ?, ?, ?, ?)', user);
+                }
+            } catch (err) { }
         }
-
-        console.log("[DATABASE] SQLite initialized at ./database.sqlite");
+        console.log(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
     } catch (e) {
-        console.error("[DATABASE] Init error:", e.message);
     }
 })();
 
@@ -968,8 +1059,6 @@ app.post('/api/admin/test-mail', async (req, res) => {
 // ------------------------------------------------------------------
 // DYNAMIC CMS CONFIGURATION (SEO & Brand)
 // ------------------------------------------------------------------
-const fs = require('fs');
-const path = require('path');
 
 app.post('/api/admin/config', async (req, res) => {
     try {
@@ -1466,7 +1555,7 @@ app.post('/api/stories/like', async (req, res) => {
             io.to(receiver).emit('dm:message', likePayload);
             
             // Sync to Sender's other devices
-            io.to(sender).emit('dm:message', likePayload);
+            io.to(sender).emit('dm:message', { ...likePayload, text: `You liked ${receiver}'s story` });
 
             // Push Notification
             const sub = pushSubscriptions.get(receiver);
@@ -1507,10 +1596,12 @@ app.post('/api/stories/reply', async (req, res) => {
             to: receiver,
             from: sender,
             text: `💬 Replied to story: ${message}`,
-            msgId: Date.now().toString(),
+            msgId: `reply_${Date.now()}`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             isSystem: false,
-            fromStory: true
+            fromStory: true,
+            ciphertext: null, // Mark as literal text for story replies
+            iv: null
         };
 
         // 3. Notify via socket (Identity-based relay ensures all user devices receive)

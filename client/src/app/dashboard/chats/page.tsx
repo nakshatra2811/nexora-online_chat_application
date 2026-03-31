@@ -917,7 +917,12 @@ export default function ChatsPage() {
         // We use msgId de-duplication to prevent local echoes if any.
         const senderUsername = data.from;
         try {
-          const decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
+          let decryptedText = "";
+          if (data.fromStory || data.ciphertext === null) {
+              decryptedText = data.text || "📷 Story Interaction";
+          } else {
+              decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
+          }
           const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
           const newMsg: ChatMessage = {
             id: data.msgId || Math.random().toString(),
