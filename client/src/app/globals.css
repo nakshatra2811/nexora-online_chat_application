@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════
+   STITCH DESIGN SYSTEM — Nexora Neon + Nexora Lumina
+   Token source: Stitch MCP
+═══════════════════════════════════════════════ */
+
+:root {
+  /* ─── LIGHT MODE — Stitch "Nexora Lumina" ─── */
+  --bg-base: #f0f2f8;
+  --bg-surface: rgba(255, 255, 255, 0.72);
+  --bg-surface-solid: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.9);
+
+  /* HIGH CONTRAST LIGHT TEXT — readable on white/glass */
+  --text-primary: #0f0f14;
+  --text-secondary: #3d3f46;
+  --text-muted: #72768a;
+
+  --color-primary: #6c5ce7;
+  --color-primary-rgb: 108, 92, 231;
+  --color-secondary: #00b8d9;
+  --color-secondary-rgb: 0, 184, 217;
+  --color-accent: #ff006e;
+
+  --border-subtle: rgba(108, 92, 231, 0.1);
+  --border-glass: rgba(255, 255, 255, 0.6);
+
+  --shadow-neumorphic-input: inset 2px 2px 6px rgba(0,0,0,0.06), inset -3px -3px 8px rgba(255,255,255,0.9);
+  --shadow-neumorphic-btn: 3px 3px 8px rgba(0,0,0,0.08), -3px -3px 8px rgba(255,255,255,0.9);
+  --shadow-glass: 0 4px 24px rgba(108,92,231,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.22);
+  --shadow-card: 0 2px 16px rgba(0,0,0,0.06);
+
+  --blur-strong: 32px;
+  --blur-medium: 20px;
+}
+
+/* ─── DARK MODE — Stitch "Nexora Neon" ─── */
+.dark {
+  --bg-base: #0a0a12;
+  --bg-surface: rgba(18, 18, 28, 0.8);
+  --bg-surface-solid: #12121c;
+  --bg-card: rgba(24, 24, 36, 0.85);
+
+  /* HIGH CONTRAST DARK TEXT — bright on void black */
+  --text-primary: #f0eeff;
+  --text-secondary: #c8c5d8;
+  --text-muted: #6e6b80;
+
+  --color-primary: #a89aff;
+  --color-primary-rgb: 168, 154, 255;
+  --color-secondary: #00d2fd;
+  --color-secondary-rgb: 0, 210, 253;
+  --color-accent: #ff4f8b;
+
+  --border-subtle: rgba(168, 154, 255, 0.1);
+  --border-glass: rgba(255, 255, 255, 0.05);
+
+  --shadow-neumorphic-input: inset 2px 2px 6px rgba(0,0,0,0.6), inset -3px -3px 8px rgba(30,30,50,0.5);
+  --shadow-neumorphic-btn: 3px 3px 10px rgba(0,0,0,0.6), -3px -3px 10px rgba(30,30,50,0.4);
+  --shadow-glass: 0 8px 40px rgba(0,0,0,0.5);
+  --shadow-glow: 0 0 24px rgba(168, 154, 255, 0.2);
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+/* ═══════ BASE ═══════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.4s ease, color 0.25s ease;
+}
+
+/* Ambient mesh gradients */
+body:not(.dark) {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(108,92,231,0.08) 0px, transparent 55%),
+    radial-gradient(at 100% 0%, rgba(0,184,217,0.07) 0px, transparent 55%),
+    radial-gradient(at 100% 100%, rgba(255,0,110,0.04) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(108,92,231,0.06) 0px, transparent 50%);
+}
+
+body.dark {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(108,92,231,0.14) 0px, transparent 55%),
+    radial-gradient(at 100% 0%, rgba(0,210,253,0.09) 0px, transparent 55%),
+    radial-gradient(at 100% 100%, rgba(255,0,110,0.07) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(168,154,255,0.09) 0px, transparent 50%);
+}
+
+/* ═══════ GLASS PANEL ═══════ */
+.glass-panel {
+  background: var(--bg-surface);
+  backdrop-filter: blur(var(--blur-medium)) saturate(1.8);
+  -webkit-backdrop-filter: blur(var(--blur-medium)) saturate(1.8);
+  border: 1px solid var(--border-glass);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-glass);
+  color: var(--text-primary);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+/* ═══════ NEUMORPHIC COMPONENTS ═══════ */
+.neumorphic-input {
+  background: var(--bg-surface-solid);
+  box-shadow: var(--shadow-neumorphic-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  transition: all 0.25s ease;
+}
+.neumorphic-input:focus-within {
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.25), var(--shadow-neumorphic-input);
+}
+
+.neumorphic-btn {
+  background: var(--bg-surface-solid);
+  box-shadow: var(--shadow-neumorphic-btn);
+  color: var(--text-primary);
+  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.neumorphic-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+.neumorphic-btn:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: var(--shadow-neumorphic-input);
+}
+
+/* ═══════ GRADIENT TEXT ═══════ */
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ═══════ UTILITIES ═══════ */
+.neon-glow { box-shadow: 0 0 22px rgba(var(--color-primary-rgb), 0.32); }
+.neon-glow:hover { box-shadow: 0 0 32px rgba(var(--color-primary-rgb), 0.5); }
+
+/* ─── Force text colours across both themes ─── */
+h1,h2,h3,h4,h5,h6 { color: var(--text-primary); }
+p, span, li, label { color: inherit; }
+input, textarea {
+  color: var(--text-primary);
+  background: transparent;
+}
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+
+/* ─── Chat bubble text always white on gradient ─── */
+.bubble-sent { color: #ffffff !important; }
+.bubble-recv { color: var(--text-primary); }
+
+/* ═══════ SCROLLBAR ═══════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--color-primary-rgb), 0.25);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--color-primary-rgb), 0.45); }
+
+/* ═══════ REACTION POPUP ═══════ */
+.reaction-popup {
+  position: absolute;
+  bottom: 120%;
+  display: flex;
+  gap: 4px;
+  background: var(--bg-surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  padding: 4px 8px;
+  box-shadow: var(--shadow-card);
+  z-index: 50;
+  white-space: nowrap;
+}
+
+/* ═══════ STORY PROGRESS BAR ═══════ */
+.story-progress-track {
+  background: rgba(255,255,255,0.25);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.story-progress-fill {
+  height: 100%;
+  background: #ffffff;
+  border-radius: 9999px;
+}
+
+/* ═══════ MOBILE RESPONSIVENESS ═══════ */
+
+/* Hide scrollbars — used on horizontal scroll areas */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Visible thin scrollbar for chat messages */
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(var(--color-primary-rgb), 0.3) transparent; }
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(var(--color-primary-rgb), 0.3);
+  border-radius: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--color-primary-rgb), 0.5); }
+
+/* Safe-area aware padding for notched devices (iPhone X+) */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+
+/* Minimum touch target (WCAG 2.5.5 — 44×44px) */
+.touch-target { min-width: 44px; min-height: 44px; }
+
+/* Prevent text overflow on mobile */
+.mobile-clamp {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mobile-friendly call control buttons */
+@media (max-width: 640px) {
+  .call-control-btn {
+    min-width: 52px;
+    min-height: 52px;
+  }
+}
