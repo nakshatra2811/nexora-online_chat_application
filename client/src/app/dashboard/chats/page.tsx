@@ -8,7 +8,7 @@ import {
   VideoOff, Maximize2, Minimize2, MoreVertical, Zap, Check, Edit3,
   CheckCheck, Smile, Trash2, Reply, Timer, ShieldOff, Shield, MapPin,
   AlertTriangle, ChevronRight, ChevronLeft, Pin, ArrowUp, ArrowDown, Wallpaper, Upload, XCircle, Eye, EyeOff,
-  Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film,
+  Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film, Heart,
   BarChart3, Users, UserPlus, MessageSquare, Share2, Plus, ToggleLeft, ToggleRight, Mail, Smartphone,
   RefreshCcw, Bell, UserCheck, Clock
 } from "lucide-react";
@@ -115,6 +115,7 @@ export default function ChatsPage() {
   
   // Stories state for top tray previews
   const [myStoryPreview, setMyStoryPreview] = useState<boolean>(false);
+  const [myStories, setMyStories] = useState<any[]>([]);
   const [friendsWithStories, setFriendsWithStories] = useState<string[]>([]);
 
   const quickPrefixes = ["Hey!", "WhatsApp?", "Connecting...", "Secure?", "Call me"];
@@ -386,6 +387,7 @@ export default function ChatsPage() {
         const stData = await nexoraFetch(`/api/stories?username=${encodeURIComponent(myUsername)}`);
         if (stData && stData.stories) {
           const mine = stData.stories.filter((s: any) => s.username === myUsername);
+          setMyStories(mine);
           setMyStoryPreview(mine.length > 0);
           const others = stData.stories.filter((s: any) => s.username !== myUsername).map((s: any) => s.username);
           setFriendsWithStories(Array.from(new Set(others)));
@@ -577,6 +579,13 @@ export default function ChatsPage() {
     const hidden = localStorage.getItem("nexora_hidden_threads");
     if (hidden) setHiddenThreads(JSON.parse(hidden));
   }, []);
+
+  // ═══ Persist Nicknames Hook (Fix for Static Nicknames) ═══
+  useEffect(() => {
+    if (Object.keys(nicknames).length > 0) {
+      localStorage.setItem("nexora_nicknames", JSON.stringify(nicknames));
+    }
+  }, [nicknames]);
 
   const saveLockedChatsMap = (newMap: Record<number, string>) => {
     setLockedChatsMap(newMap);
@@ -1138,6 +1147,11 @@ export default function ChatsPage() {
         if (activeThreadRef.current?.username === data.from) {
           setActiveThread(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
         }
+
+        // Broadly update any cached connection data to ensure persistence
+        const savedConns = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const updatedConns = savedConns.map((c: any) => c.username === data.from ? { ...c, avatarUrl: data.avatarUrl } : c);
+        localStorage.setItem("nexora_secure_connections", JSON.stringify(updatedConns));
       });
 
       // 8. Initial online users list
@@ -2344,6 +2358,13 @@ export default function ChatsPage() {
                     onClick={(e) => { e.stopPropagation(); window.location.href = '/dashboard/stories?action=camera'; }}>
                     <Plus className="w-3 h-3 text-white font-bold" />
                 </div>
+                {myStories.length > 0 && (
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-bold text-white bg-black/80 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap">
+                    <Eye className="w-2.5 h-2.5" /> {myStories.reduce((acc, s) => acc + (s.views_count || 0), 0)}
+                    <span className="opacity-30">·</span>
+                    <Heart className="w-2.5 h-2.5 text-[#ff006e]" fill="#ff006e" /> {myStories.reduce((acc, s) => acc + (s.likes_count || 0), 0)}
+                  </div>
+                )}
                 </div>
                 <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>Your Story</span>
             </motion.div>

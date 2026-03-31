@@ -534,39 +534,134 @@ async function nexoraMailProtocol(type, to, data) {
     } else if (type === 'otp') {
         subject = "Nexora Recovery: Verification Code";
         html = `
-            <!DOCTYPE html><html><head>${sharedStyles}</head>
-            <body><div class="container">
-                <div class="header">
-                    <div class="logo-box"><img src="${APP_LOGO}" style="width: 70px; height: 70px;" /></div>
-                    <div style="color: #fff; font-weight: 900; letter-spacing: 2px; font-size: 11px; text-transform: uppercase;">Recovery Channel Open</div>
-                </div>
-                <div class="content">
-                    <h1 class="title">Secure Access Code</h1>
-                    <p class="text">A request for password recovery has been initiated. Use the authorization code below to verify your identity.</p>
-                    <div class="otp-box"><div class="otp-code">${data.otp}</div></div>
-                    <p class="text" style="font-size: 12px; margin: 0;">This code will expire in 10 minutes. If you did not request this, secure your account immediately.</p>
-                </div>
-                <div class="footer"><p class="footer-text">Transmission Integrity: AES-256-GCM &bull; IP: Filtered</p></div>
-            </div></body></html>`;
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin:0; padding:0; background:linear-gradient(135deg,#eef2ff,#e0f2fe,#f8fafc); font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+                <tr>
+                  <td align="center">
+                    <table width="600" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.85); border-radius:32px; border:1px solid rgba(255,255,255,0.5); box-shadow:0 30px 60px rgba(108,92,231,0.12); overflow:hidden;">
+                      <tr>
+                        <td align="center" style="padding:30px 20px 10px;">
+                          <span style="background:rgba(108,92,231,0.08); color:#6c5ce7; padding:8px 18px; border-radius:100px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:2px;">
+                            🛡️ Recovery Protocol Active
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:20px 0;">
+                          <div style="width:70px; height:70px; background:#ffffff; border-radius:20px; box-shadow:0 15px 35px rgba(108,92,231,0.15); display:inline-flex; align-items:center; justify-content:center;">
+                             <img src="${APP_LOGO}" alt="Nexora" style="width:50px; height:50px;" />
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:10px 45px;">
+                          <h1 style="margin:0; font-size:32px; font-weight:900; color:#1a1a2e; letter-spacing:-1px;">Verification Code</h1>
+                          <p style="margin-top:20px; color:#64748b; font-size:18px; line-height:1.6; font-weight:500;">
+                            A request was made to unlock your account. Use the authorization code below to establish a secure link.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:30px 45px;">
+                          <div style="background:#f8fafc; border:2px dashed #6c5ce7; border-radius:24px; padding:35px;">
+                            <div style="font-size:52px; font-weight:950; color:#6c5ce7; letter-spacing:14px; font-family:'Courier New', monospace; margin-left:14px;">
+                              ${data.otp}
+                            </div>
+                          </div>
+                          <p style="margin-top:20px; color:#94a3b8; font-size:14px; font-weight:600;">Valid for 10 minutes &bull; Key Segment #RL-1</p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:25px 45px 45px;">
+                          <div style="background:rgba(46,213,115,0.05); border:1px solid rgba(46,213,115,0.1); border-radius:16px; padding:15px;">
+                            <p style="margin:0; font-size:11px; font-weight:800; color:#15c35a; text-transform:uppercase; letter-spacing:1px;">Transmission Integrity: AES-256-GCM Verified</p>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:45px; background:#fafbfc; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; line-height:1.8; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
+                          © ${new Date().getFullYear()} Nexora • Systems Security Protocol
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>`;
     } else if (type === 'login_alert') {
         subject = "Security Alert: Login Detected";
         html = `
-            <!DOCTYPE html><html><head>${sharedStyles}</head>
-            <body><div class="container">
-                <div class="header" style="background: linear-gradient(135deg, #ff006e 0%, #6c5ce7 100%);">
-                    <div class="logo-box"><img src="${APP_LOGO}" style="width: 70px; height: 70px;" /></div>
-                    <div style="color: #fff; font-weight: 900; letter-spacing: 2px; font-size: 11px; text-transform: uppercase;">Security Protocol Triggered</div>
-                </div>
-                <div class="content">
-                    <h1 class="title">New Login Trace</h1>
-                    <p class="text">A new login was detected for <span class="highlight">@${data.username}</span>. If this was you, ignore this transmission. If not, LOCK YOUR TERMINAL IMMEDIATELY.</p>
-                    <div style="text-align: left; background: #f8fafc; padding: 25px; border-radius: 20px; border: 1px solid #f1f5f9;">
-                        <p class="footer-text" style="color: #1a1a2e; font-size: 13px;"><strong>Node Identifier:</strong> ${data.username}</p>
-                        <p class="footer-text" style="color: #1a1a2e; font-size: 13px;"><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
-                    </div>
-                </div>
-                <div class="footer"><p class="footer-text">Security Vault &copy; NEXORA CORE &bull; ALL RIGHTS ENCRYPTED</p></div>
-            </div></body></html>`;
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body style="margin:0; padding:0; background:linear-gradient(135deg,#fff1f2,#f8fafc); font-family:'Inter', -apple-system, sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+                <tr>
+                  <td align="center">
+                    <table width="600" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.85); border-radius:32px; border:1px solid rgba(255,255,255,0.5); box-shadow:0 30px 60px rgba(225,29,72,0.12); overflow:hidden;">
+                      <tr>
+                        <td align="center" style="padding:30px 20px 10px;">
+                          <span style="background:rgba(225,29,72,0.1); color:#e11d48; padding:8px 18px; border-radius:100px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:2px;">
+                            ⚠️ Security Protocol Alert
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:20px 0;">
+                          <div style="width:70px; height:70px; background:#ffffff; border-radius:20px; box-shadow:0 15px 35px rgba(225,29,72,0.15); display:inline-flex; align-items:center; justify-content:center;">
+                             <img src="${APP_LOGO}" alt="Nexora" style="width:50px; height:50px;" />
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:10px 45px;">
+                          <h1 style="margin:0; font-size:32px; font-weight:900; color:#1a1a2e; letter-spacing:-1px;">New Login Trace</h1>
+                          <p style="margin-top:20px; color:#64748b; font-size:18px; line-height:1.6; font-weight:500;">
+                            A new login was detected for your account <span style="color:#e11d48; font-weight:800;">@${data.username}</span>.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:30px 45px;">
+                          <div style="text-align:left; background:#f8fafc; border:1px solid #f1f5f9; border-radius:24px; padding:25px;">
+                             <p style="margin:0 0 10px; font-size:14px; color:#64748b;"><strong>Node Identifier:</strong> <span style="color:#1a1a2e;">@${data.username}</span></p>
+                             <p style="margin:0 0 10px; font-size:14px; color:#64748b;"><strong>Timestamp:</strong> <span style="color:#1a1a2e;">${new Date().toLocaleString()}</span></p>
+                             <p style="margin:0; font-size:14px; color:#64748b;"><strong>Integrity:</strong> <span style="color:#2ed573;">VERIFIED</span></p>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:20px 45px 45px;">
+                          <p style="color:#64748b; font-size:14px; line-height:1.6; margin-bottom:25px;">
+                            If this was not you, lock your terminal immediately and initiate the secure password reset protocol.
+                          </p>
+                          <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" 
+                             style="background:#e11d48; color:#ffffff; padding:18px 40px; border-radius:100px; text-decoration:none; font-size:14px; font-weight:800; display:inline-block; box-shadow:0 15px 30px rgba(225,29,72,0.2);">
+                            🔒 LOCK ACCOUNT
+                          </a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td align="center" style="padding:45px; background:#fafbfc; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; line-height:1.8; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
+                          SECURITY VAULT &bull; NEXORA CORE &bull; ALL RIGHTS ENCRYPTED
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>`;
     }
 
     try {
@@ -1181,7 +1276,7 @@ app.post('/api/auth/recovery', async (req, res) => {
             </body>
             </html>
         `;
-        await nexoraMailProtocol('otp', email, { otp: code });
+        await nexoraMailProtocol('otp', email, { otp: otp });
         res.json({ status: "success", message: "Recovery code transmitted to your email." });
     } catch (err) {
         console.error("Recovery mail error:", err);

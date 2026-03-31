@@ -10,89 +10,27 @@ import {
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
+import QRCode from "qrcode";
 
 /* ─── Mock contacts ─── */
 const MOCK_CONTACTS: any[] = [];
 
 /* ─── QR Code generator using canvas ─── */
-function generateQRPattern(text: string, size = 200): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-
-  const modules = 21;
-  const pad = 16;
-  const cellSize = (size - pad * 2) / modules;
-
-  // Background
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, size, size);
-
-  // Gradient for QR
-  const grad = ctx.createLinearGradient(0, 0, size, size);
-  grad.addColorStop(0, "#6c5ce7");
-  grad.addColorStop(1, "#00d4ff");
-
-  // Generate pseudo-random pattern from text
-  const hash = text.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const seed = hash;
-
-  const pseudoRand = (i: number) => {
-    const x = Math.sin(seed + i) * 10000;
-    return x - Math.floor(x);
-  };
-
-  let k = 0;
-  for (let r = 0; r < modules; r++) {
-    for (let c = 0; c < modules; c++) {
-      // Finder patterns (corners)
-      const inTopLeft = r < 7 && c < 7;
-      const inTopRight = r < 7 && c >= modules - 7;
-      const inBottomLeft = r >= modules - 7 && c < 7;
-
-      let filled = false;
-      if (inTopLeft || inTopRight || inBottomLeft) {
-        const lr = inTopLeft ? r : inTopRight ? r : r - (modules - 7);
-        const lc = inTopLeft ? c : inTopRight ? c - (modules - 7) : c;
-        filled = (lr === 0 || lr === 6 || lc === 0 || lc === 6) || (lr >= 2 && lr <= 4 && lc >= 2 && lc <= 4);
-      } else {
-        filled = pseudoRand(k++) > 0.5;
-      }
-
-      if (filled) {
-        ctx.fillStyle = grad;
-        const x = pad + c * cellSize;
-        const y = pad + r * cellSize;
-        const s = cellSize - 1;
-        const r2 = Math.min(2, s / 2);
-        ctx.beginPath();
-        ctx.moveTo(x + 0.5 + r2, y + 0.5);
-        ctx.lineTo(x + 0.5 + s - r2, y + 0.5);
-        ctx.quadraticCurveTo(x + 0.5 + s, y + 0.5, x + 0.5 + s, y + 0.5 + r2);
-        ctx.lineTo(x + 0.5 + s, y + 0.5 + s - r2);
-        ctx.quadraticCurveTo(x + 0.5 + s, y + 0.5 + s, x + 0.5 + s - r2, y + 0.5 + s);
-        ctx.lineTo(x + 0.5 + r2, y + 0.5 + s);
-        ctx.quadraticCurveTo(x + 0.5, y + 0.5 + s, x + 0.5, y + 0.5 + s - r2);
-        ctx.lineTo(x + 0.5, y + 0.5 + r2);
-        ctx.quadraticCurveTo(x + 0.5, y + 0.5, x + 0.5 + r2, y + 0.5);
-        ctx.closePath();
-        ctx.fill();
-      }
-      k++;
-    }
+async function generateRealQRCode(text: string): Promise<string> {
+  try {
+    return await QRCode.toDataURL(text, {
+      margin: 2,
+      scale: 10,
+      color: {
+        dark: "#6c5ce7",
+        light: "#ffffff"
+      },
+      errorCorrectionLevel: 'H'
+    });
+  } catch (err) {
+    console.error("QR Generation Error:", err);
+    return "";
   }
-
-  // Add Nexora logo in center
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(size / 2 - 18, size / 2 - 18, 36, 36);
-  ctx.fillStyle = "#6c5ce7";
-  ctx.font = "bold 14px Inter, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("N", size / 2, size / 2 + 1);
-
-  return canvas.toDataURL("image/png");
 }
 
 /* ─── Share Profile Modal ─── */
@@ -524,10 +462,9 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
-    // Generate QR code
-    const url = `https://nexora.app/u/${profile.username}`;
-    const qr = generateQRPattern(url, 200);
-    setQrDataUrl(qr);
+    // Generate QR code - Pointing to the actual production profile URL
+    const url = `https://nexora31.vercel.app/u/${profile.username}`;
+    generateRealQRCode(url).then(qr => setQrDataUrl(qr));
 
     // Initial fetch
     fetchIncomingRequests();
