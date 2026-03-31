@@ -663,7 +663,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           MOBILE TOP BACK NAVIGATION (Floating)
       ═══════════════════════════════════════ */}
       <AnimatePresence>
-        {(pathname !== "/dashboard/chats" || isChatActive) && (
+        {(pathname !== "/dashboard/chats" && !isChatActive) && (
           <motion.button
             key="mobile-back-button"
             initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}

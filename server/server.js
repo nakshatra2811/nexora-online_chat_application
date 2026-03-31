@@ -476,14 +476,20 @@ io.on('connection', (socket) => {
     socket.on('call:hangup', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
+            // Forward to recipient
             io.to(data.to?.toLowerCase()).emit('call:hangup', { from: senderId });
+            // Sync with all sender's other devices
+            socket.to(senderId).emit('call:hangup', { from: senderId });
         }
     });
 
     socket.on('call:reject', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
+            // Forward to recipient
             io.to(data.to?.toLowerCase()).emit('call:reject', { from: senderId });
+            // Sync with all sender's other devices
+            socket.to(senderId).emit('call:reject', { from: senderId });
         }
     });
 
@@ -727,10 +733,22 @@ app.post('/api/auth/signup', async (req, res) => {
         // 2. Insert into database
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
         const role = isAuthorized ? 'PendingAuthorized' : 'Standard';
+        const finalEmail = email.toLowerCase().trim();
+        const finalUsername = username.toLowerCase().trim();
+        
         await db.run(
             'INSERT INTO users (full_name, email, username, password, role, color, phone_number) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [fullName, email, username.toLowerCase(), password, role, color, phoneNumber || 'Not Set']
+            [fullName, finalEmail, finalUsername, password, role, color, phoneNumber || 'Not Set']
         );
+
+        const newUser = {
+            username: finalUsername,
+            email: finalEmail,
+            fullName: fullName,
+            role: role,
+            color: color,
+            phoneNumber: phoneNumber || 'Not Set'
+        };
 
         if (isAuthorized) {
             const adminHtml = `
@@ -838,7 +856,11 @@ app.post('/api/auth/signup', async (req, res) => {
         };
         await emailTransporter.sendMail(welcomeMailOptions);
 
-        res.status(201).json({ status: "success", message: "User identity initialized. Welcome transmission sent." });
+        res.status(201).json({ 
+            status: "success", 
+            user: newUser,
+            message: "User identity initialized. Welcome transmission sent." 
+        });
     } catch (err) {
         console.error("Signup error:", err);
         res.status(500).json({ error: "Server Error: Failed to process signup." });

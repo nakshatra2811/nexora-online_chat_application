@@ -153,15 +153,14 @@ function AuthContent() {
         if (data && data._httpError) {
           alert(data.message || "Authentication failed: Invalid credentials.");
         } else if (data && data.status === "success") {
-          const role = data.role || "Normal";
+          const role = data.role || "Standard";
           document.cookie = `nexora_role=${role}; path=/; SameSite=Lax`;
           localStorage.setItem("nexora_assigned_role", role);
-          localStorage.setItem("nexora_signup_username", data.username || username);
-          if (data.fullName) localStorage.setItem("nexora_signup_name", data.fullName);
-          if (data.email) localStorage.setItem("nexora_signup_email", data.email);
-          if (data.phoneNumber) localStorage.setItem("nexora_signup_phone", data.phoneNumber);
-          if (data.color) localStorage.setItem("nexora_signup_color", data.color);
-          // Clear cached profile so it reloads from fresh signup data
+          localStorage.setItem("nexora_signup_username", data.username);
+          localStorage.setItem("nexora_signup_name", data.fullName);
+          localStorage.setItem("nexora_signup_email", data.email);
+          localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
+          localStorage.setItem("nexora_signup_color", data.color);
           localStorage.removeItem("nexora_user_profile");
           router.push("/dashboard/chats");
         } else {
@@ -196,19 +195,19 @@ function AuthContent() {
             setPendingApproval(true);
             localStorage.setItem("nexora_pending_authorized", "true");
             setIsLoading(false);
-            return; // STOP REDIRECT
-          } else if (data.status === "success") {
-            // After signup, go to login
-            setSignupSuccess(true);
-            setIsLogin(true);
-            // Pre-fill username so user just needs to enter password
-            const signedUpUsername = username;
-            setFullName("");
-            setEmail("");
-            setPhoneNumber("");
-            setPassword("");
-            setConfirmPassword("");
-            setUsername(signedUpUsername);
+            return;
+          } else if (data.status === "success" && data.user) {
+            const u = data.user;
+            const role = u.role || "Standard";
+            document.cookie = `nexora_role=${role}; path=/; SameSite=Lax`;
+            localStorage.setItem("nexora_assigned_role", role);
+            localStorage.setItem("nexora_signup_username", u.username);
+            localStorage.setItem("nexora_signup_name", u.fullName);
+            localStorage.setItem("nexora_signup_email", u.email);
+            localStorage.setItem("nexora_signup_phone", u.phoneNumber || "Not Set");
+            localStorage.setItem("nexora_signup_color", u.color);
+            localStorage.removeItem("nexora_user_profile");
+            router.push("/dashboard/chats");
           }
         } else {
           alert("Signup failed: Server unreachable.");

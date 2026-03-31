@@ -8,6 +8,19 @@ import { nexoraFetch } from "@/lib/config";
 
 const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
 
+const getTimeAgo = (dateStr: string, currentTime: number) => {
+  const date = new Date(dateStr);
+  const diffInSeconds = Math.floor((currentTime - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 0) return "Just now"; // Future safety
+  if (diffInSeconds < 60) return "Just now";
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  return `${Math.floor(diffInHours / 24)}d ago`;
+};
+
 export default function StoriesPage() {
   const { isDark } = useTheme();
   const [activeStory, setActiveStory] = useState<any | null>(null);
@@ -24,6 +37,7 @@ export default function StoriesPage() {
   const [showSnapReactions, setShowSnapReactions] = useState(false);
   const [sentReaction, setSentReaction] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const lastTapRef = useRef<number>(0);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -108,10 +122,9 @@ export default function StoriesPage() {
       if (data && data.stories) {
         // Map backend schema to frontend structure
         const mapped = data.stories.map((s: any) => ({
-          id: s.id,
-          username: s.username,
+          ...s,
           user: s.name || s.username,
-          time: new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: getTimeAgo(s.created_at, Date.now()),
           color: s.color || "from-[#6c5ce7] to-[#00d4ff]",
           type: s.media_type || "image",
           content: s.media_url,
@@ -124,12 +137,7 @@ export default function StoriesPage() {
         const mine = mapped.filter((s: any) => s.username === username);
         const others = mapped.filter((s: any) => s.username !== username);
         
-        if (mine.length > 0) {
-          setMyStory(mine[0]); // For now, just show the latest own story on the dashboard
-        } else {
-          setMyStory(null);
-        }
-        
+        setMyStory(mine.length > 0 ? mine[0] : null);
         setOtherStories(others);
         
         // Update activeStory to reflect new real-time views/likes
@@ -156,8 +164,11 @@ export default function StoriesPage() {
 
   useEffect(() => {
     fetchStories();
-    // Poll every 10 seconds for real-time updates
-    const interval = setInterval(fetchStories, 10000);
+    // Poll every 10 seconds for real-time updates and update 'now' for relative time
+    const interval = setInterval(() => {
+      fetchStories();
+      setNow(Date.now());
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -448,7 +459,7 @@ export default function StoriesPage() {
               {/* View Count Badge (only if has story) */}
               {myStory && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1 rounded-full text-[10px] font-bold text-white bg-black/70 backdrop-blur-md shadow-lg z-20 border border-white/10">
-                  <Eye className="w-3 h-3 text-[#2ed573]" /> {myStory.views}
+                  <Eye className="w-3 h-3 text-white" /> {myStory.views}
                 </div>
               )}
             </div>
@@ -457,7 +468,7 @@ export default function StoriesPage() {
               Your Story
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              {myStory ? <><Clock className="w-2.5 h-2.5" /> {myStory.time}</> : "Share a moment"}
+              {myStory ? <><Clock className="w-2.5 h-2.5" /> {getTimeAgo(myStory.created_at, now)}</> : "Share a moment"}
             </p>
           </motion.div>
 
@@ -490,7 +501,7 @@ export default function StoriesPage() {
               {story.user}
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              <Clock className="w-2.5 h-2.5" /> {story.time}
+              <Clock className="w-2.5 h-2.5" /> {getTimeAgo(story.created_at, now)}
             </p>
 
 
@@ -518,7 +529,7 @@ export default function StoriesPage() {
               onTouchStart={(e) => { setIsPaused(true); handleDoubleTap(activeStory.id, e); }}
               onTouchEnd={() => setIsPaused(false)}
               className={`relative w-full h-full md:h-[85vh] md:max-h-[760px] md:max-w-sm flex flex-col md:rounded-[2.5rem] overflow-hidden shadow-2xl md:mt-0`}
-              style={{ background: `linear-gradient(135deg, #0a0a1a, #1a1a30)` }}
+              style={{ background: `linear-gradient(135deg, #0a0a1a, #1a1a30)`, color: "white" }}
             >
               {/* Heart Burst Effect */}
               <AnimatePresence>
@@ -547,17 +558,18 @@ export default function StoriesPage() {
                     {activeStory.user[0]}
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-white group-hover:text-purple-300 transition-colors">{activeStory.user}</p>
-                    <p className="text-xs text-white/60">{activeStory.time}</p>
+                    <p className="font-bold text-sm text-white group-hover:text-white transition-colors">{activeStory.user}</p>
+                    <p className="text-[10px] text-white/50 font-black uppercase tracking-widest">{getTimeAgo(activeStory.created_at, now)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 relative">
                   {/* Viewers Trigger Button (Only for My Story) */}
                   {activeStory.username === myUsername && (
-                    <button onClick={() => setShowViewers(!showViewers)}
-                            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md text-white/90 text-[11px] font-bold border border-white/10 shadow-xl transition-colors hover:bg-black/60 cursor-pointer">
-                       <Eye className="w-3.5 h-3.5 text-green-400" />
-                       <span>{activeStory.views || 0}</span>
+                    <button onClick={(e) => { e.stopPropagation(); setShowViewers(!showViewers); setShowLikers(false); }}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-[40px] text-[13px] font-black border border-white/20 shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                            style={{ color: "white" }}>
+                       <Eye className="w-4 h-4" style={{ color: "white" }} />
+                       <span style={{ color: "white" }}>{activeStory.views || 0} Viewers</span>
                     </button>
                   )}
                   
@@ -565,18 +577,18 @@ export default function StoriesPage() {
                   <AnimatePresence>
                     {activeStory.username === myUsername && showViewers && (
                       <motion.div key="viewers-modal" initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                        className="absolute right-0 top-12 w-64 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-white/10"
-                        style={{ backgroundColor: "rgba(13,13,26,0.95)", backdropFilter: "blur(20px)" }}
+                        className="absolute right-0 top-12 w-64 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-white/10 text-white"
+                        style={{ backgroundColor: "rgba(13,13,26,0.98)", backdropFilter: "blur(25px)" }}
                         onClick={(e) => e.stopPropagation()}>
                         <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2 bg-white/5">
-                          <Eye className="w-4 h-4 text-green-400" />
-                          <span className="text-sm font-bold text-white">Viewer Activity</span>
+                          <Eye className="w-4 h-4" style={{ color: "white" }} />
+                          <span className="text-sm font-bold" style={{ color: "white" }}>Viewer Activity</span>
                         </div>
                         <div className="max-h-60 overflow-y-auto p-2 space-y-1 scrollbar-hide">
                           {viewersList.length === 0 ? (
-                            <div className="py-8 flex flex-col items-center justify-center opacity-40">
-                               <Users className="w-8 h-8 mb-2" />
-                               <p className="text-xs">No viewers yet</p>
+                            <div className="py-10 flex flex-col items-center justify-center">
+                               <Users className="w-10 h-10 mb-3" style={{ color: "white" }} />
+                               <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: "white" }}>Awaiting Node Activity</p>
                             </div>
                           ) : (
                             viewersList.map((v) => (
@@ -584,12 +596,12 @@ export default function StoriesPage() {
                                    initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
                                    className="flex items-center gap-3 px-3 py-2 rounded-2xl transition-all hover:bg-white/10 cursor-pointer group/v" 
                                    onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
-                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr flex items-center justify-center text-xs font-black shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"} border border-white/20 shadow-lg group-hover/v:scale-110 transition-transform`}>
+                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${v.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-xs font-black shrink-0 border border-white/20 shadow-lg group-hover/v:scale-110 transition-transform text-white`}>
                                   {(v.name || v.username || "?")[0].toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-[13px] font-bold block truncate text-white">{v.name || v.username}</span>
-                                  <span className="text-[10px] text-white/50 block truncate">@{v.username}</span>
+                                  <span className="text-[13px] font-black block truncate transition-colors" style={{ color: "white" }}>{v.name || v.username}</span>
+                                  <span className="text-[9px] font-black uppercase tracking-tighter block truncate" style={{ color: "rgba(255,255,255,0.6)" }}>Verified Viewer</span>
                                 </div>
                               </motion.div>
                             ))
@@ -599,8 +611,9 @@ export default function StoriesPage() {
                     )}
                   </AnimatePresence>
 
-                  <button onClick={() => { setActiveStory(null); setShowViewers(false); }} className="p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition">
-                    <X className="w-4 h-4" />
+                  <button onClick={() => { setActiveStory(null); setShowViewers(false); }} 
+                    className="p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 text-white transition-all backdrop-blur-md active:scale-95 border border-white/10 shadow-lg">
+                    <X className="w-5 h-5 shadow-sm" />
                   </button>
 
                   {/* OWN STORY DELETE ACTION */}
@@ -723,7 +736,7 @@ export default function StoriesPage() {
                                        onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}
                                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                    <div className={`w-7 h-7 rounded-full bg-gradient-to-tr flex items-center justify-center text-[11px] font-bold shrink-0 ${v.color || "from-[#ff006e] to-[#ffbe0b]"} style={{ color: "#ffffff" }} group-hover/l:scale-105 transition-transform`}>
+                                    <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${v.color || "from-[#ff006e] to-[#ffbe0b]"} flex items-center justify-center text-[12px] font-black shrink-0 border border-white/20 shadow-lg group-hover/l:scale-110 transition-transform text-white`}>
                                       {(v.name || v.username || "?")[0].toUpperCase()}
                                     </div>
                                     <span className="text-sm font-semibold truncate flex-1 group-hover/l:text-pink-400 transition-colors" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
@@ -818,7 +831,7 @@ export default function StoriesPage() {
                 <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
                 <button 
                   onClick={() => setSelectedProfileUser(null)}
-                  className="absolute top-6 right-6 p-2.5 rounded-2xl bg-black/20 hover:bg-black/40 text-white transition-all backdrop-blur-md active:scale-90"
+                  className="absolute top-4 right-4 p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 text-white transition-all backdrop-blur-md active:scale-90 z-[30]"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -840,11 +853,11 @@ export default function StoriesPage() {
                       @{selectedProfileUser.username}
                     </p>
                     
-                    <div className="flex items-center justify-center gap-2 mt-4">
-                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
+                      <span className="px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm whitespace-nowrap">
                         Official Node
                       </span>
-                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm">
+                      <span className="px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm whitespace-nowrap">
                         Encrypted
                       </span>
                     </div>

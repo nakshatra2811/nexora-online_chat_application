@@ -166,11 +166,12 @@ export default function ChatsPage() {
 
   const [callState, setCallState] = useState<{
     type: "voice" | "video" | null; isFullscreen: boolean; duration: number;
-    localStream: MediaStream | null; isMuted: boolean; isVideoOff: boolean; isSpeaker: boolean;
+    localStream: MediaStream | null; remoteStream: MediaStream | null;
+    isMuted: boolean; isVideoOff: boolean; isSpeaker: boolean;
     remoteMuted: boolean; remoteVideoOff: boolean;
     status: "ringing" | "accepted" | null; direction: "outgoing" | "incoming"; facingMode: "user" | "environment";
   }>({
-    type: null, isFullscreen: false, duration: 0, localStream: null,
+    type: null, isFullscreen: false, duration: 0, localStream: null, remoteStream: null,
     isMuted: false, isVideoOff: false, isSpeaker: false,
     remoteMuted: false, remoteVideoOff: false,
     status: null, direction: "outgoing", facingMode: "user"
@@ -1669,7 +1670,7 @@ export default function ChatsPage() {
       const myColor = localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500";
       const localStream = await webRTCService.startCall(targetId, type, {
         onRemoteStream: (stream) => {
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
+          setCallState(p => ({ ...p, remoteStream: stream }));
         },
         onCallAccepted: () => {
           setCallState(p => {
@@ -1682,7 +1683,7 @@ export default function ChatsPage() {
           endCall();
         },
         onCallRejected: () => {
-          setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, remoteMuted: false, remoteVideoOff: false, status: null, direction: "outgoing", facingMode: "user" });
+          setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, remoteStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, remoteMuted: false, remoteVideoOff: false, status: null, direction: "outgoing", facingMode: "user" });
         },
         onIceConnectionChange: () => { },
         onRemoteMuteToggle: (muted) => {
@@ -1692,7 +1693,7 @@ export default function ChatsPage() {
           setCallState(p => ({ ...p, remoteVideoOff: videoOff }));
         },
       });
-      setCallState({ type, isFullscreen: true, duration: 0, localStream, isMuted: false, isVideoOff: false, isSpeaker: false, status: "ringing", direction: "outgoing", facingMode: "user", remoteMuted: false, remoteVideoOff: false });
+      setCallState({ type, isFullscreen: true, duration: 0, localStream, remoteStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, status: "ringing", direction: "outgoing", facingMode: "user", remoteMuted: false, remoteVideoOff: false });
 
       // Call is now handled strictly by WebRTC signaling.
       // Removed the 3s auto-accept fallback to ensure real connection status.
@@ -1715,7 +1716,7 @@ export default function ChatsPage() {
       setActiveThread(thread);
       const stream = await webRTCService.acceptCall(thread.username, sdp, type, {
         onRemoteStream: (stream) => {
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
+          setCallState(p => ({ ...p, remoteStream: stream }));
         },
         onCallAccepted: () => {
           setCallState(p => ({ ...p, status: "accepted" }));
@@ -1742,6 +1743,7 @@ export default function ChatsPage() {
         isFullscreen: true,
         duration: 0,
         localStream: stream,
+        remoteStream: null,
         isMuted: false,
         isVideoOff: false,
         isSpeaker: false,
@@ -1791,11 +1793,17 @@ export default function ChatsPage() {
 
   useEffect(() => {
     if (callState.localStream && localVideoRef.current) {
-      // Force re-attach. Browsers often won't update when we add/remove tracks in-place.
       localVideoRef.current.srcObject = null;
       localVideoRef.current.srcObject = callState.localStream;
     }
   }, [callState.localStream, callState.isFullscreen, callState.facingMode]);
+
+  useEffect(() => {
+    if (callState.remoteStream && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+      remoteVideoRef.current.srcObject = callState.remoteStream;
+    }
+  }, [callState.remoteStream, callState.isFullscreen, callState.type, callState.status]);
 
   useEffect(() => {
     if (cameraView.active && !cameraView.capturedUrl && cameraView.stream && liveVideoRef.current) {
@@ -1812,7 +1820,7 @@ export default function ChatsPage() {
     const localStream = callState.localStream;
 
     // Reset UI state immediately to prevent re-entrant calls from UI interactions
-    setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, remoteMuted: false, remoteVideoOff: false, status: null, direction: "outgoing", facingMode: "user" });
+    setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, remoteStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, remoteMuted: false, remoteVideoOff: false, status: null, direction: "outgoing", facingMode: "user" });
 
     // Stop timer
     if (callTimerRef.current) {
@@ -2206,10 +2214,10 @@ export default function ChatsPage() {
                               )}
                            </div>
                            <div className="flex-1 min-w-0 pr-6 cursor-pointer" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
-                              <p className="text-[11px] leading-tight font-medium" style={{color: "var(--text-primary)"}}>
+                              <p className="text-[11px] leading-tight font-medium text-white">
                                  {notif.message}
                               </p>
-                              <p className="text-[9px] opacity-40 mt-0.5 font-bold uppercase tracking-tight">{notif.time}</p>
+                              <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase tracking-tight">{notif.time}</p>
                            </div>
                         </div>
                         
@@ -2346,6 +2354,9 @@ export default function ChatsPage() {
                           style={{ color: "var(--text-primary)" }}>
                           {isLockedDisplay ? "Locked Conversation" : thread.name}
                         </h3>
+                        {!isLockedDisplay && (
+                          <span className="inline-flex text-[6px] px-1 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center">Verified</span>
+                        )}
                         {isPinned && (
                           <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />
                         )}
@@ -2411,14 +2422,14 @@ export default function ChatsPage() {
 
       {/* ═══ ACTIVE CHAT ═══ */}
       {activeThread ? (
-        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative"
+        <div className="flex-1 flex flex-col min-w-0 max-h-full min-h-0 overflow-hidden relative"
           style={{
             background: chatWallpaper ? "transparent" : "var(--bg-base)",
             ...(chatWallpaper ? { backgroundImage: `url(${chatWallpaper})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "local" } : {})
           }}>
 
           {/* Chat Header */}
-          <div className="px-4 md:px-6 py-2 flex items-center justify-between border-b z-40 shrink-0 backdrop-blur-xl"
+          <div className="sticky top-0 px-4 md:px-6 py-2 flex items-center justify-between border-b z-40 shrink-0 backdrop-blur-xl"
             style={{ borderColor: "var(--border-subtle)", background: "var(--bg-surface)" }}>
             <div className="flex items-center gap-3">
               {activeThread ? (
@@ -2440,11 +2451,11 @@ export default function ChatsPage() {
                   </div>
                   <div className="cursor-pointer group min-w-0 pr-2" onClick={() => setSelectedProfileUser(activeThread)}>
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <h3 className="font-extrabold text-[13px] md:text-base truncate max-w-[110px] xs:max-w-none transition-all group-hover:text-[#6c5ce7]"
+                      <h3 className="font-extrabold text-[13px] md:text-base truncate transition-all group-hover:text-[#6c5ce7]"
                         style={{ color: "var(--text-primary)" }}>
                         {activeThread.name}
                       </h3>
-                      <span className="hidden xs:inline-flex text-[7px] md:text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center">Verified</span>
+                      <span className="inline-flex text-[7px] md:text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center shadow-sm">Verified</span>
                     </div>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <div className={`h-1.5 w-1.5 rounded-full ${activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "bg-green-500 shadow-[0_0_5px_#2ed573]" : "bg-gray-500"}`} />
@@ -3159,7 +3170,7 @@ export default function ChatsPage() {
                 ref={remoteVideoRef} 
                 autoPlay 
                 playsInline 
-                className={`w-full h-full object-cover ${callState.type === "voice" || callState.remoteVideoOff ? "hidden" : "block"}`} 
+                className={`w-full h-full object-cover ${callState.type === "video" && !callState.remoteVideoOff ? "block" : "invisible w-0 h-0 absolute"}`} 
               />
 
               {(callState.type === "voice" || callState.remoteVideoOff) && (
@@ -3485,9 +3496,9 @@ export default function ChatsPage() {
                 <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
                 <button 
                   onClick={() => setSelectedProfileUser(null)}
-                  className="absolute top-4 right-4 p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 text-white transition-all backdrop-blur-md active:scale-90 z-[30]"
+                  className="absolute top-5 right-5 w-12 h-12 rounded-2xl bg-black/50 hover:bg-black/70 text-white transition-all backdrop-blur-xl active:scale-95 z-[50] flex items-center justify-center border border-white/20 shadow-2xl"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
 
@@ -3506,9 +3517,12 @@ export default function ChatsPage() {
                   </div>
 
                   <div className="text-center mb-8">
-                    <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>
-                      {selectedProfileUser.name || selectedProfileUser.username}
-                    </h2>
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+                        {selectedProfileUser.name || selectedProfileUser.username}
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10">Verified</span>
+                    </div>
                     <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
                       @{selectedProfileUser.username}
                     </p>

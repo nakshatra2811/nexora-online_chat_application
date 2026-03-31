@@ -13,6 +13,18 @@ const inter = Inter({
 import fs from "fs";
 import path from "path";
 
+export const viewport: Metadata = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+}
+
+// Next.js 14+ specific viewport config
+export const viewportConfig = {
+  interactiveWidget: 'resizes-content'
+};
+
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const configPath = path.join(process.cwd(), "src/config/seo.json");
