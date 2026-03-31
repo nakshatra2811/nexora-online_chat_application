@@ -11,17 +11,20 @@ interface PermissionGateProps {
 const PermissionItem = ({ icon, title, desc, active, onClick }: { icon: any, title: string, desc: string, active: boolean, onClick: () => void }) => (
     <motion.div 
         onClick={onClick}
-        whileHover={{ x: 5 }}
-        className="flex items-center gap-5 p-5 rounded-3xl bg-white/5 border border-white/5 text-left hover:bg-white/10 hover:shadow-lg transition-all cursor-pointer group relative overflow-hidden"
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer group backdrop-blur-md ${active ? 'bg-green-500/10 border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10'}`}
     >
-        <div className={`p-4 rounded-2xl bg-white/10 shadow-sm transition-colors ${active ? 'text-green-400 bg-green-500/20' : 'text-[#6c5ce7]'}`}>
-            {active ? <CheckCircle2 className="w-5 h-5" /> : icon}
+        <div className={`flex items-center justify-center shrink-0 w-12 h-12 rounded-xl transition-all duration-300 ${active ? 'text-green-400 bg-green-500/20 scale-105' : 'text-[#6c5ce7] bg-[#6c5ce7]/10 group-hover:bg-[#6c5ce7]/20 group-hover:scale-105'}`}>
+            {active ? <CheckCircle2 className="w-6 h-6" /> : icon}
         </div>
         <div className="flex-1 min-w-0">
-            <h4 className="text-[15px] font-bold text-white truncate">{title}</h4>
-            <p className="text-[12px] font-medium text-white/40 leading-tight truncate">{desc}</p>
+            <h4 className={`text-sm font-bold truncate transition-colors ${active ? 'text-green-400' : 'text-zinc-100'}`}>{title}</h4>
+            <p className="text-xs font-semibold text-zinc-400 leading-tight truncate mt-0.5">{desc}</p>
         </div>
-        <div className={`w-2 h-2 rounded-full transition-colors ${active ? 'bg-green-400' : 'bg-white/10'}`} />
+        <div className="shrink-0 flex items-center justify-center w-6 h-6">
+            <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${active ? 'bg-green-400 shadow-[0_0_8px_rgba(34,197,94,0.8)] scale-100' : 'bg-zinc-600 scale-50 group-hover:scale-75'}`} />
+        </div>
     </motion.div>
 );
 
@@ -34,7 +37,6 @@ export const PermissionGate: React.FC<PermissionGateProps> = ({ children }) => {
     });
 
     useEffect(() => {
-        // Check if permissions were already granted (mocked for demo)
         const stored = localStorage.getItem('nexora_permissions_granted');
         if (!stored) {
             setShowModal(true);
@@ -42,22 +44,17 @@ export const PermissionGate: React.FC<PermissionGateProps> = ({ children }) => {
     }, []);
 
     const requestCamera = async () => {
-        try {
-            await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            setPermissions(prev => ({ ...prev, camera: true }));
-        } catch (err) {
-            console.error("Camera access denied:", err);
-        }
+        // Visual acknowledgement only. Actual browser prompt happens EXACTLY when a call is started (on-demand).
+        setPermissions(prev => ({ ...prev, camera: true }));
     };
 
     const requestContacts = async () => {
-        // Browser standard Contact Picker API is restricted/experimental
-        // We'll mock the "Grant" for UX and explain its used for finding friends
+        // Visual acknowledgement only.
         setPermissions(prev => ({ ...prev, contacts: true }));
     };
 
     const requestStorage = async () => {
-        // Mock storage permission request
+        // Visual acknowledgement only.
         setPermissions(prev => ({ ...prev, storage: true }));
     };
 
@@ -81,50 +78,53 @@ export const PermissionGate: React.FC<PermissionGateProps> = ({ children }) => {
                         initial={{ opacity: 0 }} 
                         animate={{ opacity: 1 }} 
                         exit={{ opacity: 0 }}
-                        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+                        className="absolute inset-0 bg-black/60 backdrop-blur-xl"
                     />
                     
                     <motion.div
-                        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                        initial={{ scale: 0.95, opacity: 0, y: 40 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
-                        exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                        className="relative w-full max-w-lg bg-[#0a0a14] rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10"
+                        exit={{ scale: 0.95, opacity: 0, y: 40 }}
+                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                        className="relative w-full max-w-[420px] rounded-[32px] overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.6)]"
+                        style={{ background: "rgba(18, 18, 26, 0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255, 255, 255, 0.08)" }}
                     >
-                        {/* Header */}
-                        <div className="relative h-32 bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center overflow-hidden">
-                            <div className="absolute inset-0 opacity-20">
-                                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_30%,white_0%,transparent_70%)]" />
-                            </div>
-                            <Shield className="w-16 h-16 text-white relative z-10" />
-                        </div>
+                        {/* Header area - no solid background, just an overarching glow */}
+                        <div className="absolute -top-32 -left-32 w-64 h-64 bg-[#6c5ce7] rounded-full mix-blend-screen filter blur-[100px] opacity-30 animate-pulse pointer-events-none" />
+                        <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-[#00d4ff] rounded-full mix-blend-screen filter blur-[100px] opacity-20 animate-pulse pointer-events-none" />
 
-                        <div className="p-8 pt-10 text-center">
-                            <h2 className="text-3xl font-black text-white mb-2 tracking-tight italic">
-                                Initialize Protocol
+                        <div className="relative z-10 p-8 pt-10 flex flex-col items-center">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/20 relative">
+                                <div className="absolute inset-0 bg-white/20 rounded-2xl animate-pulse" />
+                                <Shield className="w-8 h-8 text-white relative z-10" />
+                            </div>
+
+                            <h2 className="text-2xl font-extrabold text-white mb-2 text-center tracking-tight">
+                                Protocol Initialization
                             </h2>
-                            <p className="text-white/60 text-sm mb-10 px-4 leading-relaxed font-semibold">
-                                To enable the full Nexora Private Protocol and secure communication, we need active clearance.
+                            <p className="text-zinc-400 text-[13px] font-medium text-center mb-8 px-2 leading-relaxed">
+                                Review the core requirements. Nexora will <span className="text-[#00d4ff] font-bold">never</span> request these until the exact moment you use the feature.
                             </p>
 
-                            <div className="space-y-4 mb-10">
+                            <div className="w-full space-y-3 mb-8">
                                 <PermissionItem 
                                     icon={<Camera className="w-5 h-5" />}
-                                    title="Camera & Microphone"
-                                    desc="For high-definition encrypted voice and video tunnels."
+                                    title="Camera & Voice"
+                                    desc="Requested only when you initiate a call."
                                     active={permissions.camera}
                                     onClick={requestCamera}
                                 />
                                 <PermissionItem 
                                     icon={<Users className="w-5 h-5" />}
-                                    title="Identity Synchronization"
-                                    desc="Securely find your contacts who are already on the grid."
+                                    title="Identity Graph"
+                                    desc="For securing zero-knowledge P2P relays."
                                     active={permissions.contacts}
                                     onClick={requestContacts}
                                 />
                                 <PermissionItem 
                                     icon={<Database className="w-5 h-5" />}
-                                    title="Local Persistent Vault"
-                                    desc="Store encrypted message history and offline media."
+                                    title="Local Vault"
+                                    desc="Requested when saving offline archives."
                                     active={permissions.storage}
                                     onClick={requestStorage}
                                 />
@@ -134,18 +134,15 @@ export const PermissionGate: React.FC<PermissionGateProps> = ({ children }) => {
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={handleGrantAll}
-                                className="w-full py-5 rounded-2xl bg-gradient-to-r from-[#6c5ce7] to-[#00d4ff] text-white font-bold text-lg shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-3 group transition-all"
+                                className="w-full py-4 rounded-2xl text-white font-bold text-[15px] shadow-[0_10px_30px_rgba(108,92,231,0.3)] flex items-center justify-center gap-3 relative overflow-hidden group"
+                                style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
                             >
-                                {Object.values(permissions).every(p => p) ? "Protocol Initialized" : "Grant Access"} 
-                                {Object.values(permissions).every(p => p) ? <CheckCircle2 className="w-6 h-6 text-green-400 animate-pulse" /> : <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /> }
+                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+                                <span className="relative z-10 flex items-center gap-2">
+                                    {Object.values(permissions).every(p => p) ? "Acknowledge Secure Protocol" : "Acknowledge Requirements"} 
+                                    {Object.values(permissions).every(p => p) ? <CheckCircle2 className="w-5 h-5 text-white animate-pulse" /> : <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /> }
+                                </span>
                             </motion.button>
-
-                            <button 
-                                onClick={() => setShowModal(false)}
-                                className="mt-6 text-[10px] uppercase tracking-widest font-black text-white/40 hover:text-white transition-colors cursor-pointer"
-                            >
-                                Setup Later (Limited Experience)
-                            </button>
                         </div>
                     </motion.div>
                 </div>
