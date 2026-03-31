@@ -287,7 +287,9 @@ export default function StoriesPage() {
       reader.onload = (ev) => resolve(ev.target?.result as string);
       reader.readAsDataURL(file);
     });
-    await submitNewStory(url);
+    
+    // Instead of immediate submit, show preview
+    setCameraView({ active: true, stream: null, capturedUrl: url });
     if (e.target) e.target.value = '';
   };
 
@@ -343,7 +345,9 @@ export default function StoriesPage() {
   };
 
   const closeCameraView = () => {
-    cameraView.stream?.getTracks().forEach(t => t.stop());
+    if (cameraView.stream) {
+      cameraView.stream.getTracks().forEach(t => t.stop());
+    }
     setCameraView({ active: false, stream: null, capturedUrl: null });
   };
 
@@ -399,58 +403,60 @@ export default function StoriesPage() {
       <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
         
         {/* Your Story */}
-        {!myStory ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.03, y: -3 }} whileTap={{ scale: 0.97 }}
-            onClick={startCameraView}
-            className="flex flex-col items-center cursor-pointer group"
-          >
-            <div className="relative mb-3">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center bg-transparent"
-                   style={{ border: `2px dashed ${isDark ? "rgba(108,92,231,0.4)" : "rgba(108,92,231,0.3)"}` }}>
-                <Plus className="w-8 h-8" style={{ color: "#6c5ce7" }} />
-              </div>
-            </div>
-            <h3 className="font-bold text-xs text-center" style={{ color: "var(--text-secondary)" }}>Your Story</h3>
-          </motion.div>
-        ) : (
-          <motion.div
+        <motion.div
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             whileHover={{ scale: 1.04, y: -4 }} whileTap={{ scale: 0.97 }}
             className="flex flex-col items-center cursor-pointer group relative"
           >
-            <div className="relative mb-3" onClick={() => setActiveStory(myStory)}>
-              <div className={`p-[3px] rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888] shadow-lg group-hover:shadow-2xl transition-shadow`}>
-                <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative bg-black"
+            <div className="relative mb-3">
+              {/* Ring logic */}
+              <div className={`p-[3px] rounded-full transition-all duration-500 ${myStory ? 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888] scale-100 shadow-lg group-hover:shadow-pink-500/20' : 'bg-transparent scale-95'}`}
+                   onClick={() => myStory ? setActiveStory(myStory) : startCameraView()}>
+                <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative bg-[#1a1a2e]"
                      style={{ border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
-                  {myStory.type === "image" ? (
+                  {/* User Profile or Story Content */}
+                  {myStory ? (
                     <img src={myStory.content} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="font-extrabold text-3xl text-white">Y</span>
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                       <span className="font-extrabold text-3xl text-white/20">{(localStorage.getItem("nexora_signup_username") || "Y")[0].toUpperCase()}</span>
+                    </div>
                   )}
+                  
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
                     className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-full">
-                    <Play className="w-6 h-6 text-white" fill="white" />
+                    {myStory ? <Play className="w-6 h-6 text-white" fill="white" /> : <Camera className="w-6 h-6 text-white" />}
                   </motion.div>
                 </div>
               </div>
-              
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1 rounded-full text-[10px] font-bold text-white bg-black/70 backdrop-blur-md shadow-lg">
-                <Eye className="w-3 h-3 text-[#2ed573]" /> {myStory.views}
-              </div>
+
+              {/* Plus Badge (only if no story) */}
+              {!myStory && (
+                <motion.div 
+                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  whileHover={{ scale: 1.1 }}
+                  onClick={(e) => { e.stopPropagation(); startCameraView(); }}
+                  className="absolute bottom-1 right-1 w-7 h-7 bg-blue-500 rounded-full border-[3px] flex items-center justify-center shadow-lg z-20"
+                  style={{ borderColor: isDark ? "#0a0a12" : "#ffffff" }}>
+                  <Plus className="w-4 h-4 text-white stroke-[3px]" />
+                </motion.div>
+              )}
+
+              {/* View Count Badge (only if has story) */}
+              {myStory && (
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1 rounded-full text-[10px] font-bold text-white bg-black/70 backdrop-blur-md shadow-lg z-20 border border-white/10">
+                  <Eye className="w-3 h-3 text-[#2ed573]" /> {myStory.views}
+                </div>
+              )}
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
               Your Story
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              <Clock className="w-2.5 h-2.5" /> {myStory.time}
+              {myStory ? <><Clock className="w-2.5 h-2.5" /> {myStory.time}</> : "Share a moment"}
             </p>
-
-
           </motion.div>
-        )}
 
         {otherStories.map((story, i) => (
           <motion.div key={story.id}
@@ -547,38 +553,40 @@ export default function StoriesPage() {
                   {activeStory.username === localStorage.getItem("nexora_signup_username") && (
                     <button onClick={() => setShowViewers(!showViewers)}
                             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md text-white/90 text-[11px] font-bold border border-white/10 shadow-xl transition-colors hover:bg-black/60 cursor-pointer">
-                      <Eye className="w-3 h-3 text-[#2ed573]" /> {activeStory.views} <span className="text-white/50 font-normal">friends viewed</span>
                     </button>
                   )}
                   
                   {/* Viewers Dropdown Modal (ONLY for own story) */}
                   <AnimatePresence>
                     {activeStory.username === localStorage.getItem("nexora_signup_username") && showViewers && (
-                      <motion.div key="viewers-modal" initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                        className="absolute right-12 top-10 w-52 rounded-2xl overflow-hidden shadow-2xl z-50"
-                        style={{ background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(40px)" }}
+                      <motion.div key="viewers-modal" initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                        className="absolute right-0 top-12 w-64 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-white/10"
+                        style={{ backgroundColor: "rgba(13,13,26,0.95)", backdropFilter: "blur(20px)" }}
                         onClick={(e) => e.stopPropagation()}>
-                        <div className="px-3 py-2.5 border-b border-white/10 text-xs font-bold flex items-center gap-1.5" style={{ color: "#ffffff", background: "rgba(255,255,255,0.05)" }}>
-                          <Users className="w-3.5 h-3.5" /> Viewer Activity
+                        <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2 bg-white/5">
+                          <Eye className="w-4 h-4 text-green-400" />
+                          <span className="text-sm font-bold text-white">Viewer Activity</span>
                         </div>
-                        <div className="max-h-44 overflow-y-auto w-full p-2 space-y-1">
+                        <div className="max-h-60 overflow-y-auto p-2 space-y-1 scrollbar-hide">
                           {viewersList.length === 0 ? (
-                            <p className="text-xs text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No views yet</p>
+                            <div className="py-8 flex flex-col items-center justify-center opacity-40">
+                               <Users className="w-8 h-8 mb-2" />
+                               <p className="text-xs">No viewers yet</p>
+                            </div>
                           ) : (
                             viewersList.map((v) => (
-                              <div key={`viewer-${v.username}`} className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group/v" 
-                                   style={{ background: "rgba(255,255,255,0.03)" }}
-                                   onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}
-                                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-                                   onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}>
-                                <div className={`w-9 h-9 rounded-full bg-gradient-to-tr flex items-center justify-center text-xs font-black shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"} style={{ color: "#ffffff" }} group-hover/v:scale-105 transition-transform`}>
+                              <motion.div key={`viewer-${v.username}`} 
+                                   initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+                                   className="flex items-center gap-3 px-3 py-2 rounded-2xl transition-all hover:bg-white/10 cursor-pointer group/v" 
+                                   onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
+                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr flex items-center justify-center text-xs font-black shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"} border border-white/20 shadow-lg group-hover/v:scale-110 transition-transform`}>
                                   {(v.name || v.username || "?")[0].toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-[13px] font-bold block truncate group-hover/v:text-purple-400 transition-colors" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
-                                  <span className="text-[10px] opacity-50 block truncate" style={{ color: "#ffffff" }}>@{v.username}</span>
+                                  <span className="text-[13px] font-bold block truncate text-white">{v.name || v.username}</span>
+                                  <span className="text-[10px] text-white/50 block truncate">@{v.username}</span>
                                 </div>
-                              </div>
+                              </motion.div>
                             ))
                           )}
                         </div>

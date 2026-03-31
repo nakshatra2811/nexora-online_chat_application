@@ -319,7 +319,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden" style={{ backgroundColor: "var(--bg-base)", color: "var(--text-primary)" }}>
+    <div className="flex flex-col h-[100dvh] w-full overflow-hidden" style={{ backgroundColor: "var(--bg-base)", color: "var(--text-primary)" }}>
 
       {/* ═══ APP LOCK SCREEN ═══ */}
       <AnimatePresence>
@@ -640,7 +640,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ═══════════════════════════════════════
           MAIN CONTENT AREA
       ═══════════════════════════════════════ */}
-      <main className="flex-1 relative w-full overflow-hidden flex pb-[72px] md:pb-0 safe-bottom">
+      <main className={`flex-1 relative w-full overflow-hidden flex ${(!isKeyboardVisible && !isChatActive) ? "pb-[72px]" : "pb-0"} md:pb-0 safe-bottom`}>
         {/* Ambient glow blobs */}
         <div className="absolute top-0 right-0 h-80 w-80 rounded-full pointer-events-none"
              style={{
@@ -663,7 +663,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           MOBILE TOP BACK NAVIGATION (Floating)
       ═══════════════════════════════════════ */}
       <AnimatePresence>
-        {pathname !== "/dashboard/chats" && (
+        {(pathname !== "/dashboard/chats" || isChatActive) && (
           <motion.button
             key="mobile-back-button"
             initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}

@@ -570,7 +570,7 @@ app.get('/api/auth/check-username', async (req, res) => {
     if (!username) return res.status(400).json({ error: "Username required" });
     try {
         if (!db) return res.status(500).json({ error: "Database not ready" });
-        const user = await db.get('SELECT username FROM users WHERE username = ?', [username.toLowerCase().trim()]);
+        const user = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)', [username.trim(), username.trim()]);
         res.json({ available: !user });
     } catch (err) {
         res.status(500).json({ error: "Server error during check" });
@@ -718,10 +718,10 @@ app.post('/api/auth/signup', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ status: "error", error: "Database not ready" });
 
-        // 1. Check if username exists
-        const existing = await db.get('SELECT id FROM users WHERE username = ?', [username.toLowerCase()]);
+        // 1. Check if username or email exists
+        const existing = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)', [username.trim(), email.toLowerCase().trim()]);
         if (existing) {
-            return res.status(400).json({ status: "error", error: "Username not available" });
+            return res.status(400).json({ status: "error", error: "Username or Email already associated with an account." });
         }
 
         // 2. Insert into database
@@ -1444,7 +1444,7 @@ app.post('/api/stories/like', async (req, res) => {
             io.to(receiver).emit('dm:message', likePayload);
             
             // Sync to Sender's other devices
-            socket.to(sender).emit('dm:message', likePayload);
+            io.to(sender).emit('dm:message', likePayload);
 
             // Push Notification
             const sub = pushSubscriptions.get(receiver);
@@ -1496,7 +1496,7 @@ app.post('/api/stories/reply', async (req, res) => {
         io.to(receiver).emit('dm:message', storyRelayPayload);
         
         // Also sync back to sender's other devices
-        socket.to(sender).emit('dm:message', storyRelayPayload);
+        io.to(sender).emit('dm:message', storyRelayPayload);
 
         // Push notification
         const sub = pushSubscriptions.get(receiver);

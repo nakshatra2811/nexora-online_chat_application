@@ -400,7 +400,15 @@ function AuthContent() {
               <div className="space-y-1">
                 <div className="neumorphic-input flex items-center rounded-xl px-4 py-3">
                   <User className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
-                  <input type="text" required value={username} onChange={(e) => setUsername(e.target.value)} className="ml-3 w-full bg-transparent outline-none" placeholder="Username or Email" style={{ color: "var(--text-primary)" }} />
+                  <input 
+                    type="text" 
+                    required 
+                    value={username} 
+                    onChange={(e) => setUsername(e.target.value)} 
+                    className="ml-3 w-full bg-transparent outline-none" 
+                    placeholder={isLogin ? "Username or Email" : "Username"} 
+                    style={{ color: "var(--text-primary)" }} 
+                  />
                 </div>
                 {usernameStatus === "checking" && <p className="text-[10px] ml-1 text-blue-400">Checking availability...</p>}
                 {usernameStatus === "taken" && <p className="text-[10px] ml-1 text-red-400">Username taken.</p>}

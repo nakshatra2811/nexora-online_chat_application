@@ -22,6 +22,8 @@ export interface CallEvents {
   onCallEnded: (reason: string) => void;
   onCallRejected: () => void;
   onIceConnectionChange: (state: RTCIceConnectionState) => void;
+  onRemoteMuteToggle?: (isMuted: boolean) => void;
+  onRemoteVideoToggle?: (isVideoOff: boolean) => void;
 }
 
 export class WebRTCService {
@@ -49,6 +51,13 @@ export class WebRTCService {
     const socket = socketService.getSocket();
     if (!socket) return;
 
+    // Clear old listeners first to avoid duplicates
+    socket.off("call:offer");
+    socket.off("call:answer");
+    socket.off("call:ice-candidate");
+    socket.off("call:hangup");
+    socket.off("call:reject");
+
     socket.on("call:offer", async (data: { from: string; sdp: RTCSessionDescriptionInit; callType: CallType; callerName?: string; callerColor?: string }) => {
       if (this.onIncomingCallCallback) {
         this.onIncomingCallCallback(data);
@@ -57,19 +66,17 @@ export class WebRTCService {
 
     socket.on("call:answer", async (data: { from: string; sdp: RTCSessionDescriptionInit }) => {
       if (this.pc) {
-        await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        this.events?.onCallAccepted();
+        try {
+          await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          this.events?.onCallAccepted();
+        } catch (e) {
+          console.error("[WebRTC] Failed to set remote description (answer):", e);
+        }
       }
     });
 
     socket.on("call:ice-candidate", async (data: { from: string; candidate: RTCIceCandidateInit }) => {
-      if (this.pc) {
-        try {
-          await this.pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-          console.warn("[WebRTC] Failed to add ICE candidate:", e);
-        }
-      }
+      await this.tryAddIceCandidate(data.candidate);
     });
 
     socket.on("call:hangup", (data: { from: string }) => {
@@ -80,22 +87,39 @@ export class WebRTCService {
       this.cleanup("Call was rejected");
       this.events?.onCallRejected();
     });
+
+    socket.on("call:state-update", (data: { from: string; state: { isMuted?: boolean; isVideoOff?: boolean } }) => {
+      if (data.state.isMuted !== undefined) this.events?.onRemoteMuteToggle?.(data.state.isMuted);
+      if (data.state.isVideoOff !== undefined) this.events?.onRemoteVideoToggle?.(data.state.isVideoOff);
+    });
   }
+
 
   // Re-attach socket listeners (e.g. after reconnect)
   public reattachListeners() {
     this.setupSocketListeners();
   }
 
+  private pendingIceCandidates: RTCIceCandidateInit[] = [];
+
   private createPeerConnection() {
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     this.remoteStream = new MediaStream();
 
-    // Handle incoming remote tracks
+    // Handle incoming remote tracks (Robust stream population)
     this.pc.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((track) => {
-        this.remoteStream?.addTrack(track);
-      });
+      console.log("[WebRTC] Incoming track:", event.track.kind);
+      // Ensure we have a stream to add to
+      if (event.streams && event.streams[0]) {
+        // Most common case: tracks arrive grouped in a stream
+        event.streams[0].getTracks().forEach((track) => {
+          this.remoteStream?.addTrack(track);
+        });
+      } else {
+        // Fallback for browsers that don't group tracks into streams
+        this.remoteStream?.addTrack(event.track);
+      }
+      
       if (this.remoteStream) {
         this.events?.onRemoteStream(this.remoteStream);
       }
@@ -124,6 +148,35 @@ export class WebRTCService {
     };
   }
 
+  private async tryAddIceCandidate(candidate: RTCIceCandidateInit) {
+    if (!this.pc) return;
+    try {
+      // We can only add ICE candidates after the remote description is set
+      if (this.pc.remoteDescription && this.pc.remoteDescription.type) {
+        await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        // Queue candidate to be added later
+        this.pendingIceCandidates.push(candidate);
+      }
+    } catch (e) {
+      console.warn("[WebRTC] Failed to add ICE candidate:", e);
+    }
+  }
+
+  private async processPendingIceCandidates() {
+    if (!this.pc || !this.pc.remoteDescription) return;
+    while (this.pendingIceCandidates.length > 0) {
+      const candidate = this.pendingIceCandidates.shift();
+      if (candidate) {
+        try {
+          await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn("[WebRTC] Failed to add queued ICE candidate:", e);
+        }
+      }
+    }
+  }
+
   // ═══════════════════════════════════════════════
   // OUTGOING CALL — Initiator creates SDP Offer
   // ═══════════════════════════════════════════════
@@ -138,11 +191,25 @@ export class WebRTCService {
     this.callType = type;
     this.isInitiator = true;
 
-    // Get local media
+    // Use optimized constraints for high-quality audio
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
     const constraints: MediaStreamConstraints =
       type === "video"
-        ? { audio: true, video: { facingMode: this.currentFacingMode, width: 1280, height: 720 } }
-        : { audio: true };
+        ? { 
+            audio: audioConstraints, 
+            video: { 
+              facingMode: { ideal: this.currentFacingMode }, 
+              width: { ideal: 1280 }, 
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            } 
+          }
+        : { audio: audioConstraints };
 
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
@@ -182,10 +249,25 @@ export class WebRTCService {
     this.callType = type;
     this.isInitiator = false;
 
+    // Use optimized constraints for high-quality audio
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
     const constraints: MediaStreamConstraints =
       type === "video"
-        ? { audio: true, video: { facingMode: this.currentFacingMode, width: 1280, height: 720 } }
-        : { audio: true };
+        ? { 
+            audio: audioConstraints, 
+            video: { 
+              facingMode: { ideal: this.currentFacingMode }, 
+              width: { ideal: 1280 }, 
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            } 
+          }
+        : { audio: audioConstraints };
 
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
@@ -195,6 +277,10 @@ export class WebRTCService {
     });
 
     await this.pc!.setRemoteDescription(new RTCSessionDescription(offer));
+    
+    // Process any ICE candidates that arrived before the remote description was set
+    await this.processPendingIceCandidates();
+
     const answer = await this.pc!.createAnswer();
     await this.pc!.setLocalDescription(answer);
 
@@ -216,7 +302,12 @@ export class WebRTCService {
     const track = this.localStream.getAudioTracks()[0];
     if (track) {
       track.enabled = !track.enabled;
-      return !track.enabled; // returns true if muted
+      const muted = !track.enabled;
+      
+      const socket = socketService.getSocket();
+      socket?.emit("call:state-update", { to: this.targetUserId, state: { isMuted: muted } });
+      
+      return muted;
     }
     return false;
   }
@@ -226,7 +317,12 @@ export class WebRTCService {
     const track = this.localStream.getVideoTracks()[0];
     if (track) {
       track.enabled = !track.enabled;
-      return !track.enabled; // returns true if video is off
+      const videoOff = !track.enabled;
+
+      const socket = socketService.getSocket();
+      socket?.emit("call:state-update", { to: this.targetUserId, state: { isVideoOff: videoOff } });
+
+      return videoOff;
     }
     return false;
   }
@@ -259,7 +355,11 @@ export class WebRTCService {
     
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: this.currentFacingMode, width: 1280, height: 720 }
+        video: { 
+          facingMode: { ideal: this.currentFacingMode }, 
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 } 
+        }
       });
       
       const newVideoTrack = newStream.getVideoTracks()[0];
@@ -308,6 +408,7 @@ export class WebRTCService {
     this.remoteStream = null;
     this.targetUserId = null;
     this.currentFacingMode = "user";
+    this.pendingIceCandidates = [];
 
     // Capture and CLEAR the callback before invoking it.
     // This is the key fix: if onCallEnded → endCall → hangup → cleanup,

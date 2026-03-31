@@ -167,10 +167,12 @@ export default function ChatsPage() {
   const [callState, setCallState] = useState<{
     type: "voice" | "video" | null; isFullscreen: boolean; duration: number;
     localStream: MediaStream | null; isMuted: boolean; isVideoOff: boolean; isSpeaker: boolean;
+    remoteMuted: boolean; remoteVideoOff: boolean;
     status: "ringing" | "accepted" | null; direction: "outgoing" | "incoming"; facingMode: "user" | "environment";
   }>({
     type: null, isFullscreen: false, duration: 0, localStream: null,
     isMuted: false, isVideoOff: false, isSpeaker: false,
+    remoteMuted: false, remoteVideoOff: false,
     status: null, direction: "outgoing", facingMode: "user"
   });
 
@@ -238,6 +240,15 @@ export default function ChatsPage() {
       });
     }
   }, []);
+
+  // ═══ Mobile View Helper: Sync active state to layout ═══
+  useEffect(() => {
+    if (activeThread) {
+      document.body.classList.add("chat-active");
+    } else {
+      document.body.classList.remove("chat-active");
+    }
+  }, [activeThread]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wallpaperUploadRef = useRef<HTMLInputElement>(null);
@@ -331,11 +342,29 @@ export default function ChatsPage() {
     const hidden = localStorage.getItem("nexora_hidden_threads");
     if (hidden) setHiddenThreads(JSON.parse(hidden));
 
-    const activeId = localStorage.getItem("nexora_active_thread_id");
-    if (activeId) {
-      const savedThreads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-      const found = savedThreads.find((t: any) => t.id === parseInt(activeId));
-      if (found) setActiveThread(found);
+    // Handle URL parameters for direct chat/call navigation
+    const params = new URLSearchParams(window.location.search);
+    const targetUsername = params.get("u") || params.get("username");
+    const callType = params.get("call");
+
+    if (targetUsername) {
+      // Find thread in connections
+      const currentThreads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+      const found = currentThreads.find((t: any) => t.username === targetUsername);
+      if (found) {
+        setActiveThread(found);
+        // If call requested, trigger it after a short delay to ensure components are ready
+        if (callType === "voice" || callType === "video") {
+           setTimeout(() => startCall(callType as any), 1000);
+        }
+      }
+    } else {
+      const activeId = localStorage.getItem("nexora_active_thread_id");
+      if (activeId) {
+        const savedThreads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const found = savedThreads.find((t: any) => t.id === parseInt(activeId));
+        if (found) setActiveThread(found);
+      }
     }
 
     // Load unread counts
@@ -1629,6 +1658,8 @@ export default function ChatsPage() {
     setShowChatMenu(false);
   };
 
+  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+
   const startCall = async (type: "voice" | "video") => {
     try {
       // ✅ FIXED: Use username (string) as target, NOT thread.id (integer)
@@ -1651,21 +1682,24 @@ export default function ChatsPage() {
           endCall();
         },
         onCallRejected: () => {
-          setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, status: null, direction: "outgoing", facingMode: "user" });
+          setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, remoteMuted: false, remoteVideoOff: false, status: null, direction: "outgoing", facingMode: "user" });
         },
         onIceConnectionChange: () => { },
+        onRemoteMuteToggle: (muted) => {
+          setCallState(p => ({ ...p, remoteMuted: muted }));
+        },
+        onRemoteVideoToggle: (videoOff) => {
+          setCallState(p => ({ ...p, remoteVideoOff: videoOff }));
+        },
       });
-      setCallState({ type, isFullscreen: true, duration: 0, localStream, isMuted: false, isVideoOff: false, isSpeaker: false, status: "ringing", direction: "outgoing", facingMode: "user" });
+      setCallState({ type, isFullscreen: true, duration: 0, localStream, isMuted: false, isVideoOff: false, isSpeaker: false, status: "ringing", direction: "outgoing", facingMode: "user", remoteMuted: false, remoteVideoOff: false });
 
-      // Fallback: simulate answering after 3 seconds if no real peer responds
-      setTimeout(() => {
-        setCallState(p => {
-          if (!p.type || p.status === "accepted") return p;
-          callTimerRef.current = setInterval(() => setCallState(cp => ({ ...cp, duration: cp.duration + 1 })), 1000);
-          return { ...p, status: "accepted" };
-        });
-      }, 3000);
-    } catch { alert("Camera/microphone access denied"); }
+      // Call is now handled strictly by WebRTC signaling.
+      // Removed the 3s auto-accept fallback to ensure real connection status.
+    } catch (err) {
+      console.error("Start call error:", err);
+      alert("Camera/microphone access denied");
+    }
   };
 
   // Accept incoming call
@@ -1679,7 +1713,7 @@ export default function ChatsPage() {
 
     try {
       setActiveThread(thread);
-      const stream = await webRTCService.acceptCall(String(thread.id), sdp, type, {
+      const stream = await webRTCService.acceptCall(thread.username, sdp, type, {
         onRemoteStream: (stream) => {
           if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
         },
@@ -1694,7 +1728,13 @@ export default function ChatsPage() {
         },
         onIceConnectionChange: (state) => {
           console.log("[WebRTC] ICE Connection:", state);
-        }
+        },
+        onRemoteMuteToggle: (muted) => {
+          setCallState(p => ({ ...p, remoteMuted: muted }));
+        },
+        onRemoteVideoToggle: (videoOff) => {
+          setCallState(p => ({ ...p, remoteVideoOff: videoOff }));
+        },
       });
 
       setCallState({
@@ -1705,6 +1745,8 @@ export default function ChatsPage() {
         isMuted: false,
         isVideoOff: false,
         isSpeaker: false,
+        remoteMuted: false,
+        remoteVideoOff: false,
         status: "accepted",
         direction: "incoming",
         facingMode: "user"
@@ -1748,9 +1790,12 @@ export default function ChatsPage() {
   // The webRTCService.onIncomingCall() handler above handles all real incoming calls
 
   useEffect(() => {
-    if (callState.localStream && localVideoRef.current)
+    if (callState.localStream && localVideoRef.current) {
+      // Force re-attach. Browsers often won't update when we add/remove tracks in-place.
+      localVideoRef.current.srcObject = null;
       localVideoRef.current.srcObject = callState.localStream;
-  }, [callState.localStream, callState.isFullscreen]);
+    }
+  }, [callState.localStream, callState.isFullscreen, callState.facingMode]);
 
   useEffect(() => {
     if (cameraView.active && !cameraView.capturedUrl && cameraView.stream && liveVideoRef.current) {
@@ -1767,7 +1812,7 @@ export default function ChatsPage() {
     const localStream = callState.localStream;
 
     // Reset UI state immediately to prevent re-entrant calls from UI interactions
-    setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, status: null, direction: "outgoing", facingMode: "user" });
+    setCallState({ type: null, isFullscreen: false, duration: 0, localStream: null, isMuted: false, isVideoOff: false, isSpeaker: false, remoteMuted: false, remoteVideoOff: false, status: null, direction: "outgoing", facingMode: "user" });
 
     // Stop timer
     if (callTimerRef.current) {
@@ -1955,7 +2000,6 @@ export default function ChatsPage() {
     setSharePhone("");
   };
 
-  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   const tickColor = (status: string) =>
     status === "seen" ? "#00d4ff" : "rgba(255,255,255,0.5)";
@@ -2381,9 +2425,9 @@ export default function ChatsPage() {
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
                     onClick={() => setActiveThread(null)}
-                    className="p-1.5 rounded-lg lg:hidden mr-1 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                    style={{ color: "var(--text-secondary)" }}>
-                    <ChevronLeft className="w-5 h-5" />
+                    className="p-2 rounded-full lg:hidden mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] border border-transparent active:border-[var(--border-subtle)]"
+                    style={{ color: "var(--text-primary)" }}>
+                    <ArrowLeft className="w-5 h-5" />
                   </motion.button>
                   <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
                     <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${activeThread.color} flex items-center justify-center text-white font-bold shadow-md cursor-pointer`}>
@@ -3050,81 +3094,158 @@ export default function ChatsPage() {
       </AnimatePresence>
 
 
-      {/* ═══ FULL SCREEN CALL UI ═══ */}
+      {/* ═══ CALL UI (FULL SCREEN & PIP) ═══ */}
       <AnimatePresence>
         {callState.type && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.5, type: "spring", stiffness: 200, damping: 20 }}
-            className="fixed inset-0 z-[1000] bg-[#0c0c14] text-white flex flex-col items-center justify-center overflow-hidden">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+            animate={{ 
+              opacity: 1, 
+              scale: 1, 
+              y: 0,
+              width: callState.isFullscreen ? "100%" : "280px",
+              height: callState.isFullscreen ? "100%" : "180px",
+              bottom: callState.isFullscreen ? "0px" : "24px",
+              right: callState.isFullscreen ? "0px" : "24px",
+              top: callState.isFullscreen ? "0px" : "auto",
+              left: callState.isFullscreen ? "0px" : "auto",
+              borderRadius: callState.isFullscreen ? "0px" : "32px",
+            }} 
+            exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+            transition={{ duration: 0.6, type: "spring", stiffness: 150, damping: 22 }}
+            className={`fixed z-[1000] bg-[#0c0c14] text-white flex flex-col items-center justify-center overflow-hidden shadow-2xl ${!callState.isFullscreen ? "border border-white/20 cursor-pointer hover:border-white/40" : ""}`}
+            onClick={() => !callState.isFullscreen && setCallState(p => ({ ...p, isFullscreen: true }))}
+          >
             
+            {/* Header Controls (Minimize button) */}
+            {callState.isFullscreen && (
+              <div className="absolute top-6 left-0 right-0 z-50 flex items-center justify-between px-8 pointer-events-none">
+                <motion.button 
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                  onClick={(e) => { e.stopPropagation(); setCallState(p => ({ ...p, isFullscreen: false })); }} 
+                  className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-2xl border border-white/10 flex items-center justify-center text-white pointer-events-auto hover:bg-white/20 transition-all"
+                >
+                  <Minimize2 className="w-5 h-5" />
+                </motion.button>
+                <div className="flex items-center gap-2 bg-black/40 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10 pointer-events-none">
+                  <Lock className="w-3 h-3 text-[#2ed573]" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#2ed573]">E2EE Tunnel Active</span>
+                </div>
+              </div>
+            )}
+
+            {/* PIP Restore Overlay */}
+            {!callState.isFullscreen && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
+                 <Maximize2 className="w-8 h-8 text-white/70" />
+              </div>
+            )}
+
             {/* Animated Background for Voice Calls */}
             {callState.type === "voice" && (
               <>
-                <div className={`absolute -top-[20%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-gradient-to-br ${activeThread?.color || "from-[#6c5ce7] to-[#00d4ff]"} opacity-30 blur-[100px] animate-[pulse_4s_cubic-bezier(0.4,0,0.6,1)_infinite]`} />
-                <div className={`absolute -bottom-[20%] -right-[10%] w-[60vw] h-[60vw] rounded-full bg-gradient-to-tl ${activeThread?.color || "from-[#00d4ff] to-blue-500"} opacity-30 blur-[100px] animate-[pulse_4s_cubic-bezier(0.4,0,0.6,1)_infinite]`} style={{ animationDelay: "2s" }} />
+                <div className={`absolute -top-[20%] -left-[10%] ${callState.isFullscreen ? "w-[60vw] h-[60vw]" : "w-40 h-40"} rounded-full bg-gradient-to-br ${activeThread?.color || "from-[#6c5ce7] to-[#00d4ff]"} opacity-30 blur-[100px] animate-[pulse_4s_cubic-bezier(0.4,0,0.6,1)_infinite]`} />
+                <div className={`absolute -bottom-[20%] -right-[10%] ${callState.isFullscreen ? "w-[60vw] h-[60vw]" : "w-40 h-40"} rounded-full bg-gradient-to-tl ${activeThread?.color || "from-[#00d4ff] to-blue-500"} opacity-30 blur-[100px] animate-[pulse_4s_cubic-bezier(0.4,0,0.6,1)_infinite]`} style={{ animationDelay: "2s" }} />
               </>
             )}
 
             <div className="absolute inset-0 z-0">
-              {callState.type === "video" && !callState.isVideoOff ? (
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              ) : (
+              {/* Remote Video/Audio Element */}
+              <video 
+                ref={remoteVideoRef} 
+                autoPlay 
+                playsInline 
+                className={`w-full h-full object-cover ${callState.type === "voice" || callState.remoteVideoOff ? "hidden" : "block"}`} 
+              />
+
+              {(callState.type === "voice" || callState.remoteVideoOff) && (
                 <div className="w-full h-full flex flex-col items-center justify-center relative">
-                   {/* Ripple Effect Background */}
-                   {callState.status === "ringing" && (
+                   {/* Ripple Effect Background (Only in full screen) */}
+                   {callState.status === "ringing" && callState.isFullscreen && (
                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                        <div className="w-64 h-64 rounded-full border-2 border-white/20 animate-[ping_3s_ease-in-out_infinite]" />
                        <div className="absolute w-80 h-80 rounded-full border-2 border-white/10 animate-[ping_3s_ease-in-out_infinite]" style={{ animationDelay: "0.5s" }} />
                      </div>
                    )}
-                  <div className={`relative w-48 h-48 rounded-full flex items-center justify-center shadow-[0_0_80px_rgba(108,92,231,0.6)] z-10 bg-gradient-to-tr ${activeThread?.color || "from-[#6c5ce7] to-[#00d4ff]"} border-[6px] border-[#0c0c14]`}>
-                    <div className="text-7xl font-black text-white drop-shadow-2xl">
+                  <div className={`relative ${callState.isFullscreen ? "w-48 h-48" : "w-20 h-20"} rounded-full flex items-center justify-center shadow-[0_0_80px_rgba(108,92,231,0.6)] z-10 bg-gradient-to-tr ${activeThread?.color || "from-[#6c5ce7] to-[#00d4ff]"} border-[6px] border-[#0c0c14] transition-all duration-500`}>
+                    <div className={`${callState.isFullscreen ? "text-7xl" : "text-3xl"} font-black text-white drop-shadow-2xl`}>
                       {activeThread?.name?.[0]}
                     </div>
                   </div>
+                  {callState.remoteVideoOff && callState.status === "accepted" && callState.isFullscreen && (
+                    <div className="mt-8 bg-white/10 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10 flex items-center gap-2">
+                       <VideoOff className="w-4 h-4 text-red-400" />
+                       <span className="text-xs font-black uppercase tracking-widest text-white/70">Video Paused</span>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {callState.type === "video" && callState.localStream && (
-                <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="absolute top-8 right-8 w-32 h-44 bg-black rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl z-20 transition-all duration-300">
-                  <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: callState.facingMode === "user" ? "scaleX(-1)" : "none" }} />
+              {/* Local Video PIP (Only in full screen) */}
+              {callState.type === "video" && callState.localStream && callState.isFullscreen && (
+                <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="absolute top-24 right-8 w-32 h-44 bg-black rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl z-20 transition-all duration-300">
+                  {callState.isVideoOff ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-[#1a1a2e]">
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${myProfile.color} flex items-center justify-center text-xs font-black`}>You</div>
+                      <VideoOff className="w-3 h-3 text-white/50 mt-2" />
+                    </div>
+                  ) : (
+                    <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" style={{ transform: callState.facingMode === "user" ? "scaleX(-1)" : "none" }} />
+                  )}
                 </motion.div>
               )}
             </div>
 
-            <div className="relative z-10 flex flex-col items-center justify-start pt-20 flex-1 pointer-events-none w-full">
-               <h2 className="text-5xl md:text-6xl font-black mb-2 tracking-tight truncate max-w-[85vw] drop-shadow-xl" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.6)" }}>
+            {/* Info overlay (Name, timer) */}
+            <div className={`relative z-10 flex flex-col items-center justify-start ${callState.isFullscreen ? "pt-24" : "pt-4"} flex-1 pointer-events-none w-full transition-all duration-500`}>
+               <h2 className={`${callState.isFullscreen ? "text-5xl md:text-6xl" : "text-lg"} font-black mb-2 tracking-tight truncate max-w-[85vw] drop-shadow-xl transition-all duration-500`} style={{ textShadow: "0 2px 20px rgba(0,0,0,0.6)" }}>
                  {activeThread?.name}
                </h2>
-              {callState.status === "ringing" && <p className="text-[#00d4ff] text-lg animate-pulse mt-2 font-black tracking-[0.2em] uppercase truncate max-w-[80vw] drop-shadow-md">Calling...</p>}
-              {callState.status === "accepted" && <div className="text-[#2ed573] text-3xl font-black tracking-widest drop-shadow-[0_0_15px_rgba(46,213,115,0.8)] bg-black/40 px-5 py-2 rounded-full backdrop-blur-xl mt-3">{fmt(callState.duration)}</div>}
-              {callState.status === "ringing" && <div className="mt-6 flex items-center gap-2 bg-white/10 backdrop-blur-lg px-4 py-2 rounded-full border border-white/10"><Lock className="w-4 h-4 text-[#00d4ff]" /><span className="text-[#00d4ff] text-xs uppercase font-black tracking-widest">End-to-End Encrypted Tunnel</span></div>}
+              {callState.remoteMuted && callState.status === "accepted" && callState.isFullscreen && (
+                <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-red-500/20 backdrop-blur-xl border border-red-500/30 px-3 py-1 rounded-lg flex items-center gap-2 mb-2">
+                  <MicOff className="w-4 h-4 text-red-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-red-500">Muted</span>
+                </motion.div>
+              )}
+              {callState.status === "ringing" && <p className={`${callState.isFullscreen ? "text-[#00d4ff] text-lg" : "text-[#00d4ff] text-[10px]"} animate-pulse mt-2 font-black tracking-[0.2em] uppercase truncate max-w-[80vw] drop-shadow-md`}>Calling...</p>}
+              {callState.status === "accepted" && <div className={`${callState.isFullscreen ? "text-[#2ed573] text-3xl" : "text-[#2ed573] text-sm"} font-black tracking-widest drop-shadow-[0_0_15px_rgba(46,213,115,0.8)] bg-black/40 px-5 py-2 rounded-full backdrop-blur-xl mt-3 transition-all duration-500`}>{fmt(callState.duration)}</div>}
             </div>
 
-            <div className="relative z-10 pb-10 px-6 flex items-center justify-center gap-6 mt-auto w-full">
-              <div className="flex items-center gap-4 bg-white/10 backdrop-blur-2xl border border-white/20 p-4 rounded-[3rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
-                <button onClick={() => setCallState((p: any) => ({ ...p, isMuted: !p.isMuted }))} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${callState.isMuted ? "bg-white text-black scale-95" : "bg-white/10 text-white hover:bg-white/20"}`}>
-                  {callState.isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
-                </button>
-                {callState.type === "video" && (
-                  <>
-                    <button onClick={() => setCallState((p: any) => ({ ...p, isVideoOff: !p.isVideoOff }))} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${callState.isVideoOff ? "bg-white text-black scale-95" : "bg-white/10 text-white hover:bg-white/20"}`}>
-                      {callState.isVideoOff ? <VideoOff className="w-7 h-7" /> : <Video className="w-7 h-7" />}
-                    </button>
-                    <button onClick={async () => {
-                      const success = await webRTCService.flipCamera();
-                      if (success) {
-                        setCallState((p: any) => ({ ...p, facingMode: webRTCService.currentFacingMode }));
-                      }
-                    }} className="w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 bg-white/10 text-white hover:bg-white/20 active:rotate-180">
-                      <RefreshCcw className="w-7 h-7" />
-                    </button>
-                  </>
-                )}
-                <button onClick={endCall} className="w-20 h-20 rounded-full bg-[#ff4757] hover:bg-[#ff6b81] flex items-center justify-center text-white shadow-[0_0_30px_rgba(255,71,87,0.6)] transition-all hover:scale-105 active:scale-95 duration-300">
-                  <PhoneOff className="w-9 h-9" />
-                </button>
+            {/* Main Controls (Only in full screen) */}
+            {callState.isFullscreen && (
+              <div className="relative z-10 pb-10 px-6 flex items-center justify-center gap-6 mt-auto w-full">
+                <div className="flex items-center gap-4 bg-white/10 backdrop-blur-2xl border border-white/20 p-4 rounded-[3rem] shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
+                  <button onClick={(e) => { e.stopPropagation();
+                    const muted = webRTCService.toggleMute();
+                    setCallState((p: any) => ({ ...p, isMuted: muted }));
+                  }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${callState.isMuted ? "bg-white text-black scale-95" : "bg-white/10 text-white hover:bg-white/20"}`}>
+                    {callState.isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+                  </button>
+                  {callState.type === "video" && (
+                    <>
+                      <button onClick={(e) => { e.stopPropagation();
+                        const videoOff = webRTCService.toggleVideo();
+                        setCallState((p: any) => ({ ...p, isVideoOff: videoOff }));
+                      }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${callState.isVideoOff ? "bg-white text-black scale-95" : "bg-white/10 text-white hover:bg-white/20"}`}>
+                        {callState.isVideoOff ? <VideoOff className="w-7 h-7" /> : <Video className="w-7 h-7" />}
+                      </button>
+                      <button onClick={async (e) => { e.stopPropagation();
+                        const success = await webRTCService.flipCamera();
+                        if (success) {
+                          setCallState((p: any) => ({ ...p, facingMode: webRTCService.currentFacingMode }));
+                        }
+                      }} className="w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 bg-white/10 text-white hover:bg-white/20 active:rotate-180">
+                        <RefreshCcw className="w-7 h-7" />
+                      </button>
+                    </>
+                  )}
+                  <button onClick={(e) => { e.stopPropagation(); endCall(); }} className="w-20 h-20 rounded-full bg-[#ff4757] hover:bg-[#ff6b81] flex items-center justify-center text-white shadow-[0_0_30px_rgba(255,71,87,0.6)] transition-all hover:scale-105 active:scale-95 duration-300">
+                    <PhoneOff className="w-9 h-9" />
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

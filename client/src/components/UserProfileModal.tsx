@@ -217,21 +217,30 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
           </div>
 
           {/* 4 Action buttons: Chat, Voice, Video, Block */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { label: "Chat", icon: MessageSquare, color: "#6c5ce7", bg: "rgba(108,92,231,0.1)", action: onChat },
-              { label: "Voice", icon: Phone, color: "#2ed573", bg: "rgba(46,213,115,0.1)", action: onVoiceCall },
-              { label: "Video", icon: Video, color: "#00d4ff", bg: "rgba(0,212,255,0.1)", action: onVideoCall },
-              { label: "Block", icon: UserMinus, color: "#ff006e", bg: "rgba(255,0,110,0.1)", action: onBlock },
-            ].map(btn => (
-              <motion.button key={btn.label} whileHover={{ scale: 1.06, y: -2 }} whileTap={{ scale: 0.92 }}
-                onClick={btn.action}
-                className="flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all"
-                style={{ background: btn.bg, color: btn.color }}>
-                <btn.icon className="w-5 h-5" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wide">{btn.label}</span>
-              </motion.button>
-            ))}
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Message", icon: MessageSquare, color: "#6c5ce7", bg: isDark ? "rgba(108,92,231,0.15)" : "rgba(108,92,231,0.08)", action: onChat },
+                { label: "Voice", icon: Phone, color: "#2ed573", bg: isDark ? "rgba(46,213,115,0.15)" : "rgba(46,213,115,0.08)", action: onVoiceCall },
+                { label: "Video", icon: Video, color: "#00d4ff", bg: isDark ? "rgba(0,212,255,0.15)" : "rgba(0,212,255,0.08)", action: onVideoCall },
+              ].map(btn => (
+                <motion.button key={btn.label} whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
+                  onClick={btn.action}
+                  className="flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all border border-transparent hover:border-current"
+                  style={{ background: btn.bg, color: btn.color }}>
+                  <btn.icon className="w-6 h-6" />
+                  <span className="text-[11px] font-black uppercase tracking-widest">{btn.label}</span>
+                </motion.button>
+              ))}
+            </div>
+            
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={onBlock}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+              style={{ background: isDark ? "rgba(255,0,110,0.1)" : "rgba(255,0,110,0.05)", color: "#ff006e", border: "1px solid rgba(255,0,110,0.15)" }}>
+              <UserMinus className="w-4 h-4" />
+              Restrict Node Identity (Block)
+            </motion.button>
           </div>
 
           {/* QR + Share row */}
