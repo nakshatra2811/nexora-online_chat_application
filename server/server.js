@@ -155,6 +155,8 @@ let pgPool;
                     } else if (pgSql.toLowerCase().includes('insert into connection_requests')) {
                          // Fallback for pending requests if they conflict
                          pgSql = pgSql + ' ON CONFLICT DO NOTHING';
+                    } else if (pgSql.toLowerCase().includes('insert into users')) {
+                         pgSql = pgSql + ' ON CONFLICT DO NOTHING';
                     }
 
                     const res = await pgPool.query(pgSql, params);
@@ -934,22 +936,25 @@ app.post('/api/auth/signup', async (req, res) => {
         const existing = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [finalUsername.toLowerCase(), finalEmail]);
         
         if (existing) {
-            // CHALLENGE: If account exists, log them in automatically IF the password matches
+            // If account exists, auto-login IF password matches
             const isMatch = await bcrypt.compare(password, existing.password).catch(() => password === existing.password);
             
             if (isMatch) {
+                // Return same format as new signup so client code handles it uniformly
                 return res.json({ 
-                    status: "success", 
-                    role: existing.role, 
-                    fullName: decryptField(existing.full_name), 
-                    email: existing.email, 
-                    username: existing.username, 
-                    phoneNumber: decryptField(existing.phone_number), 
-                    color: existing.color, 
-                    message: "Identity recognized. Automatic login authorized." 
+                    status: "success",
+                    user: {
+                        username: existing.username,
+                        email: existing.email,
+                        fullName: decryptField(existing.full_name),
+                        role: existing.role,
+                        color: existing.color,
+                        phoneNumber: decryptField(existing.phone_number)
+                    },
+                    message: "Identity recognized. Automatic login authorized."
                 });
             } else {
-                return res.status(400).json({ status: "error", error: "Username or Email already associated with an account." });
+                return res.status(400).json({ status: "error", error: "Username or Email already registered. Please log in instead." });
             }
         }
 
