@@ -806,43 +806,58 @@ app.post('/api/auth/recovery', async (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
+                <meta charset="utf-8">
                 <style>
-                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
-                    .container { max-width: 550px; margin: 60px auto; background: #ffffff; border-radius: 32px; padding: 50px; border: 1px solid #eef2f7; box-shadow: 0 30px 60px rgba(108,92,231,0.08); text-align: center; }
-                    .logo-img { width: 90px; height: 90px; object-fit: contain; margin-bottom: 30px; border-radius: 22px; box-shadow: 0 15px 35px rgba(108,92,231,0.2); }
-                    .title { font-size: 26px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; letter-spacing: -1px; }
-                    .desc { font-size: 15px; color: #64748b; line-height: 1.8; margin-bottom: 35px; }
-                    .code-container { background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 24px; padding: 35px; margin-bottom: 35px; position: relative; overflow: hidden; }
-                    .code-box { font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #6c5ce7; margin: 0; }
-                    .code-label { font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; display: block; }
-                    .expire { font-size: 13px; color: #94a3b8; margin-top: 20px; font-weight: 500; }
-                    .footer { font-size: 12px; color: #94a3b8; margin-top: 50px; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 30px; }
-                    .protocol-badge { display: inline-block; background: rgba(108,92,231,0.06); color: #6c5ce7; padding: 8px 16px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; }
-                    .social-links { margin-top: 25px; }
-                    .security-note { font-size: 11px; font-weight: 700; color: #2ed573; margin-top: 15px; border: 1px solid rgba(46,213,115,0.2); padding: 10px; border-radius: 12px; background: rgba(46,213,115,0.03); }
+                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+                    .wrapper { padding: 60px 20px; }
+                    .container { max-width: 550px; margin: 0 auto; background: #ffffff; border-radius: 48px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; text-align: center; }
+                    .content { padding: 60px 45px; }
+                    .header-logo { width: 90px; height: 90px; object-fit: contain; margin-bottom: 35px; border-radius: 24px; }
+                    .protocol-badge { display: inline-block; background: rgba(108,92,231,0.06); color: #6c5ce7; padding: 10px 20px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 30px; }
+                    .recover-title { font-size: 28px; font-weight: 900; color: #1a1a2e; margin: 0 0 15px 0; letter-spacing: -1px; }
+                    .recover-desc { font-size: 15px; color: #64748b; line-height: 1.8; margin-bottom: 40px; }
+                    
+                    .otp-vault { background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 32px; padding: 45px; margin-bottom: 35px; position: relative; }
+                    .otp-label { font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; display: block; }
+                    .otp-code { font-size: 48px; font-weight: 900; letter-spacing: 14px; color: #6c5ce7; margin: 0; }
+                    .otp-expiry { font-size: 13px; color: #94a3b8; margin-top: 25px; font-weight: 600; }
+                    
+                    .security-infobox { background: rgba(46,213,115,0.05); border: 1px solid rgba(46,213,115,0.1); border-radius: 20px; padding: 20px; margin-top: 35px; }
+                    .security-text { font-size: 11px; font-weight: 800; color: #15c35a; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+                    
+                    .footer { background: #fafbfc; padding: 45px; border-top: 1px solid #f1f5f9; }
+                    .privacy-note { font-size: 11px; color: #94a3b8; line-height: 1.8; margin-bottom: 25px; text-align: left; }
+                    .copyright { font-size: 10px; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <img src="${APP_LOGO_URL}" alt="Nexora Logo" class="logo-img" />
-                    <div class="protocol-badge">Security Protocol Active</div>
-                    <h2 class="title">Verify Your Identity</h2>
-                    <p class="desc">A request was made to unlock the recovery vault for your Nexora account. Use the encrypted authorization code below to establish a secure link.</p>
-                    
-                    <div class="code-container">
-                        <span class="code-label">One-Time Security Code</span>
-                        <div class="code-box">${otp}</div>
-                        <p class="expire">Valid for the next <strong>10 minutes</strong> only.</p>
-                    </div>
+                <div class="wrapper">
+                    <div class="container">
+                        <div class="content">
+                            <img src="${APP_LOGO_URL}" alt="Nexora" class="header-logo" />
+                            <div class="protocol-badge">Security Link Verification</div>
+                            <h2 class="recover-title">Verify Your Identity</h2>
+                            <p class="recover-desc">A request was made to unlock the recovery vault for your Nexora account. Use the encrypted authorization code below to establish a secure link.</p>
+                            
+                            <div class="otp-vault">
+                                <span class="otp-label">Encryption Key Segment</span>
+                                <div class="otp-code">${otp}</div>
+                                <p class="otp-expiry">Universal expiry in 10 minutes.</p>
+                            </div>
 
-                    <div class="security-note">
-                        🔒 END-TO-END ENCRYPTED TRANSMISSION
-                    </div>
+                            <div class="security-infobox">
+                                <p class="security-text">Transmission Integrity Verified - AES-256-GCM</p>
+                            </div>
+                        </div>
 
-                    <div class="footer">
-                        This is an automated security transmission from Nexora Core.<br>
-                        If you did not initiate this request, your account remains secure. No action is required.<br><br>
-                        <strong>&copy; ${new Date().getFullYear()} Nexora Systems &bull; Deeply Encrypted.</strong>
+                        <div class="footer">
+                            <div class="privacy-note">
+                                This is an automated security transmission from Nexora Core. All recovery protocols are strictly zero-knowledge. If you did not initiate this request, your account remains secure and no further action is required.
+                            </div>
+                            <div class="copyright">
+                                &copy; ${new Date().getFullYear()} NEXORA SYSTEMS &bull; PRIVACY PROTOCOL
+                            </div>
+                        </div>
                     </div>
                 </div>
             </body>
@@ -1010,42 +1025,77 @@ app.post('/api/auth/signup', async (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
+                <meta charset="utf-8">
                 <style>
-                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
-                    .wrapper { padding: 50px 20px; text-align: center; }
-                    .main { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 40px; padding: 60px 40px; box-shadow: 0 40px 80px rgba(108,92,231,0.08); border: 1px solid #eef2f7; }
-                    .logo-img { width: 90px; height: 90px; object-fit: contain; margin-bottom: 35px; border-radius: 20px; box-shadow: 0 15px 35px rgba(108,92,231,0.2); }
-                    .welcome-text { font-size: 28px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; letter-spacing: -1.5px; }
-                    .body-text { font-size: 16px; color: #64748b; line-height: 1.8; margin-bottom: 40px; }
-                    .feature-box { background: #f8fafc; border-radius: 24px; padding: 35px; margin-bottom: 40px; text-align: left; border: 1px solid #f1f5f9; position: relative; overflow: hidden; }
-                    .feature-title { font-size: 11px; font-weight: 900; color: #6c5ce7; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; display: block; }
-                    .feature-item { font-size: 14px; color: #475569; margin-bottom: 12px; display: flex; align-items: center; font-weight: 600; }
-                    .feature-icon { margin-right: 12px; font-size: 18px; }
-                    .btn { display: inline-block; background: linear-gradient(135deg, #6c5ce7, #00d4ff); color: #ffffff !important; padding: 20px 45px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 15px; box-shadow: 0 20px 40px rgba(108,92,231,0.25); transition: all 0.3s ease; letter-spacing: 1px; }
-                    .footer-note { font-size: 11px; color: #94a3b8; margin-top: 50px; border-top: 1px solid #f1f5f9; padding-top: 30px; line-height: 1.6; }
+                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+                    .wrapper { padding: 60px 20px; }
+                    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 48px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; }
+                    .content { padding: 60px 50px; text-align: center; }
+                    .header-logo { width: 100px; height: 100px; object-fit: contain; margin-bottom: 40px; border-radius: 28px; }
+                    .protocol-title { font-size: 11px; font-weight: 900; color: #6c5ce7; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 20px; display: block; }
+                    .welcome-header { font-size: 34px; font-weight: 900; color: #1a1a2e; margin: 0 0 20px 0; letter-spacing: -1.5px; line-height: 1.1; }
+                    .welcome-sub { font-size: 16px; color: #64748b; line-height: 1.8; margin-bottom: 45px; max-width: 480px; margin-left: auto; margin-right: auto; }
+                    
+                    .feature-grid { background: #f8fafc; border-radius: 32px; padding: 40px; margin-bottom: 45px; text-align: left; border: 1px solid #f1f5f9; }
+                    .feature-label { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 25px; display: block; }
+                    .feature-row { display: table; width: 100%; margin-bottom: 15px; }
+                    .feature-bullet { display: table-cell; width: 24px; color: #6c5ce7; font-weight: 900; font-size: 18px; line-height: 1; vertical-align: middle; }
+                    .feature-text { display: table-cell; font-size: 14px; color: #334155; font-weight: 700; vertical-align: middle; }
+                    
+                    .action-btn { display: inline-block; background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 22px 55px; border-radius: 100px; text-decoration: none !important; font-weight: 800; font-size: 16px; box-shadow: 0 25px 50px rgba(108,92,231,0.25); letter-spacing: 0.5px; transition: all 0.3s ease; }
+                    
+                    .footer { background: #fafbfc; padding: 50px; border-top: 1px solid #f1f5f9; }
+                    .footer-brand { font-size: 14px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; display: block; }
+                    .privacy-policy { text-align: left; background: #ffffff; border: 1px solid #eef2f7; border-radius: 20px; padding: 25px; margin-bottom: 30px; }
+                    .privacy-text { font-size: 11px; color: #94a3b8; line-height: 1.8; margin: 0; font-weight: 500; }
+                    .privacy-link { color: #6c5ce7; text-decoration: none; font-weight: 700; }
+                    .copyright { font-size: 10px; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
                 </style>
             </head>
             <body>
                 <div class="wrapper">
-                    <div class="main">
-                        <img src="${APP_LOGO_URL}" alt="Nexora Logo" class="logo-img" />
-                        <h1 class="welcome-text">Protocol Established</h1>
-                        <p class="body-text">Welcome to the Void, <strong>${fullName}</strong>. Your identity <strong>@${username}</strong> has been successfully synchronized with the Nexora Private Protocol.</p>
-                        
-                        <div class="feature-box">
-                            <span class="feature-title">Active Capabilities</span>
-                            <div class="feature-item"><span class="feature-icon">🔒</span> End-to-End P2P Encryption</div>
-                            <div class="feature-item"><span class="feature-icon">⏳</span> Ephemeral Data Persistence</div>
-                            <div class="feature-item"><span class="feature-icon">📞</span> Secure Voice & Video Tunnels</div>
-                            <div class="feature-item"><span class="feature-icon">🌑</span> Deep-Dark Glass Interface</div>
+                    <div class="container">
+                        <div class="content">
+                            <img src="${APP_LOGO_URL}" alt="Nexora" class="header-logo" />
+                            <span class="protocol-title">Protocol Synchronized</span>
+                            <h1 class="welcome-header">Welcome to the Void.</h1>
+                            <p class="welcome-sub">Subject identity <strong>@${username}</strong> has been successfully verified. Your clearance for the Nexora Private Protocol is now active.</p>
+                            
+                            <div class="feature-grid">
+                                <span class="feature-label">Active Capabilities</span>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">End-to-End P2P Encryption Active</div>
+                                </div>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">Zero-Knowledge Data Transfer</div>
+                                </div>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">Ephemeral Vault Storage Initialized</div>
+                                </div>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">Secure Media Tunneling Protocol</div>
+                                </div>
+                            </div>
+     
+                            <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="action-btn">ESTABLISH SECURE LINK</a>
                         </div>
- 
-                        <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="btn">Enter Protocol</a>
 
-                        <div class="footer-note">
-                            This is an automated transmission confirming successful link establishment.<br>
-                            Synchronization completed at ${new Date().toUTCString()}.<br><br>
-                            &copy; ${new Date().getFullYear()} Nexora Global Systems &bull; Deeply Encrypted.
+                        <div class="footer">
+                            <span class="footer-brand">Nexora Systems</span>
+                            <div class="privacy-policy">
+                                <p class="privacy-text">
+                                    <strong>PRIVACY ASSURANCE:</strong> All communications via Nexora are protected by military-grade encryption. We do not store, inspect, or log your messages. By accessing the protocol, you agree to our <a href="#" class="privacy-link">Global Security Standards</a> and data handling protocols.
+                                    <br><br>
+                                    Reference ID: SEC-PRT-${Math.random().toString(36).substring(7).toUpperCase()}
+                                </p>
+                            </div>
+                            <div class="copyright">
+                                &copy; ${new Date().getFullYear()} NEXORA GLOBAL &bull; ALL LINKS ENCRYPTED
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1089,46 +1139,71 @@ app.post('/api/admin/approve', async (req, res) => {
             <head>
                 <meta charset="utf-8">
                 <style>
-                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
-                    .container { max-width: 600px; margin: 60px auto; background: #ffffff; border-radius: 40px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; }
-                    .header { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); padding: 70px 40px; text-align: center; position: relative; }
-                    .logo-box { width: 95px; height: 95px; background: #fff; border-radius: 24px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
-                    .brand-name { color: #ffffff; font-size: 34px; font-weight: 900; letter-spacing: -2px; margin: 0; }
-                    .content { padding: 60px 45px; text-align: center; }
-                    .title { font-size: 32px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; letter-spacing: -1px; }
-                    .greeting { font-size: 18px; font-weight: 700; color: #6c5ce7; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; }
-                    .message { color: #64748b; font-size: 16px; line-height: 1.8; margin-bottom: 50px; }
-                    .button { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 22px 50px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 20px 40px rgba(108,92,231,0.3); transition: all 0.3s ease; letter-spacing: 1.5px; text-transform: uppercase; }
-                    .footer { background: #f8fafc; padding: 45px; text-align: center; color: #94a3b8; border-top: 1px solid #f1f5f9; }
-                    .copyright { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 25px; }
-                    .disclaimer-box { background: #ffffff; border: 1px solid #eef2f7; border-radius: 20px; padding: 25px; text-align: left; }
-                    .disclaimer-text { font-size: 11px; color: #94a3b8; line-height: 1.8; margin: 0; font-weight: 500; }
+                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+                    .wrapper { padding: 60px 20px; }
+                    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 48px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; }
+                    .content { padding: 60px 50px; text-align: center; }
+                    .header-logo { width: 100px; height: 100px; object-fit: contain; margin-bottom: 40px; border-radius: 28px; }
+                    .protocol-title { font-size: 11px; font-weight: 900; color: #6c5ce7; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 20px; display: block; }
+                    .welcome-header { font-size: 34px; font-weight: 900; color: #1a1a2e; margin: 0 0 20px 0; letter-spacing: -1.5px; line-height: 1.1; }
+                    .welcome-sub { font-size: 16px; color: #64748b; line-height: 1.8; margin-bottom: 45px; max-width: 480px; margin-left: auto; margin-right: auto; }
+                    
+                    .feature-grid { background: #f8fafc; border-radius: 32px; padding: 40px; margin-bottom: 45px; text-align: left; border: 1px solid #f1f5f9; }
+                    .feature-label { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 25px; display: block; }
+                    .feature-row { display: table; width: 100%; margin-bottom: 15px; }
+                    .feature-bullet { display: table-cell; width: 24px; color: #6c5ce7; font-weight: 900; font-size: 18px; line-height: 1; vertical-align: middle; }
+                    .feature-text { display: table-cell; font-size: 14px; color: #334155; font-weight: 700; vertical-align: middle; }
+                    
+                    .action-btn { display: inline-block; background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 22px 55px; border-radius: 100px; text-decoration: none !important; font-weight: 800; font-size: 16px; box-shadow: 0 25px 50px rgba(108,92,231,0.25); letter-spacing: 0.5px; transition: all 0.3s ease; }
+                    
+                    .footer { background: #fafbfc; padding: 50px; border-top: 1px solid #f1f5f9; }
+                    .footer-brand { font-size: 14px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px; display: block; }
+                    .privacy-policy { text-align: left; background: #ffffff; border: 1px solid #eef2f7; border-radius: 20px; padding: 25px; margin-bottom: 30px; }
+                    .privacy-text { font-size: 11px; color: #94a3b8; line-height: 1.8; margin: 0; font-weight: 500; }
+                    .privacy-link { color: #6c5ce7; text-decoration: none; font-weight: 700; }
+                    .copyright { font-size: 10px; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <div class="header">
-                        <div class="logo-box">
-                            <img src="${APP_LOGO_URL}" alt="Nexora" style="width: 75px; height: 75px; object-fit: contain; border-radius: 18px;" />
+                <div class="wrapper">
+                    <div class="container">
+                        <div class="content">
+                            <img src="${APP_LOGO_URL}" alt="Nexora" class="header-logo" />
+                            <span class="protocol-title">Authorization Verified</span>
+                            <h1 class="welcome-header">Protocol Access Granted.</h1>
+                            <p class="welcome-sub">Welcome back to the unified hub. Your administrative clearance has been verified for <strong>${username}</strong>. You may now establish a secure connection.</p>
+                            
+                            <div class="feature-grid">
+                                <span class="feature-label">Credentials Initialized</span>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">Identity Verification Success</div>
+                                </div>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">Encryption Keys Synchronized</div>
+                                </div>
+                                <div class="feature-row">
+                                    <div class="feature-bullet">L</div>
+                                    <div class="feature-text">Secure Tunnel Handshake Ready</div>
+                                </div>
+                            </div>
+     
+                            <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="action-btn">START SURFING</a>
                         </div>
-                        <h1 class="brand-name">Nexora</h1>
-                    </div>
-                    <div class="content">
-                        <h2 class="title">Welcome to the Void.</h2>
-                        <div class="greeting">Clearing: ${username} &bull; SUCCESS</div>
-                        <p class="message">
-                            Your identity has been verified. You are now authorized to use the Nexora Private Protocol. Enter the unified communication hub to start your deeply encrypted journey.
-                        </p>
-                        <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="button">START SURFING</a>
-                    </div>
-                    <div class="footer">
-                        <div class="copyright">&copy; ${new Date().getFullYear()} NEXORA SYSTEMS &bull; PRIVACY PROTOCOL</div>
-                        <div class="disclaimer-box">
-                            <p class="disclaimer-text">
-                                <strong>IDENTITY VERIFIED:</strong> This is a secure transmission from Nexora Core. All sessions are protected by industry-leading end-to-end encryption.
-                                <br><br>
-                                Reference-ID: SEC-ACL-${Math.random().toString(36).substring(7).toUpperCase()}
-                            </p>
+
+                        <div class="footer">
+                            <span class="footer-brand">Nexora Systems</span>
+                            <div class="privacy-policy">
+                                <p class="privacy-text">
+                                    <strong>IDENTITY VERIFIED:</strong> This is a secure transmission from Nexora Core. All sessions are protected by industry-leading end-to-end encryption. Our zero-knowledge policy ensures that your private data remains your own.
+                                    <br><br>
+                                    Reference ID: SEC-ACL-${Math.random().toString(36).substring(7).toUpperCase()}
+                                </p>
+                            </div>
+                            <div class="copyright">
+                                &copy; ${new Date().getFullYear()} NEXORA CORE &bull; PRIVACY PROTOCOL
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1205,18 +1280,52 @@ app.post('/api/profile/request-email-change', async (req, res) => {
             <!DOCTYPE html>
             <html>
             <head>
+                <meta charset="utf-8">
                 <style>
-                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f4f7fa; text-align: center; padding: 50px; }
-                    .code-box { font-size: 42px; font-weight: 900; letter-spacing: 12px; color: #6c5ce7; margin: 30px 0; background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 24px; padding: 35px; }
-                    .container { background: #fff; padding: 50px; border-radius: 32px; max-width: 550px; margin: auto; box-shadow: 0 30px 60px rgba(108,92,231,0.08); }
+                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+                    .wrapper { padding: 60px 20px; }
+                    .container { max-width: 550px; margin: 0 auto; background: #ffffff; border-radius: 48px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; text-align: center; }
+                    .content { padding: 60px 45px; }
+                    .header-logo { width: 90px; height: 90px; object-fit: contain; margin-bottom: 35px; border-radius: 24px; }
+                    .protocol-badge { display: inline-block; background: rgba(108,92,231,0.06); color: #6c5ce7; padding: 10px 20px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 30px; }
+                    .recover-title { font-size: 28px; font-weight: 900; color: #1a1a2e; margin: 0 0 15px 0; letter-spacing: -1px; }
+                    .recover-desc { font-size: 15px; color: #64748b; line-height: 1.8; margin-bottom: 40px; }
+                    
+                    .otp-vault { background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 32px; padding: 45px; margin-bottom: 35px; position: relative; }
+                    .otp-label { font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; display: block; }
+                    .otp-code { font-size: 48px; font-weight: 900; letter-spacing: 14px; color: #6c5ce7; margin: 0; }
+                    .otp-expiry { font-size: 13px; color: #94a3b8; margin-top: 25px; font-weight: 600; }
+                    
+                    .footer { background: #fafbfc; padding: 45px; border-top: 1px solid #f1f5f9; }
+                    .privacy-note { font-size: 11px; color: #94a3b8; line-height: 1.8; margin-bottom: 25px; text-align: left; }
+                    .copyright { font-size: 10px; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <h2 style="font-size: 26px; font-weight: 900; color: #1a1a2e; margin-bottom: 15px;">Verify Your New Email</h2>
-                    <p style="color: #64748b; line-height: 1.8;">You requested to change your Nexora email address. Use this code to verify:</p>
-                    <div class="code-box">${otp}</div>
-                    <p style="color: #94a3b8; font-size: 13px;">Valid for the next 10 minutes.</p>
+                <div class="wrapper">
+                    <div class="container">
+                        <div class="content">
+                            <img src="${APP_LOGO_URL}" alt="Nexora" class="header-logo" />
+                            <div class="protocol-badge">Email Synchronization</div>
+                            <h2 class="recover-title">Verify New Identity</h2>
+                            <p class="recover-desc">A request was made to link this email address to your Nexora profile. Use the verification segment below to finalize the synchronization.</p>
+                            
+                            <div class="otp-vault">
+                                <span class="otp-label">Verification Segment</span>
+                                <div class="otp-code">${otp}</div>
+                                <p class="otp-expiry">Segment expires in 10 minutes.</p>
+                            </div>
+                        </div>
+
+                        <div class="footer">
+                            <div class="privacy-note">
+                                This is an automated identity verification transmission from Nexora Core. All identity updates are strictly synchronized across your encrypted device graph.
+                            </div>
+                            <div class="copyright">
+                                &copy; ${new Date().getFullYear()} NEXORA SYSTEMS &bull; PRIVACY PROTOCOL
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </body>
             </html>

@@ -244,6 +244,7 @@ export default function ChatsPage() {
 
   // ═══ Mobile View Helper: Sync active state to layout ═══
   useEffect(() => {
+    activeThreadRef.current = activeThread;
     if (activeThread) {
       document.body.classList.add("chat-active");
     } else {
@@ -437,7 +438,7 @@ export default function ChatsPage() {
 
   // Persist messages whenever they change
   useEffect(() => {
-    if (activeThread && messages.length > 0) {
+    if (activeThread) {
       localStorage.setItem(`nexora_msgs_${activeThread.id}`, JSON.stringify(messages));
     }
   }, [messages, activeThread]);
@@ -721,7 +722,7 @@ export default function ChatsPage() {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setLocationCoords(coords);
         const locMsg: ChatMessage = {
-          id: Math.random().toString(), senderId: myClientId,
+          id: Math.random().toString(), senderId: myUsernameRef.current,
           text: "📍 Shared Live Location",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           createdAt: Date.now(),
@@ -864,6 +865,7 @@ export default function ChatsPage() {
     const initProtocol = async () => {
       const myUsername = localStorage.getItem("nexora_signup_username") || "";
       const myName = localStorage.getItem("nexora_signup_name") || myUsername;
+      myUsernameRef.current = myUsername; // 🛡️ Sync Ref for socket handlers
 
       // 1. Derive symmetric key (backward compat)
       const key = await deriveKeyFromPassword(TUNNEL_PASSWORD);
@@ -937,7 +939,7 @@ export default function ChatsPage() {
           };
 
           const currentThread = activeThreadRef.current;
-          if (currentThread?.username === senderUsername && currentThread !== null) {
+          if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase() && currentThread !== null) {
             // Active conversation — show immediately
             setMessages(prev => {
               if (prev.find(m => m.id === newMsg.id)) return prev; // 🛡️ Prevent duplicates
@@ -947,8 +949,9 @@ export default function ChatsPage() {
             socket.emit("dm:seen", { to: senderUsername, msgId: newMsg.id });
           } else {
             // Different conversation — save to that thread's localStorage and increment unread
-            const senderThread = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]")
-              .find((t: any) => t.username === senderUsername);
+            const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+            const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+            
             if (senderThread) {
               const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
               if (!threadMsgs.find((m: any) => m.id === newMsg.id)) { // 🛡️ Prevent duplicates in storage
@@ -964,7 +967,7 @@ export default function ChatsPage() {
             });
             // Update thread preview
             setThreads(prev => prev.map(t =>
-              t.username === senderUsername
+              t.username?.toLowerCase() === senderUsername?.toLowerCase()
                 ? { ...t, preview: decryptedText, unread: (t.unread || 0) + 1 }
                 : t
             ));
@@ -995,7 +998,7 @@ export default function ChatsPage() {
           replyTo: data.replyTo,
         };
         const currentThread = activeThreadRef.current;
-        if (currentThread?.username === senderUsername && currentThread !== null) {
+        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase() && currentThread !== null) {
           setMessages(prev => {
             if (prev.find(m => m.id === newMsg.id)) return prev; // 🛡️ De-duplicate
             return [...prev, newMsg];
@@ -1007,7 +1010,7 @@ export default function ChatsPage() {
             return next;
           });
           const senderThread = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]")
-            .find((t: any) => t.username === senderUsername);
+            .find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
           if (senderThread) {
             const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
             if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
@@ -1016,7 +1019,7 @@ export default function ChatsPage() {
             }
           }
           setThreads(prev => prev.map(t =>
-            t.username === senderUsername
+            t.username?.toLowerCase() === senderUsername?.toLowerCase()
               ? { ...t, preview: "📎 Attachment", unread: (t.unread || 0) + 1 }
               : t
           ));
@@ -1035,7 +1038,7 @@ export default function ChatsPage() {
       // 6. Message seen receipts — mark our sent messages as seen
       socket.on("dm:seen", (data: { from: string; msgId: string }) => {
         setMessages(prev => prev.map(m =>
-          m.senderId === myUsername && (m.id === data.msgId || data.msgId === 'all')
+          m.senderId?.toLowerCase() === myUsernameRef.current?.toLowerCase() && (m.id === data.msgId || data.msgId === 'all')
             ? { ...m, status: "seen" as const }
             : m
         ));
@@ -1271,13 +1274,7 @@ export default function ChatsPage() {
     return () => document.removeEventListener("click", handler);
   }, []);
 
-  // Simulate incoming seen receipt after 2s for sent messages
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setMessages(prev => prev.map(m => m.isSelf && m.status === "delivered" ? { ...m, status: "seen" as const } : m));
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [messages.length]);
+
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !cryptoKey || !activeThread || isSendingRef.current) return;
@@ -1297,10 +1294,10 @@ export default function ChatsPage() {
     const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
     const tempMsg: ChatMessage = {
-      id: msgId, senderId: myUsername, text,
+      id: msgId, senderId: myUsernameRef.current, text,
       timestamp,
       createdAt: Date.now(),
-      isSelf: true, status: "delivering" as any,
+      isSelf: true, status: "sending",
       reactions: {},
       replyTo: replyTo?.id,
     };
@@ -1446,7 +1443,7 @@ export default function ChatsPage() {
     setReplyTo(null);
     
     const msg: ChatMessage = {
-      id: msgId, senderId: myClientId,
+      id: msgId, senderId: myUsernameRef.current,
       text: "📷 View Once Photo",
       timestamp,
       createdAt: Date.now(),
@@ -1573,7 +1570,7 @@ export default function ChatsPage() {
     setReplyTo(null);
     
     const msg: ChatMessage = {
-      id: msgId, senderId: myClientId,
+      id: msgId, senderId: myUsernameRef.current,
       text: `🎙 Voice Message (${recordingTime}s)`,
       timestamp,
       createdAt: Date.now(),
@@ -2019,7 +2016,7 @@ export default function ChatsPage() {
 
   const TickIcon = ({ status, isSelf }: { status: string; isSelf: boolean }) => {
     if (!isSelf) return null;
-    if (status === "delivering") return <Check className="w-3 h-3 opacity-40" />;
+    if (status === "sending") return <Check className="w-3 h-3 opacity-40" />;
     if (status === "delivered") return <CheckCheck className="w-3 h-3" style={{ color: "rgba(255,255,255,0.6)" }} />;
     if (status === "seen") return <CheckCheck className="w-3 h-3" style={{ color: "#00d4ff" }} />;
     return null;
@@ -2888,7 +2885,7 @@ export default function ChatsPage() {
                   <input
                     type="text"
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
+                    onChange={(e) => handleInputChange(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault(); // 🚫 Prevent default form behavior/bubbles
