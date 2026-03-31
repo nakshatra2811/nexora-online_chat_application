@@ -4,17 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users } from "lucide-react";
 import { useTheme } from "@/lib/theme";
-
-const MOCK_STORIES: any[] = [];
+import { nexoraFetch } from "@/lib/config";
 
 const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
 
 export default function StoriesPage() {
   const { isDark } = useTheme();
-  const [activeStory, setActiveStory] = useState<any | null>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const [liked, setLiked] = useState<Record<number, boolean>>({});
-  const [likeCount, setLikeCount] = useState<Record<number, number>>({});
+  const [otherStories, setOtherStories] = useState<any[]>([]);
   
   // Your story state
   const [myStory, setMyStory] = useState<any | null>(null);
@@ -33,7 +29,63 @@ export default function StoriesPage() {
   // Real-time viewer tracking
   const [showViewers, setShowViewers] = useState(false);
   const [showLikers, setShowLikers] = useState(false);
-  const MOCK_VIEWERS: string[] = [];
+  const [viewersList, setViewersList] = useState<any[]>([]);
+  const [likersList, setLikersList] = useState<any[]>([]);
+
+  const fetchStories = async () => {
+    try {
+      const username = localStorage.getItem("nexora_signup_username");
+      if (!username) return;
+      
+      const data = await nexoraFetch(`/api/stories?username=${username}`);
+      if (data && data.stories) {
+        // Map backend schema to frontend structure
+        const mapped = data.stories.map((s: any) => ({
+          id: s.id,
+          username: s.username,
+          user: s.name || s.username,
+          time: new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          color: s.color || "from-[#6c5ce7] to-[#00d4ff]",
+          type: s.media_type || "image",
+          content: s.media_url,
+          views: s.views_count,
+          isViewed: s.is_viewed,
+          likes: s.likes_count,
+          isLiked: s.is_liked
+        }));
+        
+        const mine = mapped.filter((s: any) => s.username === username);
+        const others = mapped.filter((s: any) => s.username !== username);
+        
+        if (mine.length > 0) {
+          setMyStory(mine[0]); // For now, just show the latest own story on the dashboard
+        } else {
+          setMyStory(null);
+        }
+        
+        setOtherStories(others);
+        
+        // Initialize like state
+        const initialLiked: Record<number, boolean> = {};
+        const initialLikeCount: Record<number, number> = {};
+        mapped.forEach((s: any) => {
+          initialLiked[s.id] = s.isLiked;
+          initialLikeCount[s.id] = s.likes;
+        });
+        setLiked(initialLiked);
+        setLikeCount(initialLikeCount);
+      }
+    } catch (e) {
+      console.error("Failed to fetch stories");
+    }
+  };
+
+  useEffect(() => {
+    fetchStories();
+    // Poll every 10 seconds for real-time updates
+    const interval = setInterval(fetchStories, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (cameraView.active && !cameraView.capturedUrl && cameraView.stream && liveVideoRef.current) {
@@ -41,10 +93,31 @@ export default function StoriesPage() {
     }
   }, [cameraView.active, cameraView.capturedUrl, cameraView.stream]);
 
-  // Auto-progress story bar
+  // Auto-progress story bar and handle recording views/stats
   useEffect(() => {
     setProgress(0);
     setIsPaused(false);
+    
+    if (activeStory) {
+      const username = localStorage.getItem("nexora_signup_username");
+      if (activeStory.username === username) {
+        // It's my story - fetch detailed stats (who viewed, who liked)
+        nexoraFetch(`/api/stories/stats?storyId=${activeStory.id}`).then((data) => {
+           if (data) {
+             setViewersList(data.views || []);
+             setLikersList(data.likes || []);
+           }
+        });
+      } else {
+        // It's someone else's story - record a view
+        if (!activeStory.isViewed) {
+          nexoraFetch('/api/stories/view', {
+             method: "POST",
+             body: JSON.stringify({ storyId: activeStory.id, username })
+          }).then(() => fetchStories());
+        }
+      }
+    }
   }, [activeStory?.id]);
 
   useEffect(() => {
@@ -66,10 +139,25 @@ export default function StoriesPage() {
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
   }, [activeStory, isPaused]);
 
-  const handleLike = (storyId: number, e: React.MouseEvent) => {
+  const handleLike = async (storyId: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    const username = localStorage.getItem("nexora_signup_username");
+    if (!username) return;
+    
+    // Optimistic UI update
     setLiked((prev) => ({ ...prev, [storyId]: !prev[storyId] }));
     setLikeCount((prev) => ({ ...prev, [storyId]: prev[storyId] + (liked[storyId] ? -1 : 1) }));
+    
+    try {
+      await nexoraFetch("/api/stories/like", {
+        method: "POST",
+        body: JSON.stringify({ storyId, username })
+      });
+    } catch {
+      // Revert on fail
+      setLiked((prev) => ({ ...prev, [storyId]: !prev[storyId] }));
+      setLikeCount((prev) => ({ ...prev, [storyId]: prev[storyId] + (liked[storyId] ? 1 : -1) }));
+    }
   };
 
   const handleReply = () => {
@@ -85,16 +173,16 @@ export default function StoriesPage() {
     setTimeout(() => setSentReaction(null), 2000);
   };
 
-  const handleNewSnap = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNewSnap = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setMyStory({
-      id: 0, user: "Your Story", time: "Just now", color: "from-[#6c5ce7] to-[#00d4ff]", type: "image", content: url, views: 0
+    const url = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve(ev.target?.result as string);
+      reader.readAsDataURL(file);
     });
-    setLikeCount(prev => ({ ...prev, 0: 0 }));
-    // Reset file input so we can select same file again
-    e.target.value = '';
+    await submitNewStory(url);
+    if (e.target) e.target.value = '';
   };
 
   const startCameraView = async () => {
@@ -113,16 +201,27 @@ export default function StoriesPage() {
     canvas.width = liveVideoRef.current.videoWidth;
     canvas.height = liveVideoRef.current.videoHeight;
     canvas.getContext("2d")?.drawImage(liveVideoRef.current, 0, 0);
-    const url = canvas.toDataURL("image/jpeg");
+    const url = canvas.toDataURL("image/jpeg", 0.8);
     setCameraView(p => ({ ...p, capturedUrl: url }));
   };
 
-  const publishStory = () => {
+  const submitNewStory = async (mediaUrl: string) => {
+    const username = localStorage.getItem("nexora_signup_username");
+    if (!username) return;
+    try {
+      await nexoraFetch("/api/stories", {
+         method: "POST",
+         body: JSON.stringify({ username, mediaUrl, mediaType: "image", caption: "" })
+      });
+      fetchStories(); // Refresh after publish
+    } catch (e) {
+      alert("Failed to submit story.");
+    }
+  };
+
+  const publishStory = async () => {
     if (!cameraView.capturedUrl) return;
-    setMyStory({
-      id: 0, user: "Your Story", time: "Just now", color: "from-[#6c5ce7] to-[#00d4ff]", type: "image", content: cameraView.capturedUrl, views: 0
-    });
-    setLikeCount(prev => ({ ...prev, 0: 0 }));
+    await submitNewStory(cameraView.capturedUrl);
     closeCameraView();
   };
 
@@ -130,27 +229,6 @@ export default function StoriesPage() {
     cameraView.stream?.getTracks().forEach(t => t.stop());
     setCameraView({ active: false, stream: null, capturedUrl: null });
   };
-
-  // Simulate active story viewership over time
-  useEffect(() => {
-    if (!myStory) return;
-    const interval = setInterval(() => {
-      setMyStory((prev: any) => {
-        if (!prev) return prev;
-        // Randomly cap simulated views at 42 to look natural
-        if (prev.views > 42) return prev;
-        return { ...prev, views: prev.views + Math.floor(Math.random() * 3) };
-      });
-      setLikeCount((prev: Record<number, number>) => {
-        // Only some views become likes
-        if (Math.random() > 0.6) {
-           return { ...prev, 0: (prev[0] || 0) + 1 };
-        }
-        return prev;
-      });
-    }, 4000); // Simulate every 4 seconds
-    return () => clearInterval(interval);
-  }, [myStory]);
 
   return (
     <div className="relative flex flex-col w-full h-full overflow-y-auto p-6 md:p-8"
@@ -245,7 +323,7 @@ export default function StoriesPage() {
           </motion.div>
         )}
 
-        {MOCK_STORIES.map((story, i) => (
+        {otherStories.map((story, i) => (
           <motion.div key={story.id}
             initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 + 0.05, ease: [0.16, 1, 0.3, 1] }}
@@ -270,13 +348,7 @@ export default function StoriesPage() {
                 </div>
               </div>
 
-              {/* View dot (Only for My Story) */}
-              {story.id === 0 && (
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold text-white"
-                     style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}>
-                  <Eye className="w-2.5 h-2.5" /> {story.views}
-                </div>
-              )}
+              {/* View dot no longer needed on other stories, but keep isViewed style if I want */}
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
@@ -335,7 +407,7 @@ export default function StoriesPage() {
                 </div>
                 <div className="flex items-center gap-2 relative">
                   {/* Viewers Trigger Button (Only for My Story) */}
-                  {activeStory.id === 0 && (
+                  {activeStory.username === localStorage.getItem("nexora_signup_username") && (
                     <button onClick={() => setShowViewers(!showViewers)}
                             className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md text-white/90 text-[11px] font-bold border border-white/10 shadow-xl transition-colors hover:bg-black/60 cursor-pointer">
                       <Eye className="w-3 h-3 text-[#2ed573]" /> {activeStory.views} <span className="text-white/50 font-normal">friends viewed</span>
@@ -344,7 +416,7 @@ export default function StoriesPage() {
                   
                   {/* Viewers Dropdown Modal (ONLY for own story) */}
                   <AnimatePresence>
-                    {activeStory.id === 0 && showViewers && (
+                    {activeStory.username === localStorage.getItem("nexora_signup_username") && showViewers && (
                       <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                         className="absolute right-12 top-10 w-52 rounded-2xl overflow-hidden shadow-2xl z-50"
                         style={{ background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(40px)" }}
@@ -353,17 +425,17 @@ export default function StoriesPage() {
                           <Users className="w-3.5 h-3.5" /> Viewer Activity
                         </div>
                         <div className="max-h-44 overflow-y-auto w-full p-2 space-y-1">
-                          {activeStory.views === 0 ? (
+                          {viewersList.length === 0 ? (
                             <p className="text-xs text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No views yet</p>
                           ) : (
-                            MOCK_VIEWERS.slice(0, activeStory.views || MOCK_VIEWERS.length).map((v, idx) => (
+                            viewersList.map((v, idx) => (
                               <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer" style={{ background: "transparent" }}
                                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-[11px] font-bold shrink-0" style={{ color: "#ffffff" }}>
-                                  {v[0]}
+                                <div className={`w-7 h-7 rounded-full bg-gradient-to-tr flex items-center justify-center text-[11px] font-bold shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"}`} style={{ color: "#ffffff" }}>
+                                  {v.name[0]}
                                 </div>
-                                <span className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{v}</span>
+                                <span className="text-sm font-semibold truncate" style={{ color: "#ffffff" }}>{v.name}</span>
                               </div>
                             ))
                           )}
@@ -416,12 +488,12 @@ export default function StoriesPage() {
                   )}
                 </AnimatePresence>
 
-                {activeStory.id !== 0 && (
+                {activeStory.username !== localStorage.getItem("nexora_signup_username") && (
                   <div className="flex items-center gap-2">
                     {/* Like button */}
                     <motion.button
                       whileTap={{ scale: 0.8 }}
-                      onClick={() => handleLike(activeStory.id, { stopPropagation: () => {} } as any)}
+                      onClick={(e) => handleLike(activeStory.id, e)}
                       className="h-10 w-10 rounded-full flex items-center justify-center transition-all shrink-0"
                       style={{ background: liked[activeStory.id] ? "rgba(255,0,110,0.25)" : "rgba(255,255,255,0.1)" }}>
                       <motion.span animate={{ scale: liked[activeStory.id] ? [1, 1.5, 1] : 1 }} transition={{ duration: 0.3 }}>
@@ -459,11 +531,11 @@ export default function StoriesPage() {
 
                 {/* Like count & Viewers Dropdown */}
                 <div className="relative flex flex-col items-center mt-3">
-                  {activeStory.id === 0 && (
+                  {activeStory.username === localStorage.getItem("nexora_signup_username") && (
                     <>
                       <p className="text-center text-[11px] text-white/50 font-medium cursor-pointer hover:text-white/70 transition-colors"
                          onClick={() => setShowLikers(!showLikers)}>
-                        <span className="text-white/90 font-bold">{likeCount[activeStory.id]}</span> friends liked · Nexora Story Protocol
+                        <span className="text-white/90 font-bold">{activeStory.likes}</span> friends liked · Nexora Story Protocol
                       </p>
 
                       {/* Likers Dropdown Modal */}
@@ -477,17 +549,17 @@ export default function StoriesPage() {
                               <Heart className="w-3.5 h-3.5" style={{ color: "#ff006e" }} fill="#ff006e" /> Post Likes
                             </div>
                             <div className="max-h-44 overflow-y-auto w-full p-2 space-y-1">
-                              {likeCount[activeStory.id] === 0 ? (
+                              {likersList.length === 0 ? (
                                 <p className="text-[10px] text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No likes yet</p>
                               ) : (
-                                MOCK_VIEWERS.slice(0, likeCount[activeStory.id] || MOCK_VIEWERS.length).map((v, idx) => (
+                                likersList.map((v, idx) => (
                                   <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer" style={{ background: "transparent" }}
                                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#ff006e] to-[#ffbe0b] flex items-center justify-center text-[11px] font-bold shrink-0" style={{ color: "#ffffff" }}>
-                                      {v[0]}
+                                    <div className={`w-7 h-7 rounded-full bg-gradient-to-tr flex items-center justify-center text-[11px] font-bold shrink-0 ${v.color || "from-[#ff006e] to-[#ffbe0b]"}`} style={{ color: "#ffffff" }}>
+                                      {v.name[0]}
                                     </div>
-                                    <span className="text-sm font-semibold truncate flex-1" style={{ color: "#ffffff" }}>{v}</span>
+                                    <span className="text-sm font-semibold truncate flex-1" style={{ color: "#ffffff" }}>{v.name}</span>
                                     <Heart className="w-3.5 h-3.5 shrink-0" style={{ color: "#ff006e" }} fill="#ff006e" />
                                   </div>
                                 ))
