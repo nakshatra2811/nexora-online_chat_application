@@ -362,6 +362,7 @@ export default function ChatsPage() {
   useEffect(() => {
     if (!showGlobalSearch || globalSearchQuery.trim().length < 2) {
       setGlobalSearchResults([]);
+      setGlobalSearchLoading(false);
       return;
     }
     setGlobalSearchLoading(true);

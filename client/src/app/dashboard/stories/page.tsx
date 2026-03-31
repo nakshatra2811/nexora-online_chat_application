@@ -69,6 +69,13 @@ export default function StoriesPage() {
         
         setOtherStories(others);
         
+        // Update activeStory to reflect new real-time views/likes
+        setActiveStory((prev: any) => {
+          if (!prev) return prev;
+          const updated = mapped.find((s: any) => s.id === prev.id);
+          return updated || prev;
+        });
+        
         // Initialize like state
         const initialLiked: Record<number, boolean> = {};
         const initialLikeCount: Record<number, number> = {};
@@ -164,17 +171,36 @@ export default function StoriesPage() {
     }
   };
 
-  const handleReply = () => {
-    if (!reply.trim()) return;
-    setReply("");
-    setSentReaction("✓ Sent!");
-    setTimeout(() => setSentReaction(null), 2000);
+  const handleReply = async (messageText?: string) => {
+    const textToSend = messageText || reply;
+    if (!textToSend.trim() || !activeStory) return;
+    
+    const username = localStorage.getItem("nexora_signup_username");
+    if (!username) return;
+
+    // Optimistic UI clear
+    if (!messageText) setReply("");
+    
+    try {
+      await nexoraFetch("/api/stories/reply", {
+        method: "POST",
+        body: JSON.stringify({
+           storyId: activeStory.id,
+           username,
+           targetUsername: activeStory.username,
+           message: textToSend
+        })
+      });
+      setSentReaction(messageText ? messageText : "✓ Sent!");
+      setTimeout(() => setSentReaction(null), 2000);
+    } catch (e) {
+      alert("Failed to send reply");
+    }
   };
 
   const handleSnapReaction = (emoji: string) => {
     setShowSnapReactions(false);
-    setSentReaction(emoji);
-    setTimeout(() => setSentReaction(null), 2000);
+    handleReply(emoji);
   };
 
   const handleNewSnap = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,17 +235,28 @@ export default function StoriesPage() {
     setCameraView(p => ({ ...p, capturedUrl: url }));
   };
 
+  const [isUploading, setIsUploading] = useState(false);
+
   const submitNewStory = async (mediaUrl: string) => {
     const username = localStorage.getItem("nexora_signup_username");
     if (!username) return;
+    setIsUploading(true);
     try {
-      await nexoraFetch("/api/stories", {
+      const res = await nexoraFetch("/api/stories", {
          method: "POST",
          body: JSON.stringify({ username, mediaUrl, mediaType: "image", caption: "" })
       });
-      fetchStories(); // Refresh after publish
+      
+      if (!res || res._httpError) {
+         alert("Failed to submit story (File might be too large).");
+      } else {
+         await fetchStories(); // Refresh after publish
+         alert("Story uploaded successfully!");
+      }
     } catch (e) {
       alert("Failed to submit story.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -525,7 +562,7 @@ export default function StoriesPage() {
                         placeholder="Reply to story..."
                         className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/40"
                       />
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={handleReply}
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleReply()}
                         className="text-white/70 hover:text-white transition-colors">
                         <Send className="w-4 h-4" />
                       </motion.button>
@@ -614,18 +651,18 @@ export default function StoriesPage() {
                           className="px-5 py-3 rounded-xl bg-white/20 text-white font-bold hover:bg-white/30 backdrop-blur-md transition-colors">
                     Retake
                   </button>
-                  <motion.button whileTap={{ scale: 0.9 }} onClick={publishStory}
-                    className="h-14 flex items-center gap-2 px-6 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] shadow-xl text-white font-bold">
-                    <span>Add to Story</span>
-                    <Send className="w-4 h-4" />
+                  <motion.button whileTap={{ scale: 0.9 }} onClick={publishStory} disabled={isUploading}
+                    className={`h-14 flex items-center gap-2 px-6 rounded-full shadow-xl text-white font-bold ${isUploading ? 'bg-gray-500 cursor-not-allowed' : 'bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff]'}`}>
+                    <span>{isUploading ? "Uploading..." : "Add to Story"}</span>
+                    {!isUploading && <Send className="w-4 h-4" />}
                   </motion.button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-white/20 rounded-full backdrop-blur-md hover:bg-white/30 text-white shadow-xl">
+                  <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-4 bg-white/20 rounded-full backdrop-blur-md hover:bg-white/30 text-white shadow-xl">
                     <ImageIcon className="w-6 h-6" />
                   </button>
-                  <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={capturePhoto}
+                  <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={capturePhoto} disabled={isUploading}
                     className="h-20 w-20 rounded-full border-4 border-white/30 flex items-center justify-center p-1">
                     <div className="w-full h-full bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.8)]" />
                   </motion.button>

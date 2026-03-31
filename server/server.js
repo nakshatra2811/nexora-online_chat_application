@@ -1351,7 +1351,6 @@ app.get('/api/stories', async (req, res) => {
 
         // Fetch stories from friends (last 24 hours)
         const placeholders = friends.map(() => '?').join(',');
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
         const stories = await db.all(`
             SELECT s.*, u.full_name as name, u.color,
@@ -1361,9 +1360,9 @@ app.get('/api/stories', async (req, res) => {
             (SELECT EXISTS(SELECT 1 FROM story_likes WHERE story_id = s.id AND liker_username = ?)) as is_liked
             FROM stories s
             JOIN users u ON s.username = u.username
-            WHERE s.username IN (${placeholders}) AND s.created_at >= ?
+            WHERE s.username IN (${placeholders}) AND s.created_at >= datetime('now', '-1 day')
             ORDER BY s.created_at DESC
-        `, [username, username, ...friends, oneDayAgo]);
+        `, [username, username, ...friends]);
 
         res.json({ stories });
     } catch (err) {
@@ -1415,6 +1414,41 @@ app.post('/api/stories/like', async (req, res) => {
         res.json({ status: "success" });
     } catch (err) {
         console.error("Story Like Error:", err);
+        res.status(500).json({ error: "Server Error" });
+    }
+});
+
+// Reply to story (Sends a notification to the owner)
+app.post('/api/stories/reply', async (req, res) => {
+    const { storyId, username, targetUsername, message } = req.body;
+    if (!storyId || !username || !targetUsername || !message) return res.status(400).json({ error: "Missing required fields" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run(
+            'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
+            [targetUsername.toLowerCase(), username.toLowerCase(), 'story_reply', `Replied to your story: "${message}"`]
+        );
+        
+        // Push notification for the reply
+        const sub = pushSubscriptions.get(targetUsername.toLowerCase());
+        if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+            webpush.sendNotification(sub, JSON.stringify({
+                title: `New story reply from ${username}`,
+                body: message,
+                icon: '/icon.svg',
+                badge: '/icon.svg',
+            })).catch(() => {});
+        }
+        
+        // Notify via socket if online
+        const targetSocket = userSockets.get(targetUsername.toLowerCase());
+        if (targetSocket) {
+             io.to(targetSocket).emit('new_notification', { type: 'story_reply', message: `Replied to your story: "${message}"`, from_username: username.toLowerCase() });
+        }
+
+        res.json({ status: "success" });
+    } catch (err) {
+        console.error("Story Reply Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
