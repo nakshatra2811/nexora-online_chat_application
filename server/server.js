@@ -1394,14 +1394,14 @@ app.post('/api/connections/request', async (req, res) => {
         if (existingCon) return res.json({ status: 'already_connected' });
 
         // 2. Check if a request already exists IN EITHER DIRECTION
-        const existingReqFromMe = await db.get('SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = "pending"', [from, to]);
+        const existingReqFromMe = await db.get('SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = \'pending\'', [from, to]);
         if (existingReqFromMe) return res.json({ status: 'already_sent' });
 
-        const existingReqToMe = await db.get('SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = "pending"', [to, from]);
+        const existingReqToMe = await db.get('SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = \'pending\'', [to, from]);
 
         if (existingReqToMe) {
             // BACK-ACTION: Cross-request exists, auto-accept it!
-            await db.run('UPDATE connection_requests SET status = "accepted" WHERE id = ?', [existingReqToMe.id]);
+            await db.run('UPDATE connection_requests SET status = \'accepted\' WHERE id = ?', [existingReqToMe.id]);
 
             const [u1, u2] = [from.toLowerCase(), to.toLowerCase()].sort();
             try {
@@ -1454,7 +1454,7 @@ app.get('/api/connections/requests', async (req, res) => {
     if (!username) return res.json({ requests: [] });
     try {
         if (!db) return res.json({ requests: [] });
-        const reqs = await db.all('SELECT id, from_username AS "from", from_name AS "fromName", from_color AS "fromColor", created_at AS "time" FROM connection_requests WHERE LOWER(to_username) = LOWER(?) AND status = "pending"', [username]);
+        const reqs = await db.all('SELECT id, from_username AS "from", from_name AS "fromName", from_color AS "fromColor", created_at AS "time" FROM connection_requests WHERE LOWER(to_username) = LOWER(?) AND status = \'pending\'', [username]);
         
         // Decrypt sender names if they were encrypted (older requests might be raw)
         const decryptedReqs = reqs.map(r => ({ ...r, fromName: decryptField(r.fromName) }));
@@ -1507,7 +1507,7 @@ app.get('/api/connections/sent', async (req, res) => {
     try {
         if (!db) return res.json({ requests: [] });
         const reqs = await db.all(
-            'SELECT id, to_username AS "to", created_at AS time FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND status = "pending"',
+            'SELECT id, to_username AS "to", created_at AS time FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND status = \'pending\'',
             [username]
         );
         const formatted = reqs.map(r => ({
@@ -1532,7 +1532,7 @@ app.post('/api/connections/respond', async (req, res) => {
         if (!req_) return res.status(404).json({ error: 'request not found' });
 
         if (action === 'accept') {
-            await db.run('UPDATE connection_requests SET status = "accepted" WHERE id = ?', [requestId]);
+            await db.run('UPDATE connection_requests SET status = \'accepted\' WHERE id = ?', [requestId]);
 
             // Add to established connections if not already
             const u1 = req_.from_username.toLowerCase();
@@ -1563,7 +1563,7 @@ app.post('/api/connections/respond', async (req, res) => {
             // Notify the receiver via socket
             io.to(username.toLowerCase()).emit('new_notification', { type: 'request_back_prompt', message: `${req_.from_name} started following you.`, from_username: req_.from_username.toLowerCase() });
         } else {
-            await db.run('UPDATE connection_requests SET status = "declined" WHERE id = ?', [requestId]);
+            await db.run('UPDATE connection_requests SET status = \'declined\' WHERE id = ?', [requestId]);
         }
 
         res.json({ status: action === 'accept' ? 'accepted' : 'declined' });
@@ -1594,7 +1594,9 @@ app.post('/api/notifications/read', async (req, res) => {
     const { id } = req.body;
     try {
         if (!db) return res.status(500).json({ success: false });
-        await db.run('UPDATE notifications SET is_read = 1 WHERE id = ?', [id]);
+        // Use standard TRUE for Postgres, 1 for SQLite handled by db.run helper
+        const sql = dbType === 'postgres' ? 'UPDATE notifications SET is_read = TRUE WHERE id = ?' : 'UPDATE notifications SET is_read = 1 WHERE id = ?';
+        await db.run(sql, [id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false });
@@ -1675,7 +1677,11 @@ app.post('/api/stories/view', async (req, res) => {
     if (!storyId || !username) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        await db.run('INSERT OR IGNORE INTO story_views (story_id, viewer_username) VALUES (?, ?)', [storyId, username.toLowerCase()]);
+        if (dbType === 'postgres') {
+            await db.run('INSERT INTO story_views (story_id, viewer_username) VALUES (?, ?) ON CONFLICT (story_id, viewer_username) DO NOTHING', [storyId, username.toLowerCase()]);
+        } else {
+            await db.run('INSERT OR IGNORE INTO story_views (story_id, viewer_username) VALUES (?, ?)', [storyId, username.toLowerCase()]);
+        }
         res.json({ status: "success" });
     } catch (err) {
         console.error("Story View Error:", err);
