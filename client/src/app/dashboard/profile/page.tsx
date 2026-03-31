@@ -526,7 +526,7 @@ export default function ProfilePage() {
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row w-full h-full overflow-y-auto pt-24 lg:pt-6 p-4 sm:p-6 gap-6 safe-bottom" style={{ color: "var(--text-primary)" }}>
+      <div className="flex flex-col lg:flex-row w-full h-full overflow-y-auto pt-24 lg:pt-6 p-4 sm:p-6 pb-40 md:pb-6 gap-6 safe-bottom" style={{ color: "var(--text-primary)" }}>
 
         {/* LEFT: Profile Card */}
         <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}
@@ -607,7 +607,7 @@ export default function ProfilePage() {
                 <h2 className="text-2xl font-extrabold" style={{ color: "var(--text-primary)" }}>{profile.name}</h2>
                 <div className="flex flex-col items-center gap-1 mb-3 w-full px-4">
                   <p className="text-sm font-bold text-[#6c5ce7]">@{profile.username}</p>
-                  <span className="text-[10px] uppercase font-black px-3 py-1 rounded-full bg-[#6c5ce7]/10 text-[#6c5ce7] max-w-full text-center leading-tight shadow-sm md:max-w-none">
+                  <span className="inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-[#6c5ce7]/10 text-[#6c5ce7] shadow-sm whitespace-nowrap overflow-hidden text-ellipsis">
                     {userRole}
                   </span>
                 </div>

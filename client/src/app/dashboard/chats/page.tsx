@@ -2380,7 +2380,7 @@ export default function ChatsPage() {
         </div>
 
         {/* ═══ SELF PROFILE FOOTER ═══ */}
-        <div className="mt-auto p-4 border-t shrink-0 backdrop-blur-md" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", background: isDark ? "rgba(18,18,28,0.4)" : "rgba(255,255,255,0.5)" }}>
+        <div className="mt-auto p-4 md:pb-4 pb-24 border-t shrink-0 backdrop-blur-md" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", background: isDark ? "rgba(18,18,28,0.4)" : "rgba(255,255,255,0.5)" }}>
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                  <div className="relative">
@@ -3482,7 +3482,7 @@ export default function ChatsPage() {
                 <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
                 <button 
                   onClick={() => setSelectedProfileUser(null)}
-                  className="absolute top-6 right-6 p-2.5 rounded-2xl bg-black/20 hover:bg-black/40 text-white transition-all backdrop-blur-md active:scale-90"
+                  className="absolute top-4 right-4 p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 text-white transition-all backdrop-blur-md active:scale-90 z-[30]"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -3511,10 +3511,10 @@ export default function ChatsPage() {
                     </p>
                     
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
-                      <span className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm max-w-full text-center leading-tight">
+                      <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                         Official Node
                       </span>
-                      <span className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm max-w-full text-center leading-tight">
+                      <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                         Encrypted
                       </span>
                     </div>
