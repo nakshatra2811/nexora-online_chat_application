@@ -69,6 +69,15 @@ function hashPhone(phone) {
 const app = express();
 const server = http.createServer(app);
 
+app.get('/', (req, res) => {
+    res.json({ 
+        status: "operational", 
+        platform: "Nexora Core",
+        version: "1.3.1-ANTI",
+        security: "Zero-Knowledge Active"
+    });
+});
+
 // ------------------------------------------------------------------
 // DATABASE INITIALIZATION (SQLite + PostgreSQL Support)
 // ------------------------------------------------------------------
@@ -136,13 +145,16 @@ let pgPool;
                         pgSql = pgSql.replace(/insert or ignore into/gi, 'INSERT INTO') + ' ON CONFLICT DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert or replace')) {
                         // Very basic replace handling
-                        pgSql = pgSql.replace(/insert or replace into/gi, 'INSERT INTO') + ' ON CONFLICT DO UPDATE SET id=EXCLUDED.id'; 
+                        pgSql = pgSql.replace(/insert or replace into/gi, 'INSERT INTO') + ' ON CONFLICT (id) DO UPDATE SET id=EXCLUDED.id'; 
                     } else if (pgSql.toLowerCase().includes('insert into story_views')) {
-                         pgSql = pgSql + ' ON CONFLICT ON CONSTRAINT story_views_story_id_viewer_username_key DO NOTHING';
+                         pgSql = pgSql + ' ON CONFLICT (story_id, viewer_username) DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert into story_likes')) {
-                         pgSql = pgSql + ' ON CONFLICT ON CONSTRAINT story_likes_story_id_liker_username_key DO NOTHING';
+                         pgSql = pgSql + ' ON CONFLICT (story_id, liker_username) DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert into connections')) {
-                         pgSql = pgSql + ' ON CONFLICT ON CONSTRAINT connections_user_a_user_b_key DO NOTHING';
+                         pgSql = pgSql + ' ON CONFLICT (user_a, user_b) DO NOTHING';
+                    } else if (pgSql.toLowerCase().includes('insert into connection_requests')) {
+                         // Fallback for pending requests if they conflict
+                         pgSql = pgSql + ' ON CONFLICT DO NOTHING';
                     }
 
                     const res = await pgPool.query(pgSql, params);
@@ -641,6 +653,16 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('call:state-update', (data) => {
+        const senderId = socketToUser.get(socket.id);
+        if (senderId && data.to) {
+            io.to(data.to.toLowerCase()).emit('call:state-update', { 
+                from: senderId, 
+                state: data.state 
+            });
+        }
+    });
+
     socket.on('call:hangup', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
@@ -663,28 +685,6 @@ io.on('connection', (socket) => {
 
     socket.on('screenshot_taken', (data) => {
         socket.to(data.tunnelId).emit('notify_screenshot', { user: socket.id });
-    });
-
-    // ═══════════════════════════════════════════════
-    // WALLPAPER SYNC (per-user relay)
-    // ═══════════════════════════════════════════════
-    socket.on('dm:wallpaper', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:wallpaper', { from: fromUserId, wallpaper: data.wallpaper });
-        }
-    });
-
-    // ═══════════════════════════════════════════════
-    // DISAPPEARING MESSAGE SETTING SYNC
-    // ═══════════════════════════════════════════════
-    socket.on('dm:disappear_setting', (data) => {
-        const targetSocketId = userSockets.get(data.to);
-        const fromUserId = connectedUsers.get(socket.id);
-        if (targetSocketId && fromUserId) {
-            io.to(targetSocketId).emit('dm:disappear_setting', { from: fromUserId, timer: data.timer });
-        }
     });
 
     // ═══════════════════════════════════════════════
@@ -919,8 +919,13 @@ const COLORS = [
 
 app.post('/api/auth/signup', async (req, res) => {
     const { username, email, fullName, password, isAuthorized, phoneNumber } = req.body;
+    console.log(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
+    
     try {
-        if (!db) return res.status(500).json({ status: "error", error: "Database not ready" });
+        if (!db) {
+            console.error("[SIGNUP] Database Reference Missing Error: DB not ready");
+            return res.status(500).json({ status: "error", error: "Database not ready" });
+        }
 
         const finalEmail = email.toLowerCase().trim();
         const finalUsername = username.trim();
@@ -1057,13 +1062,13 @@ app.post('/api/auth/signup', async (req, res) => {
                 console.error(`[SIGNUP] Welcome email transmission FAILED for @${username}:`, mailErr.message);
                 // Continue to respond success as the user is already created in DB
             }
-
-            res.status(201).json({ 
-                status: "success", 
-                user: newUser,
-                message: "User identity initialized." 
-            });
         }
+
+        res.status(201).json({ 
+            status: "success", 
+            user: newUser,
+            message: "User identity initialized." 
+        });
     } catch (err) {
         console.error("Signup error details:", err);
         res.status(500).json({ error: "Server Error: Failed to process signup. Check server logs." });

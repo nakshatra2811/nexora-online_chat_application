@@ -34,6 +34,7 @@ export async function nexoraFetch(endpoint: string, options: RequestInit = {}) {
     return data;
   } catch (err) {
     // Graceful failure for "Failed to fetch" (unreachable server)
+    console.error(`[Nexora Protocol] Connectivity failed for ${endpoint}:`, err);
     return null;
   }
 }
