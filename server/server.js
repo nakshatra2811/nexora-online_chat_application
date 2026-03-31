@@ -993,7 +993,7 @@ app.post('/api/auth/signup', async (req, res) => {
                 subject: 'New Authorized Account Request: ' + username,
                 html: adminHtml
             };
-            await emailTransporter.sendMail(mailOptions);
+            emailTransporter.sendMail(mailOptions);
 
             // Send welcome notification to the user
             const welcomeHtml = `
@@ -1051,7 +1051,7 @@ app.post('/api/auth/signup', async (req, res) => {
                     subject: 'Welcome to Nexora: Protocol Established',
                     html: welcomeHtml
                 };
-                await emailTransporter.sendMail(welcomeMailOptions);
+                emailTransporter.sendMail(welcomeMailOptions);
                 console.log(`[SIGNUP] Welcome email transmitted to @${username}`);
             } catch (mailErr) {
                 console.error(`[SIGNUP] Welcome email transmission FAILED for @${username}:`, mailErr.message);

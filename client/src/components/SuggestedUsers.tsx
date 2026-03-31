@@ -13,21 +13,55 @@ export function SuggestedUsers() {
 
   const syncContacts = async () => {
     setIsSyncing(true);
-    // Simulate contact discovery via phone hashes
-    // These numbers match the seeded users
-    const mockContacts = ["9876543210", "9876543211", "9876543212", "9876543213", "9876543214", "9876543215"];
     
     try {
       const me = localStorage.getItem("nexora_signup_username") || "";
-      const res = await nexoraFetch("/api/users/sync-contacts", {
-        method: "POST",
-        body: JSON.stringify({ contacts: mockContacts, me })
-      });
-      if (res.suggestions) {
-        setSuggestions(res.suggestions);
+      let contactNumbers: string[] = [];
+
+      // Check for Contact Picker API Support (Mobile browsers)
+      const supportsContacts = 'contacts' in navigator && 'ContactsManager' in window;
+
+      if (supportsContacts) {
+        try {
+          // Request access to telephone numbers
+          const contacts = await (navigator as any).contacts.select(['tel'], { multiple: true });
+          if (contacts && Array.isArray(contacts)) {
+            // Extract and sanitize numbers (remove spaces, dashes, etc.)
+            contactNumbers = contacts.flatMap(c => 
+              (c.tel || []).map((t: string) => t.replace(/\D/g, ''))
+            ).filter(num => num.length >= 10);
+          }
+        } catch (err: any) {
+          console.warn("Contact selection cancelled or failed:", err.message);
+          setIsSyncing(false);
+          return;
+        }
+      } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // DEVELOPER BYPASS: Mock data for localhost testing
+        console.info("[DEV] Localhost detected — injecting mock protocol for testing.");
+        contactNumbers = ["9876543210", "9876543211", "9876543212", "9876543213", "9876543214", "9876543215"];
+      } else {
+        // Fallback for Production Desktop/Unsupported browsers
+        alert("The Nexora Contact Relay requires a mobile device (Android/iOS) to sync native contacts. On desktop, this feature is restricted for security.");
+        setIsSyncing(false);
+        return;
+      }
+
+      if (contactNumbers.length > 0) {
+        const res = await nexoraFetch("/api/users/sync-contacts", {
+          method: "POST",
+          body: JSON.stringify({ contacts: contactNumbers, me })
+        });
+        
+        if (res.suggestions) {
+          setSuggestions(res.suggestions);
+          if (res.suggestions.length === 0) {
+            alert("No Nexora identities found in your current contact archive.");
+          }
+        }
       }
     } catch (err) {
-      console.error("Sync failed", err);
+      console.error("Sync protocol failure:", err);
     } finally {
       setIsSyncing(false);
     }
