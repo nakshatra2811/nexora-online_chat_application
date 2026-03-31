@@ -110,6 +110,10 @@ export default function ChatsPage() {
   const [showRequestsSlider, setShowRequestsSlider] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  
+  // Stories state for top tray previews
+  const [myStoryPreview, setMyStoryPreview] = useState<boolean>(false);
+  const [friendsWithStories, setFriendsWithStories] = useState<string[]>([]);
 
   const quickPrefixes = ["Hey!", "WhatsApp?", "Connecting...", "Secure?", "Call me"];
 
@@ -231,6 +235,15 @@ export default function ChatsPage() {
       const notifData = await nexoraFetch(`/api/notifications?username=${encodeURIComponent(myUsername)}`);
       if (notifData && notifData.notifications) {
         setNotifications(notifData.notifications);
+      }
+
+      // Fetch Stories for Preview Rings
+      const stData = await nexoraFetch(`/api/stories?username=${encodeURIComponent(myUsername)}`);
+      if (stData && stData.stories) {
+        const mine = stData.stories.filter((s: any) => s.username === myUsername);
+        setMyStoryPreview(mine.length > 0);
+        const others = stData.stories.filter((s: any) => s.username !== myUsername).map((s: any) => s.username);
+        setFriendsWithStories(Array.from(new Set(others)));
       }
     } catch (e) {
       console.error("Failed to sync connections:", e);
@@ -2086,32 +2099,47 @@ export default function ChatsPage() {
 
           {/* Online Users Horizontal Scroll */}
           <div className="flex gap-3 overflow-x-auto pb-4 pt-1 px-1 mb-2 no-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
-            {/* Self Profile in Online Tray */}
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                onClick={() => { window.location.href = '/dashboard/stories'; }}
                 className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                 <div className="relative">
-                <div className={`h-14 w-14 rounded-full bg-gradient-to-tr ${myProfile.color} flex items-center justify-center text-white font-extrabold text-xl shadow-lg ring-2 ring-transparent hover:ring-[rgba(108,92,231,0.5)] transition-all`}>
+                <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-extrabold text-xl shadow-lg ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + myProfile.color : 'ring-2 ring-transparent bg-gradient-to-tr ' + myProfile.color} hover:opacity-80 transition-all`}
+                     style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
                     {myProfile.name?.[0] || 'M'}
                 </div>
-                <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-md z-10"
-                    style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
+                {!myStoryPreview && (
+                  <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center"
+                      style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}>
+                      <Plus className="w-3 h-3 text-white font-bold" />
+                  </div>
+                )}
                 </div>
-                <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>You</span>
+                <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>Your Story</span>
             </motion.div>
 
-            {threads.filter(t => (t.online || liveOnlineUsers.includes(t.username)) && !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id)).map((user) => {
+            {threads.filter(t => friendsWithStories.includes(t.username) || t.online || liveOnlineUsers.includes(t.username))
+              .filter(t => !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id))
+              .sort((a, b) => {
+                 const aHas = friendsWithStories.includes(a.username) ? 1 : 0;
+                 const bHas = friendsWithStories.includes(b.username) ? 1 : 0;
+                 return bHas - aHas; // Stories first
+              })
+              .map((user) => {
               const L = lockedChatsMap[user.id] && !unlockedSessionThreads.includes(user.id);
               if (L) return null; // Don't show locked users in online tray mapping to real name
               const isUserOnline = user.online || liveOnlineUsers.includes(user.username);
+              const hasStory = friendsWithStories.includes(user.username);
+              
               return (
                 <motion.div key={user.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => handleOpenThread(user)}
+                  onClick={() => hasStory ? (window.location.href = '/dashboard/stories') : handleOpenThread(user)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                   <div className="relative">
-                    <div className={`h-14 w-14 rounded-full bg-gradient-to-tr ${user?.color || 'from-gray-700 to-gray-900'} flex items-center justify-center text-white font-extrabold text-xl shadow-lg ring-2 ring-transparent hover:ring-[rgba(108,92,231,0.5)] transition-all`}>
+                    <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-extrabold text-xl shadow-lg ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color || 'from-gray-700 to-gray-900') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color || 'from-gray-700 to-gray-900')} hover:opacity-80 transition-all`}
+                         style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
                       {user?.name?.[0]}
                     </div>
-                    {isUserOnline && (
+                    {isUserOnline && !hasStory && (
                       <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-md z-10"
                         style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
