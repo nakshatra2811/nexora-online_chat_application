@@ -11,6 +11,7 @@ import {
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
+import { NotificationSkeleton } from "@/components/Skeleton";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -25,7 +26,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<{id:number;from:string;fromName:string;fromColor:string;time:string}[]>([]);
   const [sentRequests, setSentRequests] = useState<any[]>([]);
+  const [generalNotifications, setGeneralNotifications] = useState<any[]>([]);
   const [actionedIds, setActionedIds] = useState<number[]>([]);
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(true);
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Global action confirmation state
@@ -79,51 +82,74 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const socket = socketService.connect();
     socket.emit("register", username);
 
-    const fetchRequests = async () => {
-      try {
-        const received = await nexoraFetch(`/api/connections/requests?username=${encodeURIComponent(username)}`);
-        if (received?.requests) setPendingRequests(received.requests);
-        
-        // Also fetch sent requests if backend supports it (standard in this app is to check local storage or a specific endpoint)
-        const sent = await nexoraFetch(`/api/connections/sent?username=${encodeURIComponent(username)}`);
-        if (sent?.requests) setSentRequests(sent.requests);
-      } catch (err) {
-        console.error("Global protocol fetch failed", err);
-      }
-    };
+      const fetchRequests = async () => {
+        setIsLoadingNotifs(true);
+        try {
+          const [received, sent, notifs] = await Promise.all([
+            nexoraFetch(`/api/connections/requests?username=${encodeURIComponent(username)}`),
+            nexoraFetch(`/api/connections/sent?username=${encodeURIComponent(username)}`),
+            nexoraFetch(`/api/notifications?username=${encodeURIComponent(username)}`)
+          ]);
+          
+          if (received?.requests) setPendingRequests(received.requests);
+          if (sent?.requests) setSentRequests(sent.requests);
+          if (notifs?.notifications) setGeneralNotifications(notifs.notifications);
+        } catch (err) {
+          console.error("Global protocol fetch failed", err);
+        } finally {
+          setIsLoadingNotifs(false);
+        }
+      };
 
-    fetchRequests();
+      fetchRequests();
 
-    // Listen for real-time connection events
-    const handleNewRequest = (data: any) => {
-      console.log("[Signal] Global Incoming Request:", data.from);
-      setPendingRequests(prev => {
-        if (prev.find(r => r.from === data.from)) return prev;
-        const newReq = {
-          id: Date.now(), 
-          from: data.from,
-          fromName: data.fromName || data.from,
-          fromColor: data.fromColor || "from-purple-500 to-indigo-500",
-          time: "Just now"
-        };
-        // Simple sound or vibration could go here
-        return [newReq, ...prev];
-      });
-    };
+      // Listen for real-time connection events
+      const handleNewRequest = (data: any) => {
+        setPendingRequests(prev => {
+          if (prev.find(r => r.from === data.from)) return prev;
+          const newReq = {
+            id: Date.now() + Math.random(), 
+            from: data.from,
+            fromName: data.fromName || data.from,
+            fromColor: data.fromColor || "from-purple-500 to-indigo-500",
+            time: "Just now"
+          };
+          return [newReq, ...prev];
+        });
+      };
 
-    const handleAccepted = (data: any) => {
-      console.log("[Signal] Global Request Accepted by:", data.by);
-      setPendingRequests(prev => prev.filter(r => r.from !== data.by));
-      setSentRequests(prev => prev.filter(r => r.to !== data.by));
-    };
+      const handleAccepted = (data: any) => {
+        setPendingRequests(prev => prev.filter(r => r.from !== data.by));
+        setSentRequests(prev => prev.filter(r => r.to !== data.by));
+        // Add to general notifications to show accepted state globally
+        setGeneralNotifications(prev => [{
+          id: Date.now() + Math.random(),
+          type: 'request_accepted',
+          message: `${data.byName || data.by} accepted your follow request.`,
+          from_username: data.by,
+          time: 'Just now'
+        }, ...prev]);
+      };
 
-    socket.on("connection_request", handleNewRequest);
-    socket.on("connection_accepted", handleAccepted);
+      const handleNewNotification = (data: any) => {
+        setGeneralNotifications(prev => [{
+          id: data.id || (Date.now() + Math.random()),
+          type: data.type,
+          message: data.message,
+          from_username: data.from_username,
+          time: 'Just now'
+        }, ...prev]);
+      };
 
-    return () => {
-      socket.off("connection_request", handleNewRequest);
-      socket.off("connection_accepted", handleAccepted);
-    };
+      socket.on("connection_request", handleNewRequest);
+      socket.on("connection_accepted", handleAccepted);
+      socket.on("new_notification", handleNewNotification);
+
+      return () => {
+        socket.off("connection_request", handleNewRequest);
+        socket.off("connection_accepted", handleAccepted);
+        socket.off("new_notification", handleNewNotification);
+      };
   }, []);
 
   // Close notif panel on outside click
@@ -137,6 +163,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const handleFollowBack = async (targetUsername: string) => {
+    const me = localStorage.getItem("nexora_signup_username") || "";
+    try {
+      await nexoraFetch("/api/connections/request", {
+        method: "POST",
+        body: JSON.stringify({ from: me, fromName: me, to: targetUsername }),
+      });
+      alert(`Follow request sent to @${targetUsername}`);
+      // Add to actioned to animate out
+      const notifId = generalNotifications.find(n => n.from_username === targetUsername && n.type === 'request_back_prompt')?.id;
+      if (notifId) setActionedIds(prev => [...prev, notifId]);
+      
+      setTimeout(() => {
+        setGeneralNotifications(prev => prev.filter(n => n.from_username !== targetUsername || n.type !== 'request_back_prompt'));
+        if (notifId) setActionedIds(prev => prev.filter(id => id !== notifId));
+      }, 400);
+    } catch (err) {
+      console.error("Follow back failed");
+    }
+  };
+
   const handleRespond = async (req: typeof pendingRequests[0], action: "accept" | "decline") => {
     const username = localStorage.getItem("nexora_signup_username") || "";
     setActionedIds(prev => [...prev, req.id]);
@@ -146,6 +193,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         body: JSON.stringify({ username, requestId: req.id, action }),
       });
       if (action === "accept") {
+        // Show follow back prompt immediately in activity
+        setGeneralNotifications(prev => [{
+          id: Date.now() + Math.random(),
+          type: 'request_back_prompt',
+          message: `${req.fromName} started following you.`,
+          from_username: req.from,
+          time: 'Just now'
+        }, ...prev]);
+
         // Add to secure connections in localStorage so chats page picks it up
         const colors = [
           "from-purple-500 to-indigo-500", "from-cyan-500 to-blue-500",
@@ -153,15 +209,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           "from-orange-400 to-red-500"
         ];
         const existing = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-        const alreadyExists = existing.find((t: any) => t.name === req.fromName || t.name === req.from || t.username === req.from);
+        const alreadyExists = existing.find((t: any) => t.username === req.from);
         if (!alreadyExists) {
           const newThread = {
             id: req.id,
-            username: req.from,  // ← critical for DM routing
+            username: req.from,
             name: req.fromName || req.from,
             color: req.fromColor || colors[req.id % colors.length],
             online: true,
-            preview: "Secure tunnel established",
+            preview: "Connected! Start chatting.",
             unread: 1,
           };
           localStorage.setItem("nexora_secure_connections", JSON.stringify([...existing, newThread]));
@@ -458,13 +514,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               }}
             >
               <Bell className="h-4 w-4" />
-              {pendingRequests.length > 0 && (
+              {(pendingRequests.length + generalNotifications.length) > 0 && (
                 <motion.span
                   initial={{ scale: 0 }} animate={{ scale: 1 }}
                   className="absolute -top-1 -right-1 h-4 min-w-4 px-0.5 rounded-full text-[9px] font-black text-white flex items-center justify-center"
-                  style={{ background: "linear-gradient(135deg,#ff006e,#ff4f8b)", boxShadow: "0 0 8px rgba(255,0,110,0.5)" }}
+                   style={{ background: "linear-gradient(135deg,#ff006e,#ff4f8b)", boxShadow: "0 0 8px rgba(255,0,110,0.5)" }}
                 >
-                  {pendingRequests.length}
+                  {pendingRequests.length + generalNotifications.length}
                 </motion.span>
               )}
             </motion.button>
@@ -473,10 +529,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <AnimatePresence>
               {showNotifPanel && (
                 <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                  transition={{ type: "spring", damping: 24, stiffness: 300 }}
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
                   className="absolute right-0 top-11 w-80 rounded-2xl overflow-hidden z-[200] shadow-2xl"
                   style={{
                     background: isDark ? "rgba(14,14,22,0.98)" : "rgba(255,255,255,0.98)",
@@ -484,119 +539,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     backdropFilter: "blur(24px)",
                   }}
                 >
-                  {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
-                    <div className="flex items-center gap-2">
-                      <Bell className="w-4 h-4" style={{ color: "#6c5ce7" }} />
-                      <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Notifications</span>
-                    </div>
-                    {pendingRequests.length > 0 && (
-                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
-                        style={{ background: "rgba(255,0,110,0.12)", color: "#ff006e" }}>
-                        {pendingRequests.length} pending
-                      </span>
-                    )}
+                     <div className="flex items-center gap-2">
+                       <Bell className="w-4 h-4 text-[#6c5ce7]" />
+                       <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Notifications</span>
+                     </div>
                   </div>
 
-                  {/* Request list */}
-                  <div className="max-h-80 overflow-y-auto">
-                    {pendingRequests.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 gap-3">
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                          <Bell className="w-6 h-6" style={{ color: "var(--text-muted)" }} />
-                        </div>
-                        <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>No new notifications</p>
+                  <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                    {(pendingRequests.length === 0 && generalNotifications.length === 0) ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 opacity-40">
+                         <Bell className="w-6 h-6 text-muted-foreground" />
+                         <p className="text-[10px] font-black uppercase tracking-widest">No Activity</p>
                       </div>
                     ) : (
-                      <>
-                        <AnimatePresence>
-                          {/* Received Requests */}
-                          {pendingRequests.map((req) => (
-                            <motion.div
-                              key={`in-${req.id}`}
-                              initial={{ opacity: 0, x: 20 }} animate={{ opacity: actionedIds.includes(req.id) ? 0.3 : 1, x: 0 }}
-                              exit={{ opacity: 0, scale: 0.95 }}
-                              className="flex items-center gap-3 px-4 py-3.5 border-b last:border-0 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
-                              style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}
-                            >
-                              <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${req.fromColor || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-extrabold text-sm shrink-0 shadow-md border-2 border-white dark:border-[#161622]`}>
-                                {(req.fromName || req.from)?.[0]?.toUpperCase()}
-                              </div>
-                              <div className="flex-1 min-w-0 pr-1">
-                                <p className="text-[11px] font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
-                                  <span className="text-[#6c5ce7]">@{req.from}</span>
-                                  <span className="font-medium opacity-70 ml-1">requested to connect.</span>
-                                </p>
-                                <p className="text-[9px] mt-0.5 font-bold uppercase tracking-widest opacity-40">{req.time}</p>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <motion.button 
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => handleRespond(req, "accept")}
-                                  className="px-3.5 py-1.5 rounded-lg text-[10px] font-black text-white shadow-sm"
-                                  style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}
-                                >
-                                  Confirm
-                                </motion.button>
-                                <motion.button 
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => handleRespond(req, "decline")}
-                                  className="p-1.5 rounded-lg flex items-center justify-center"
-                                  style={{ color: "var(--text-muted)", background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </motion.button>
-                              </div>
-                            </motion.div>
-                          ))}
-
-                          {/* Sent Requests */}
-                          {sentRequests.map((req) => (
-                            <motion.div
-                              key={`out-${req.id}`}
-                              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-                              className="flex items-center gap-3 px-4 py-3.5 border-b last:border-0 opacity-60"
-                              style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}
-                            >
-                              <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${req.toColor || "from-gray-400 to-gray-500"} flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm opacity-80 grayscale`}>
-                                {(req.toName || req.to)?.[0]?.toUpperCase()}
-                              </div>
-                              <div className="flex-1 min-w-0 pr-1">
-                                <p className="text-[10px] font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
-                                  <span className="text-[#6c5ce7]">@{req.to}</span>
-                                  <span className="font-medium opacity-70 ml-1">Request Sent</span>
-                                </p>
-                                <p className="text-[8px] font-black uppercase opacity-30 mt-0.5">PENDING...</p>
-                              </div>
-                              <motion.button 
-                                whileTap={{ scale: 0.92 }}
-                                className="px-2.5 py-1.5 rounded-lg text-[9px] font-bold border border-red-500/20 text-red-500/60 hover:text-red-500 hover:bg-red-500/5 transition-all"
-                              >
-                                Cancel
-                              </motion.button>
-                            </motion.div>
-                          ))}
-
-                          {pendingRequests.length === 0 && sentRequests.length === 0 && (
-                            <div className="py-12 flex flex-col items-center justify-center opacity-30">
-                              <Bell className="w-8 h-8 mb-2" />
-                              <p className="text-xs font-bold uppercase tracking-widest">No Protocol Activity</p>
+                      <div className="flex flex-col">
+                        <AnimatePresence mode="popLayout">
+                          {pendingRequests.length > 0 && (
+                            <div key="pending-requests-header" className="px-4 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                              <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Pending Requests</span>
                             </div>
                           )}
+                          {pendingRequests.map((req) => (
+                            <motion.div key={`req-${req.id}`} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: actionedIds.includes(req.id) ? 0 : 1, x: 0 }} exit={{ opacity: 0 }}
+                              className="px-4 py-4 border-b flex items-center gap-3" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                              <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${req.fromColor} flex items-center justify-center text-white font-black shadow-lg`}>{(req.fromName || req.from)[0].toUpperCase()}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] font-bold"><span className="text-[#6c5ce7]">@{req.from}</span> requested.</p>
+                                <p className="text-[8px] opacity-30 uppercase font-black">{req.time}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => handleRespond(req, "accept")} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-xl">Confirm</button>
+                                <button onClick={() => handleRespond(req, "decline")} className="p-2 rounded-lg opacity-40 hover:opacity-100 transition-opacity" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </motion.div>
+                          ))}
+
+                          {generalNotifications.length > 0 && (
+                            <div key="activity-header" className="px-4 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                              <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Recent Activity</span>
+                            </div>
+                          )}
+                          {generalNotifications.map((notif) => (
+                            <motion.div key={`notif-${notif.id}`} layout initial={{ opacity: 0 }} animate={{ opacity: actionedIds.includes(notif.id) ? 0 : 1 }} exit={{ opacity: 0 }}
+                              className="px-4 py-4 border-b flex items-center gap-3 last:border-0" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                              <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${notif.type.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} flex items-center justify-center text-white font-black text-[10px]`}>{(notif.from_username || "N")[0].toUpperCase()}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] leading-tight"><span className="font-bold">@{notif.from_username}</span> {notif.message}</p>
+                                <p className="text-[9px] opacity-30 mt-0.5">{notif.time || "Recently"}</p>
+                              </div>
+                              {notif.type === 'request_back_prompt' && (
+                                <button onClick={() => handleFollowBack(notif.from_username)} className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase text-[#00d4ff] border border-[#00d4ff]/20 bg-[#00d4ff]/5">Follow Back</button>
+                               )}
+                            </motion.div>
+                          ))}
                         </AnimatePresence>
-                        {/* Vault Link Footer */}
-                        <div className="p-3 border-t text-center" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                          <motion.button
-                            whileHover={{ scale: 1.02, color: "#6c5ce7" }}
-                            onClick={() => { router.push('/dashboard/profile'); setShowNotifPanel(false); }}
-                            className="text-[10px] font-black uppercase tracking-widest opacity-60 hover:opacity-100 transition-all flex items-center justify-center gap-2 mx-auto"
-                            style={{ color: "var(--text-primary)" }}
-                          >
-                            Manage All in Protocol Vault <ChevronLeft className="w-3 h-3 rotate-180" />
-                          </motion.button>
-                        </div>
-                      </>
+                      </div>
                     )}
+                    <div className="p-3 border-t text-center" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                       <button onClick={() => { router.push('/dashboard/profile'); setShowNotifPanel(false); }} className="text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100 transition-all">Manage All In Vault</button>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -658,6 +660,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AnimatePresence>
         {pathname !== "/dashboard/chats" && (
           <motion.button
+            key="mobile-back-button"
             initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}
             whileTap={{ scale: 0.92 }}
             onClick={() => router.back()}
@@ -678,6 +681,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AnimatePresence>
         {!isKeyboardVisible && !isChatActive && (
           <motion.div
+            key="mobile-bottom-nav"
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
@@ -728,6 +732,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <AnimatePresence>
               {showNotifPanel && (
                 <motion.div
+                  key="mobile-notif-slideup"
                   initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
                   className="absolute bottom-full mb-3 left-0 right-0 mx-4 rounded-2xl overflow-hidden shadow-2xl z-[200]"
                   style={{
@@ -756,7 +761,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     ) : (
                       <AnimatePresence>
                         {pendingRequests.map((req) => (
-                          <motion.div key={req.id}
+                          <motion.div key={`mobile-req-${req.id}`}
                             initial={{ opacity: 0 }} animate={{ opacity: actionedIds.includes(req.id) ? 0 : 1 }}
                             exit={{ opacity: 0, height: 0 }}
                             className="flex items-center gap-3 px-4 py-3 border-b last:border-0"
@@ -801,11 +806,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AnimatePresence>
         {mobileMenuOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            <motion.div key="mobile-menu-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="md:hidden fixed inset-0 z-[60]"
               style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
               onClick={() => setMobileMenuOpen(false)} />
             <motion.div
+              key="mobile-menu-content"
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 26, stiffness: 300 }}
               className="md:hidden fixed bottom-0 left-0 right-0 z-[70] rounded-t-3xl p-6 pb-10 safe-bottom"

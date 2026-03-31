@@ -39,7 +39,7 @@ export default function VaultPage() {
   const handleStore = async () => {
     if (!newSecret.trim()) return;
     setIsStoring(true);
-    await vault.storeSecret(`sec_${Date.now()}`, newSecret);
+    await vault.storeSecret(`sec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, newSecret);
     setNewSecret("");
     await fetchVault();
     setIsStoring(false);
@@ -95,7 +95,7 @@ export default function VaultPage() {
                 <div className="flex justify-center gap-1 mb-8 flex-wrap">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <motion.div
-                      key={i}
+                      key={`security-dot-${i}`}
                       animate={{ opacity: [0.2, 0.6, 0.2] }}
                       transition={{ duration: 2, delay: i * 0.1, repeat: Infinity }}
                       className="w-2 h-2 rounded-full bg-[#6c5ce7]"
@@ -212,7 +212,7 @@ export default function VaultPage() {
                     ) : (
                       secrets.map((s, idx) => (
                         <motion.div
-                          key={s.id}
+                          key={`secret-${s.id}`}
                           initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: idx * 0.08 }}
                           className="glass-panel p-4 bg-white border border-[#e2e8f0] rounded-2xl shadow-sm"
                         >

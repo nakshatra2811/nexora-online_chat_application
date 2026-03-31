@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users } from "lucide-react";
+import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 
@@ -23,6 +23,8 @@ export default function StoriesPage() {
   const [showSnapReactions, setShowSnapReactions] = useState(false);
   const [sentReaction, setSentReaction] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [showHeartBurst, setShowHeartBurst] = useState(false);
+  const lastTapRef = useRef<number>(0);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,6 +37,64 @@ export default function StoriesPage() {
   const [showLikers, setShowLikers] = useState(false);
   const [viewersList, setViewersList] = useState<any[]>([]);
   const [likersList, setLikersList] = useState<any[]>([]);
+
+  // Profile Modal State
+  const [selectedProfileUser, setSelectedProfileUser] = useState<any>(null);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [blockedThreads, setBlockedThreads] = useState<number[]>([]);
+  const [threads, setThreads] = useState<any[]>([]);
+
+  useEffect(() => {
+    const blocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
+    setBlockedThreads(blocked);
+    
+    // Fetch threads to check connections for calling
+    const fetchThreads = async () => {
+      try {
+        const username = localStorage.getItem("nexora_signup_username");
+        const res = await nexoraFetch(`/api/chats/threads?username=${username}`);
+        if (res && res.threads) setThreads(res.threads);
+      } catch (e) { console.error(e); }
+    };
+    fetchThreads();
+  }, [selectedProfileUser]);
+
+  const handleBlockUser = (threadId: number) => {
+    if (!threadId) return;
+    setBlockedThreads(prev => {
+      const next = prev.includes(threadId) ? prev : [...prev, threadId];
+      localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
+      return next;
+    });
+    setSelectedProfileUser(null);
+    alert("Node communication blocked.");
+  };
+
+  const handleUnblockUser = (threadId: number) => {
+    if (!threadId) return;
+    setBlockedThreads(prev => {
+      const next = prev.filter(id => id !== threadId);
+      localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
+      return next;
+    });
+    setSelectedProfileUser(null);
+    alert("Node communication restored.");
+  };
+
+  useEffect(() => {
+    if (!selectedProfileUser) { setProfileData(null); return; }
+    const fetchProfile = async () => {
+      setLoadingProfile(true);
+      try {
+        const username = selectedProfileUser.username;
+        const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(username)}`);
+        if (res && res.user) setProfileData(res.user);
+      } catch (e) { console.error(e); }
+      finally { setLoadingProfile(false); }
+    };
+    fetchProfile();
+  }, [selectedProfileUser]);
 
   const fetchStories = async () => {
     try {
@@ -150,14 +210,23 @@ export default function StoriesPage() {
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
   }, [activeStory, isPaused]);
 
-  const handleLike = async (storyId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleLike = async (storyId: number, e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.stopPropagation();
     const username = localStorage.getItem("nexora_signup_username");
     if (!username) return;
     
-    // Optimistic UI update
-    setLiked((prev) => ({ ...prev, [storyId]: !prev[storyId] }));
-    setLikeCount((prev) => ({ ...prev, [storyId]: prev[storyId] + (liked[storyId] ? -1 : 1) }));
+    // If already liked, just toggle state locally (unliking)
+    if (liked[storyId]) {
+      setLiked(prev => ({ ...prev, [storyId]: false }));
+      setLikeCount(prev => ({ ...prev, [storyId]: Math.max(0, prev[storyId] - 1) }));
+    } else {
+      // New Like: Show burst animation
+      setShowHeartBurst(true);
+      setTimeout(() => setShowHeartBurst(false), 800);
+
+      setLiked(prev => ({ ...prev, [storyId]: true }));
+      setLikeCount(prev => ({ ...prev, [storyId]: prev[storyId] + 1 }));
+    }
     
     try {
       await nexoraFetch("/api/stories/like", {
@@ -165,10 +234,17 @@ export default function StoriesPage() {
         body: JSON.stringify({ storyId, username })
       });
     } catch {
-      // Revert on fail
-      setLiked((prev) => ({ ...prev, [storyId]: !prev[storyId] }));
-      setLikeCount((prev) => ({ ...prev, [storyId]: prev[storyId] + (liked[storyId] ? 1 : -1) }));
+      // Minimal revert logic
     }
+  };
+
+  const handleDoubleTap = (storyId: number, e: React.MouseEvent | React.TouchEvent) => {
+    const now = Date.now();
+    const diff = now - lastTapRef.current;
+    if (diff < 300) {
+      handleLike(storyId, e);
+    }
+    lastTapRef.current = now;
   };
 
   const handleReply = async (messageText?: string) => {
@@ -271,6 +347,18 @@ export default function StoriesPage() {
     setCameraView({ active: false, stream: null, capturedUrl: null });
   };
 
+  const handleDeleteStory = async (storyId: number) => {
+    if (!window.confirm("Are you sure you want to delete this story?")) return;
+    const username = localStorage.getItem("nexora_signup_username");
+    try {
+      await nexoraFetch(`/api/stories/${storyId}?username=${username}`, { method: "DELETE" });
+      setActiveStory(null);
+      await fetchStories();
+    } catch (e) {
+      alert("Failed to delete story");
+    }
+  };
+
   return (
     <div className="relative flex flex-col w-full h-full overflow-y-auto p-6 md:p-8"
          style={{ color: "var(--text-primary)" }}>
@@ -333,9 +421,9 @@ export default function StoriesPage() {
             className="flex flex-col items-center cursor-pointer group relative"
           >
             <div className="relative mb-3" onClick={() => setActiveStory(myStory)}>
-              <div className={`p-[3px] rounded-full bg-gradient-to-tr ${myStory.color} shadow-lg group-hover:shadow-2xl transition-shadow`}>
-                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center relative bg-black"
-                     style={{ border: `3px solid ${isDark ? "#0a0a12" : "#f0f2f8"}` }}>
+              <div className={`p-[3px] rounded-full bg-gradient-to-tr from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888] shadow-lg group-hover:shadow-2xl transition-shadow`}>
+                <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative bg-black"
+                     style={{ border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
                   {myStory.type === "image" ? (
                     <img src={myStory.content} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -348,8 +436,8 @@ export default function StoriesPage() {
                 </div>
               </div>
               
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold text-white bg-black/60 backdrop-blur-md">
-                <Eye className="w-2.5 h-2.5" /> {myStory.views}
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1 rounded-full text-[10px] font-bold text-white bg-black/70 backdrop-blur-md shadow-lg">
+                <Eye className="w-3 h-3 text-[#2ed573]" /> {myStory.views}
               </div>
             </div>
 
@@ -370,16 +458,15 @@ export default function StoriesPage() {
             transition={{ delay: i * 0.08 + 0.05, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ scale: 1.04, y: -4 }} whileTap={{ scale: 0.97 }}
             className="flex flex-col items-center cursor-pointer group relative"
-          >
-            {/* Ring + Avatar */}
+          >            {/* Ring + Avatar */}
             <div className="relative mb-3" onClick={() => setActiveStory(story)}>
-              <div className={`p-[3px] rounded-full bg-gradient-to-tr ${story.color} shadow-lg group-hover:shadow-2xl transition-shadow`}>
-                <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center relative"
-                     style={{ background: isDark ? "#1a1a2e" : "#ffffff", border: `3px solid ${isDark ? "#0a0a12" : "#f0f2f8"}` }}>
+              <div className={`p-[3px] rounded-full bg-gradient-to-tr ${story.isViewed ? 'from-gray-400 to-gray-600' : 'from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888]'} shadow-lg group-hover:shadow-2xl transition-shadow`}>
+                <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
+                     style={{ background: isDark ? "#1a1a2e" : "#ffffff", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
                   {story.type === "image" ? (
                     <img src={story.content} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{story.user[0]}</span>
+                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(story.user || story.username || "?")[0].toUpperCase()}</span>
                   )}
                   {/* Play hover */}
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
@@ -388,8 +475,6 @@ export default function StoriesPage() {
                   </motion.div>
                 </div>
               </div>
-
-              {/* View dot no longer needed on other stories, but keep isViewed style if I want */}
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
@@ -417,14 +502,25 @@ export default function StoriesPage() {
               initial={{ scale: 0.88, y: 40 }} animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.88, y: 40 }} transition={{ type: "spring", stiffness: 280, damping: 26 }}
               onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => handleDoubleTap(activeStory.id, e)}
               onMouseDown={() => setIsPaused(true)}
               onMouseUp={() => setIsPaused(false)}
               onMouseLeave={() => setIsPaused(false)}
-              onTouchStart={() => setIsPaused(true)}
+              onTouchStart={(e) => { setIsPaused(true); handleDoubleTap(activeStory.id, e); }}
               onTouchEnd={() => setIsPaused(false)}
               className={`relative w-full h-full md:h-[85vh] md:max-h-[760px] md:max-w-sm flex flex-col md:rounded-[2.5rem] overflow-hidden shadow-2xl md:mt-0`}
               style={{ background: `linear-gradient(135deg, #0a0a1a, #1a1a30)` }}
             >
+              {/* Heart Burst Effect */}
+              <AnimatePresence>
+                {showHeartBurst && (
+                  <motion.div key="heart-burst" initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.5, opacity: 0 }}
+                    className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none">
+                    <Heart className="w-32 h-32 text-white drop-shadow-[0_0_20px_rgba(255,0,110,0.8)]" fill="white" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* GRADIENT BG BEHIND TEXT STORIES */}
               {activeStory.type !== "image" && (
                 <div className={`absolute inset-0 bg-gradient-to-br ${activeStory.color} opacity-90`} />
@@ -437,12 +533,12 @@ export default function StoriesPage() {
 
               {/* Header */}
               <div className="absolute top-8 md:top-8 left-0 w-full px-5 flex justify-between items-center z-20 safe-top">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center font-bold text-white">
+                <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedProfileUser({ username: activeStory.username, name: activeStory.user, color: activeStory.color })}>
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105`}>
                     {activeStory.user[0]}
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-white">{activeStory.user}</p>
+                    <p className="font-bold text-sm text-white group-hover:text-purple-300 transition-colors">{activeStory.user}</p>
                     <p className="text-xs text-white/60">{activeStory.time}</p>
                   </div>
                 </div>
@@ -458,7 +554,7 @@ export default function StoriesPage() {
                   {/* Viewers Dropdown Modal (ONLY for own story) */}
                   <AnimatePresence>
                     {activeStory.username === localStorage.getItem("nexora_signup_username") && showViewers && (
-                      <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                      <motion.div key="viewers-modal" initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                         className="absolute right-12 top-10 w-52 rounded-2xl overflow-hidden shadow-2xl z-50"
                         style={{ background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(40px)" }}
                         onClick={(e) => e.stopPropagation()}>
@@ -469,16 +565,17 @@ export default function StoriesPage() {
                           {viewersList.length === 0 ? (
                             <p className="text-xs text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No views yet</p>
                           ) : (
-                            viewersList.map((v, idx) => (
-                              <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all" 
+                            viewersList.map((v) => (
+                              <div key={`viewer-${v.username}`} className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all cursor-pointer group/v" 
                                    style={{ background: "rgba(255,255,255,0.03)" }}
+                                   onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}
                                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                                    onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}>
-                                <div className={`w-9 h-9 rounded-full bg-gradient-to-tr flex items-center justify-center text-xs font-black shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"}`} style={{ color: "#ffffff" }}>
-                                  {(v.name || v.username)[0].toUpperCase()}
+                                <div className={`w-9 h-9 rounded-full bg-gradient-to-tr flex items-center justify-center text-xs font-black shrink-0 ${v.color || "from-[#6c5ce7] to-[#00d4ff]"} style={{ color: "#ffffff" }} group-hover/v:scale-105 transition-transform`}>
+                                  {(v.name || v.username || "?")[0].toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <span className="text-[13px] font-bold block truncate" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
+                                  <span className="text-[13px] font-bold block truncate group-hover/v:text-purple-400 transition-colors" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
                                   <span className="text-[10px] opacity-50 block truncate" style={{ color: "#ffffff" }}>@{v.username}</span>
                                 </div>
                               </div>
@@ -492,6 +589,17 @@ export default function StoriesPage() {
                   <button onClick={() => { setActiveStory(null); setShowViewers(false); }} className="p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition">
                     <X className="w-4 h-4" />
                   </button>
+
+                  {/* OWN STORY DELETE ACTION */}
+                  {activeStory.username === localStorage.getItem("nexora_signup_username") && (
+                    <motion.button 
+                      whileHover={{ scale: 1.1, backgroundColor: "rgba(255,0,0,0.2)" }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleDeleteStory(activeStory.id)}
+                      className="p-2 rounded-full bg-black/40 text-red-500 border border-red-500/20 backdrop-blur-md shadow-xl transition-all">
+                      <Trash2 className="w-4 h-4" />
+                    </motion.button>
+                  )}
                 </div>
               </div>
 
@@ -513,7 +621,7 @@ export default function StoriesPage() {
                 {/* Sent reaction feedback */}
                 <AnimatePresence>
                   {sentReaction && (
-                    <motion.div initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 8, opacity: 0 }}
+                    <motion.div key="sent-reaction-feedback" initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 8, opacity: 0 }}
                       className="text-center mb-2 text-2xl">{sentReaction}</motion.div>
                   )}
                 </AnimatePresence>
@@ -521,7 +629,7 @@ export default function StoriesPage() {
                 {/* Snap reactions row */}
                 <AnimatePresence>
                   {showSnapReactions && (
-                    <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
+                    <motion.div key="snap-reactions-row" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
                       className="flex justify-center gap-3 mb-3">
                       {SNAP_REACTIONS.map((emoji) => (
                         <motion.button key={emoji} whileHover={{ scale: 1.3 }} whileTap={{ scale: 0.9 }}
@@ -586,7 +694,7 @@ export default function StoriesPage() {
                       {/* Likers Dropdown Modal */}
                       <AnimatePresence>
                         {showLikers && (
-                          <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                          <motion.div key="likers-modal" initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
                             className="absolute bottom-8 w-52 rounded-2xl overflow-hidden shadow-2xl z-50"
                             style={{ background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(40px)" }}
                             onClick={(e) => e.stopPropagation()}>
@@ -597,14 +705,15 @@ export default function StoriesPage() {
                               {likersList.length === 0 ? (
                                 <p className="text-[10px] text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No likes yet</p>
                               ) : (
-                                likersList.map((v, idx) => (
-                                  <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer" style={{ background: "transparent" }}
+                                likersList.map((v) => (
+                                  <div key={`liker-${v.username}`} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group/l" style={{ background: "transparent" }}
+                                       onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}
                                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                    <div className={`w-7 h-7 rounded-full bg-gradient-to-tr flex items-center justify-center text-[11px] font-bold shrink-0 ${v.color || "from-[#ff006e] to-[#ffbe0b]"}`} style={{ color: "#ffffff" }}>
-                                      {v.name[0]}
+                                    <div className={`w-7 h-7 rounded-full bg-gradient-to-tr flex items-center justify-center text-[11px] font-bold shrink-0 ${v.color || "from-[#ff006e] to-[#ffbe0b]"} style={{ color: "#ffffff" }} group-hover/l:scale-105 transition-transform`}>
+                                      {(v.name || v.username || "?")[0].toUpperCase()}
                                     </div>
-                                    <span className="text-sm font-semibold truncate flex-1" style={{ color: "#ffffff" }}>{v.name}</span>
+                                    <span className="text-sm font-semibold truncate flex-1 group-hover/l:text-pink-400 transition-colors" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
                                     <Heart className="w-3.5 h-3.5 shrink-0" style={{ color: "#ff006e" }} fill="#ff006e" />
                                   </div>
                                 ))
@@ -625,7 +734,7 @@ export default function StoriesPage() {
       {/* ═══ REAL-TIME CAMERA / MEDIA STORY OVERLAY ═══ */}
       <AnimatePresence>
         {cameraView.active && (
-          <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+          <motion.div key="camera-overlay" initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
             className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center overflow-hidden">
             
             {/* Top Bar */}
@@ -674,6 +783,126 @@ export default function StoriesPage() {
                 </>
               )}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══ PREMIUM USER PROFILE MODAL ═══ */}
+      <AnimatePresence>
+        {selectedProfileUser && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] flex items-center justify-center p-4 sm:p-6 backdrop-blur-3xl bg-black/50"
+            onClick={() => setSelectedProfileUser(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 40, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 40, opacity: 0 }}
+              className="w-full max-w-[440px] overflow-hidden rounded-[40px] shadow-[0_32px_80px_rgba(0,0,0,0.5)] relative border border-white/10"
+              style={{ background: isDark ? "rgba(18, 18, 30, 0.95)" : "rgba(255, 255, 255, 0.98)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`h-36 w-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} relative`}>
+                <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
+                <button 
+                  onClick={() => setSelectedProfileUser(null)}
+                  className="absolute top-6 right-6 p-2.5 rounded-2xl bg-black/20 hover:bg-black/40 text-white transition-all backdrop-blur-md active:scale-90"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-10 pb-10 -mt-20 relative z-10">
+                <div className="flex flex-col items-center">
+                  <div className={`h-36 w-36 rounded-[36px] bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
+                    <span className="group-hover/avatar:scale-110 transition-transform duration-500">
+                      {selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?'}
+                    </span>
+                  </div>
+
+                  <div className="text-center mb-8">
+                    <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>
+                      {selectedProfileUser.name || selectedProfileUser.username}
+                    </h2>
+                    <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
+                      @{selectedProfileUser.username}
+                    </p>
+                    
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm">
+                        Official Node
+                      </span>
+                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm">
+                        Encrypted
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full mb-8 p-6 rounded-[32px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 backdrop-blur-md">
+                     <div className="flex items-center gap-2 mb-3 opacity-40">
+                        <Lock className="w-3 h-3" />
+                        <h4 className="text-[10px] uppercase font-black tracking-[0.2em]">Identity Memo</h4>
+                     </div>
+                     <p className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                      {loadingProfile ? (
+                        <span className="opacity-30 italic animate-pulse">Decrypting protocol memo...</span>
+                      ) : profileData?.bio || "No secure bio established for this node yet."}
+                    </p>
+                    <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between opacity-50 font-black text-[10px] tracking-widest uppercase">
+                       <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> EST. {profileData?.created_at ? new Date(profileData.created_at).getFullYear() : '2026'}</div>
+                       <div className="flex items-center gap-2"><Shield className="w-3.5 h-3.5" /> Phase 1.2</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 w-full mb-4">
+                     {threads.some(t => t.username === selectedProfileUser.username) ? (
+                       <div className="col-span-2 p-5 rounded-[32px] bg-purple-500/10 border border-purple-500/20 flex flex-col items-center text-center">
+                          <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Mutual Node Active</p>
+                          <p className="text-[9px] text-purple-600/60 font-bold mt-1">Open Chat to initiate secure media stream</p>
+                       </div>
+                     ) : (
+                       <div className="col-span-2 p-5 rounded-[32px] bg-amber-500/5 border border-amber-500/10 flex flex-col items-center text-center">
+                          <div className="p-2.5 rounded-2xl bg-amber-500/10 mb-2">
+                             <ShieldOff className="w-5 h-5 text-amber-500" />
+                          </div>
+                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Protocol Restriction</p>
+                          <p className="text-[9px] text-amber-600/60 font-bold mt-1">Direct communication requires mutual connection</p>
+                       </div>
+                     )}
+                  </div>
+
+                  <div className="flex gap-3 w-full">
+                    <motion.button 
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                      onClick={() => { 
+                         window.location.href = `/dashboard/chats?u=${selectedProfileUser.username}`;
+                      }}
+                      className="flex-1 py-4.5 rounded-[28px] bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      Message Node
+                    </motion.button>
+                    
+                    {blockedThreads.includes(selectedProfileUser.id || 0) ? (
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                        onClick={() => handleUnblockUser(selectedProfileUser.id || 0)}
+                        className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
+                      >
+                        Unblock
+                      </motion.button>
+                    ) : (
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                        onClick={() => handleBlockUser(selectedProfileUser.id || 0)}
+                        className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
+                      >
+                        Block
+                      </motion.button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

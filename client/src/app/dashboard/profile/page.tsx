@@ -467,7 +467,7 @@ export default function ProfilePage() {
         setPendingReceived(prev => {
           if (prev.find(r => r.from === data.from)) return prev;
           return [{
-            id: Date.now(),
+            id: Date.now() + Math.random(),
             from: data.from,
             fromName: data.fromName || data.from,
             fromColor: data.fromColor || "from-purple-500 to-indigo-500",
@@ -729,10 +729,10 @@ export default function ProfilePage() {
                 {friends.filter(f => f.online).length} Active
               </span>
             </div>
-            <AnimatePresence>
-              <div className="flex flex-col gap-3">
+            <AnimatePresence mode="popLayout">
+              <div key="friends-list-container" className="flex flex-col gap-3">
                 {friends.map((friend, idx) => (
-                  <motion.div key={friend.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                  <motion.div key={`friend-${friend.id}`} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ delay: idx * 0.04 }}
                     className="group flex items-center justify-between p-4 rounded-2xl transition-all"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
@@ -792,10 +792,10 @@ export default function ProfilePage() {
                 </motion.button>
               </div>
             </div>
-            <AnimatePresence>
-              <div className="flex flex-col gap-3">
+            <AnimatePresence mode="popLayout">
+              <div key="pending-received-container" className="flex flex-col gap-3">
                 {pendingReceived.map((req, idx) => (
-                  <motion.div key={req.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, x: 20 }}
+                  <motion.div key={`req-in-${req.id}`} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, x: 20 }}
                     transition={{ delay: idx * 0.05 }}
                     className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl gap-4"
                     style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.03)", border: "1px solid var(--border-subtle)" }}>
@@ -848,10 +848,10 @@ export default function ProfilePage() {
                 {pendingSent.length}
               </span>
             </div>
-            <AnimatePresence>
-              <div className="flex flex-col gap-3">
+            <AnimatePresence mode="popLayout">
+              <div key="pending-sent-container" className="flex flex-col gap-3">
                 {pendingSent.map((req, idx) => (
-                  <motion.div key={req.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -10 }}
+                  <motion.div key={`req-out-${req.id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -10 }}
                     transition={{ delay: idx * 0.07 }}
                     className="flex items-center justify-between p-4 rounded-2xl"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
@@ -888,15 +888,15 @@ export default function ProfilePage() {
                 {blockedThreads.length}
               </span>
             </div>
-            <AnimatePresence>
-              <div className="flex flex-col gap-3">
+            <AnimatePresence mode="popLayout">
+              <div key="blocked-list-container" className="flex flex-col gap-3">
                 {blockedThreads.map((id, idx) => {
                   // Find name from mocks (for demo)
                   const savedConnections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
                   const user = savedConnections.find((u: any) => u.id === id) || { name: `Unknown Account ${id}`, color: "from-gray-500 to-gray-700" };
                   
                   return (
-                    <motion.div key={id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                    <motion.div key={`blocked-${id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ delay: idx * 0.05 }}
                       className="flex items-center justify-between p-4 rounded-2xl group transition-all"
                       style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
@@ -928,16 +928,16 @@ export default function ProfilePage() {
       </div>
 
       {/* Modals */}
-      <AnimatePresence>
-        {showShare && <ShareProfileModal profile={profile} onClose={() => setShowShare(false)} isDark={isDark} />}
-        {showContacts && <ContactsModal onClose={() => setShowContacts(false)} isDark={isDark} />}
+      <AnimatePresence mode="wait">
+        {showShare && <ShareProfileModal key="share-modal" profile={profile} onClose={() => setShowShare(false)} isDark={isDark} />}
+        {showContacts && <ContactsModal key="contacts-modal" onClose={() => setShowContacts(false)} isDark={isDark} />}
         
         {showOTPModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <div key="otp-modal-container" className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div key="otp-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowOTPModal(false)}
               className="absolute inset-0 bg-[#0c0c14]/80 backdrop-blur-xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            <motion.div key="otp-content" initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
               className="relative w-full max-w-sm glass-panel p-8 text-center bg-white/95 rounded-[32px] border border-white/50 shadow-2xl">
               <div className="mx-auto w-16 h-16 bg-[#6c5ce7]/10 rounded-2xl flex items-center justify-center mb-6">
                 <Shield className="w-8 h-8 text-[#6c5ce7]" />

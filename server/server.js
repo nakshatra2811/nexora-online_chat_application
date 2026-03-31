@@ -1152,16 +1152,17 @@ app.post('/api/connections/request', async (req, res) => {
             );
 
             // Notify both via socket
-            const fromSocket = userSockets.get(from.toLowerCase());
-            const targetSocket = userSockets.get(to.toLowerCase());
-            if (targetSocket) {
-                io.to(targetSocket).emit('connection_accepted', { by: from, byName: fromName || from });
-                io.to(targetSocket).emit('new_notification', { type: 'request_accepted', message: `${fromName || from} accepted your follow request.`, from_username: from.toLowerCase() });
-            }
-            if (fromSocket) {
-                io.to(fromSocket).emit('connection_accepted', { by: to, byName: to });
-                io.to(fromSocket).emit('new_notification', { type: 'request_back_prompt', message: `${to} started following you back.`, from_username: to.toLowerCase() });
-            }
+            const senderId = from.toLowerCase();
+            const receiverId = to.toLowerCase();
+
+            // Notify Receiver (the person who was REQUESTED)
+            io.to(receiverId).emit('connection_accepted', { by: senderId, byName: fromName || senderId });
+            io.to(receiverId).emit('new_notification', { type: 'request_accepted', message: `${fromName || senderId} accepted your follow request.`, from_username: senderId });
+
+            // Notify Sender (the person who REQUESTED BACK)
+            io.to(senderId).emit('connection_accepted', { by: receiverId, byName: receiverId });
+            io.to(senderId).emit('new_notification', { type: 'request_back_prompt', message: `${receiverId} started following you back.`, from_username: receiverId });
+
             return res.json({ status: 'accepted', message: 'Bidirectional request: Connected!' });
         }
 
@@ -1172,10 +1173,7 @@ app.post('/api/connections/request', async (req, res) => {
         );
 
         // Notify via socket if target is online
-        const targetSocket = userSockets.get(to);
-        if (targetSocket) {
-            io.to(targetSocket).emit('connection_request', { from, fromName, fromColor });
-        }
+        io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor });
         res.json({ status: 'sent' });
     } catch (err) {
         console.error("Connection Request Error:", err);
@@ -1214,13 +1212,16 @@ app.get('/api/connections', async (req, res) => {
                 (c.user_a = u.username AND c.user_b = ?) OR
                 (c.user_b = u.username AND c.user_a = ?)
         `, [username, username]);
-        // Attach real-time online status from the live socket map
-        const enriched = rows.map(r => ({
-            ...r,
-            online: userSockets.has(r.username),
-            preview: 'Secure tunnel established',
-            unread: 0,
-        }));
+        // Attach real-time online status from the live room adapter
+        const enriched = rows.map(r => {
+            const room = io.sockets.adapter.rooms.get(r.username);
+            return {
+                ...r,
+                online: room && room.size > 0,
+                preview: 'Secure tunnel established',
+                unread: 0,
+            };
+        });
         res.json({ connections: enriched });
     } catch (err) {
         res.status(500).json({ connections: [] });
@@ -1283,17 +1284,12 @@ app.post('/api/connections/respond', async (req, res) => {
             );
 
             // Notify the sender via socket
-            const senderSocket = userSockets.get(req_.from_username.toLowerCase());
-            if (senderSocket) {
-                io.to(senderSocket).emit('connection_accepted', { by: username.toLowerCase(), byName: username });
-                io.to(senderSocket).emit('new_notification', { type: 'request_accepted', message: `${username} accepted your follow request.`, from_username: username.toLowerCase() });
-            }
+            const senderId = req_.from_username.toLowerCase();
+            io.to(senderId).emit('connection_accepted', { by: username.toLowerCase(), byName: username });
+            io.to(senderId).emit('new_notification', { type: 'request_accepted', message: `${username} accepted your follow request.`, from_username: username.toLowerCase() });
 
             // Notify the receiver via socket
-            const receiverSocket = userSockets.get(username.toLowerCase());
-            if (receiverSocket) {
-                 io.to(receiverSocket).emit('new_notification', { type: 'request_back_prompt', message: `${req_.from_name} started following you.`, from_username: req_.from_username.toLowerCase() });
-            }
+            io.to(username.toLowerCase()).emit('new_notification', { type: 'request_back_prompt', message: `${req_.from_name} started following you.`, from_username: req_.from_username.toLowerCase() });
         } else {
             await db.run('UPDATE connection_requests SET status = "declined" WHERE id = ?', [requestId]);
         }
@@ -1421,11 +1417,44 @@ app.post('/api/stories/like', async (req, res) => {
     if (!storyId || !username) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        const exists = await db.get('SELECT 1 FROM story_likes WHERE story_id = ? AND liker_username = ?', [storyId, username.toLowerCase()]);
+        const sender = username.toLowerCase();
+        const story = await db.get('SELECT * FROM stories WHERE id = ?', [storyId]);
+        if (!story) return res.status(404).json({ error: "Story not found" });
+        const receiver = story.username.toLowerCase();
+
+        const exists = await db.get('SELECT 1 FROM story_likes WHERE story_id = ? AND liker_username = ?', [storyId, sender]);
         if (exists) {
-            await db.run('DELETE FROM story_likes WHERE story_id = ? AND liker_username = ?', [storyId, username.toLowerCase()]);
+            await db.run('DELETE FROM story_likes WHERE story_id = ? AND liker_username = ?', [storyId, sender]);
         } else {
-            await db.run('INSERT INTO story_likes (story_id, liker_username) VALUES (?, ?)', [storyId, username.toLowerCase()]);
+            await db.run('INSERT INTO story_likes (story_id, liker_username) VALUES (?, ?)', [storyId, sender]);
+            
+            // IG LIKE FEATURE: Send heart to chat and notification
+            const likePayload = {
+                to: receiver,
+                from: sender,
+                text: `❤️ Liked your story`,
+                msgId: `like_${Date.now()}`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isSystem: false,
+                fromStory: true
+            };
+
+            // Notify Receiver's room
+            io.to(receiver).emit('new_notification', { type: 'story_like', message: `Liked your story.`, from_username: sender });
+            io.to(receiver).emit('dm:message', likePayload);
+            
+            // Sync to Sender's other devices
+            socket.to(sender).emit('dm:message', likePayload);
+
+            // Push Notification
+            const sub = pushSubscriptions.get(receiver);
+            if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+                webpush.sendNotification(sub, JSON.stringify({
+                    title: `${username} liked your story`,
+                    body: "❤️",
+                    icon: '/icon.svg'
+                })).catch(() => {});
+            }
         }
         res.json({ status: "success" });
     } catch (err) {
@@ -1462,14 +1491,12 @@ app.post('/api/stories/reply', async (req, res) => {
             fromStory: true
         };
 
-        // Notify via socket if online
-        const targetSocket = userSockets.get(receiver);
-        if (targetSocket) {
-             io.to(targetSocket).emit('new_notification', { type: 'story_reply', message: `Replied to your story: "${message}"`, from_username: sender });
-             io.to(targetSocket).emit('dm:message', storyRelayPayload);
-        } else {
-             queueMessageForUser(receiver, storyRelayPayload);
-        }
+        // 3. Notify via socket (Identity-based relay ensures all user devices receive)
+        io.to(receiver).emit('new_notification', { type: 'story_reply', message: `Replied to your story: "${message}"`, from_username: sender });
+        io.to(receiver).emit('dm:message', storyRelayPayload);
+        
+        // Also sync back to sender's other devices
+        socket.to(sender).emit('dm:message', storyRelayPayload);
 
         // Push notification
         const sub = pushSubscriptions.get(receiver);
@@ -1511,6 +1538,26 @@ app.get('/api/stories/stats', async (req, res) => {
     } catch (err) {
         console.error("Story Stats Error:", err);
         res.status(500).json({ views: [], likes: [] });
+    }
+});
+
+// Delete a story
+app.delete('/api/stories/:id', async (req, res) => {
+    const { id } = req.params;
+    const { username } = req.query;
+    if (!id || !username) return res.status(400).json({ error: "Missing ID or username" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const story = await db.get('SELECT username FROM stories WHERE id = ?', [id]);
+        if (!story) return res.status(404).json({ error: "Story not found" });
+        if (story.username !== username.toLowerCase()) return res.status(403).json({ error: "Unauthorized" });
+
+        await db.run('DELETE FROM stories WHERE id = ?', [id]);
+        await db.run('DELETE FROM story_views WHERE story_id = ?', [id]);
+        await db.run('DELETE FROM story_likes WHERE story_id = ?', [id]);
+        res.json({ status: "success" });
+    } catch (err) {
+        res.status(500).json({ error: "Server Error" });
     }
 });
 

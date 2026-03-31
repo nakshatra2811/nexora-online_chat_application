@@ -165,7 +165,7 @@ function LockSetupModal({ type, onClose, onSave, isDark }: LockSetupProps) {
         {/* Step indicator */}
         <div className="flex gap-2">
           {["pin", "confirm", "question"].map((s, i) => (
-            <div key={s} className="flex-1 h-1.5 rounded-full transition-all"
+            <div key={`step-${s}`} className="flex-1 h-1.5 rounded-full transition-all"
               style={{ background: ["pin", "confirm", "question"].indexOf(step) >= i ? "linear-gradient(90deg,#6c5ce7,#00d4ff)" : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)" }} />
           ))}
         </div>
@@ -309,15 +309,15 @@ function LockCard({ type, isDark }: { type: LockType; isDark: boolean }) {
       </div>
 
       {/* Setup Modal */}
-      <AnimatePresence>
-        {showSetup && <LockSetupModal type={type} isDark={isDark} onClose={() => setShowSetup(false)} onSave={() => setEnabled(true)} />}
+      <AnimatePresence mode="wait">
+        {showSetup && <LockSetupModal key={`${type}-setup`} type={type} isDark={isDark} onClose={() => setShowSetup(false)} onSave={() => setEnabled(true)} />}
       </AnimatePresence>
 
       {/* Forgot Password Modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showForgot && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/95 backdrop-blur-3xl" onClick={() => setShowForgot(false)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
+          <div key={`${type}-forgot-overlay`} className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/95 backdrop-blur-3xl" onClick={() => setShowForgot(false)}>
+            <motion.div key={`${type}-forgot-modal`} initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
               onClick={e => e.stopPropagation()}
               className="w-full max-w-sm rounded-[2rem] p-7 shadow-2xl flex flex-col gap-4"
               style={{ background: isDark ? "rgba(16,16,30,0.98)" : "rgba(255,255,255,0.98)", border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(108,92,231,0.12)"}` }}>
@@ -466,7 +466,7 @@ export default function SettingsPage() {
       {/* ─── GENERAL SETTINGS ─── */}
       <div className="relative z-10 grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-5xl">
         {settings.map((section, si) => (
-          <div key={section.title} className="p-6 shadow-lg h-full rounded-2xl glass-panel">
+          <div key={`section-${section.title}`} className="p-6 shadow-lg h-full rounded-2xl glass-panel">
             <div className="flex items-center gap-3 mb-5">
               <div className={`p-3 rounded-xl bg-gradient-to-br ${section.color} shadow-md`}>
                 <section.icon className="w-5 h-5 text-white" />
@@ -477,7 +477,7 @@ export default function SettingsPage() {
               {section.items.map((item, ii) => {
                 const isActive = item.label === "Dark Mode" ? isDark : item.value;
                 return (
-                  <motion.div key={item.label} transition={{ duration: 0.15 }}
+                  <motion.div key={`item-${item.label}`} transition={{ duration: 0.15 }}
                     className="flex items-center justify-between p-3 rounded-xl cursor-pointer group transition-colors"
                     style={{ background: isActive ? "rgba(108,92,231,0.05)" : "transparent" }}
                     onClick={() => toggleSetting(si, ii, item.label)}>
@@ -523,9 +523,10 @@ export default function SettingsPage() {
       </motion.div>
 
       {/* Action Confirmation Modal */}
-      {confirmSetting && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/95 backdrop-blur-3xl">
-          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+      <AnimatePresence mode="wait">
+        {confirmSetting && (
+          <div key="confirm-modal-overlay" className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/95 backdrop-blur-3xl">
+            <motion.div key="confirm-modal-content" initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
             className="w-full max-w-sm rounded-[2rem] p-6 shadow-2xl border"
             style={{ background: isDark ? "rgba(20,20,36,0.95)" : "rgba(255,255,255,0.95)", borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }}>
             <div className="flex flex-col items-center text-center">
@@ -553,6 +554,7 @@ export default function SettingsPage() {
           </motion.div>
         </div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import {
   AlertTriangle, ChevronRight, ChevronLeft, Pin, ArrowUp, ArrowDown, Wallpaper, Upload, XCircle, Eye, EyeOff,
   Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film,
   BarChart3, Users, UserPlus, MessageSquare, Share2, Plus, ToggleLeft, ToggleRight, Mail, Smartphone,
-  RefreshCcw, Bell, UserCheck
+  RefreshCcw, Bell, UserCheck, Clock
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
 import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, KeyStore } from "@/lib/crypto";
@@ -176,8 +176,51 @@ export default function ChatsPage() {
   const [incomingCall, setIncomingCall] = useState<{ from: Thread; type: CallType; sdp?: RTCSessionDescriptionInit } | null>(null);
   const [ecdhReady, setEcdhReady] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
-  const [selectedUserProfile, setSelectedUserProfile] = useState<Thread | null>(null);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string }>({ name: "", username: "", color: "" });
+
+  const handleBlockUser = (threadId: number) => {
+    if (!threadId) return;
+    setBlockedThreads(prev => {
+      const next = prev.includes(threadId) ? prev : [...prev, threadId];
+      localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
+      return next;
+    });
+    setSelectedProfileUser(null);
+    alert("Node communication blocked.");
+  };
+
+  const handleUnblockUser = (threadId: number) => {
+    if (!threadId) return;
+    setBlockedThreads(prev => {
+      const next = prev.filter(id => id !== threadId);
+      localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
+      return next;
+    });
+    setSelectedProfileUser(null);
+    alert("Node communication restored.");
+  };
+
+  // Fetch full bio/data when a profile is selected
+  useEffect(() => {
+    if (!selectedProfileUser) {
+      setProfileData(null);
+      return;
+    }
+    const fetchProfile = async () => {
+      setLoadingProfile(true);
+      try {
+        const username = selectedProfileUser.username || selectedProfileUser.from_username;
+        const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(username)}`);
+        if (res && res.user) {
+          setProfileData(res.user);
+        }
+      } catch (e) { console.error(e); }
+      finally { setLoadingProfile(false); }
+    };
+    fetchProfile();
+  }, [selectedProfileUser]);
 
   const myUsernameRef = useRef("");
   const isSendingRef = useRef(false);
@@ -814,6 +857,20 @@ export default function ChatsPage() {
         }
       };
       registerUser();
+      
+      const fetchInitialData = async () => {
+        try {
+          const [notifs, reqs] = await Promise.all([
+            nexoraFetch(`/api/notifications?username=${myUsername}`),
+            nexoraFetch(`/api/connections/requests?username=${myUsername}`)
+          ]);
+          if (notifs?.notifications) setNotifications(notifs.notifications);
+          if (reqs?.requests) setPendingRequests(reqs.requests);
+        } catch (e) {
+          console.error("Initial activity fetch failed", e);
+        }
+      };
+      fetchInitialData();
 
       // Re-register on reconnect
       socket.on("connect", () => {
@@ -825,18 +882,19 @@ export default function ChatsPage() {
 
       // 4. Handle incoming DIRECT messages (new per-user system)
       socket.on("dm:message", async (data: any) => {
-        // 🛡️ Case-insensitive comparison using stable ref to prevent own-echo duplication
-        if (data.from?.toLowerCase() === myUsernameRef.current?.toLowerCase()) return;
+        // NOTE: Server now sends 'dm:message' to sender's other devices for sync.
+        // We use msgId de-duplication to prevent local echoes if any.
         const senderUsername = data.from;
         try {
           const decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
+          const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
           const newMsg: ChatMessage = {
             id: data.msgId || Math.random().toString(),
             senderId: senderUsername,
             text: decryptedText,
             timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             createdAt: Date.now(),
-            isSelf: false,
+            isSelf: isFromSelf,
             status: "delivered",
             reactions: {},
             replyTo: data.replyTo,
@@ -886,15 +944,15 @@ export default function ChatsPage() {
 
       // 4b. Handle incoming media DMs
       socket.on("dm:media", (data: any) => {
-        if (data.from?.toLowerCase() === myUsernameRef.current?.toLowerCase()) return;
         const senderUsername = data.from;
+        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
         const newMsg: ChatMessage = {
           id: data.msgId || Math.random().toString(),
           senderId: senderUsername,
           text: data.caption || "",
           timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           createdAt: Date.now(),
-          isSelf: false,
+          isSelf: isFromSelf,
           status: "delivered",
           reactions: {},
           attachment: data.attachment,
@@ -1116,7 +1174,25 @@ export default function ChatsPage() {
       });
     };
     initProtocol();
-    return () => { socketService.disconnect(); };
+    // 🛡️ REMOVED: Global socket disconnect — Dashboard Layout needs it for notifications
+    return () => {
+      const socket = socketService.getSocket();
+      if (socket) {
+        // Clean up common chat-related listeners only
+        socket.off("dm:message");
+        socket.off("dm:media");
+        socket.off("dm:typing");
+        socket.off("dm:seen");
+        socket.off("dm:delete");
+        socket.off("dm:reaction");
+        socket.off("dm:clear_chat");
+        socket.off("key:exchange");
+        socket.off("user_status");
+        socket.off("dm:wallpaper");
+        socket.off("dm:disappear_setting");
+        socket.off("dm:view_once_ack");
+      }
+    };
   }, []);
 
   // ═══ Disappearing Messages "After View" Logic ═══
@@ -2059,59 +2135,74 @@ export default function ChatsPage() {
                          setNotifications([]);
                        }} 
                        className="ml-2 px-3 py-1.5 rounded-lg text-[10px] font-black text-purple-500 bg-purple-500/5 hover:bg-purple-500/10 transition-all border border-purple-500/10 uppercase tracking-widest shrink-0"
-                     >
-                       Clear All
-                     </button>
-                   )}
-                </div>
- 
-                {showNotifications && (
-                  <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} className="mt-2 space-y-2 pl-2">
+                      >
+                        Clear All
+                      </button>
+                    )}
+                 </div>
+                 {showNotifications && (
+                  <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} className="mt-1 space-y-1.5 pl-1 pr-1 pb-2">
+                    {/* Activity items are smaller and more dense here */}
                     {notifications.map(notif => (
-                      <div key={notif.id} className="flex flex-col gap-2 p-3 rounded-xl border relative overflow-hidden" style={{borderColor: "var(--border-subtle)", background: "var(--bg-base)"}}>
-                        {/* Unread dot */}
-                        {!notif.is_read && <div className="absolute top-3 right-3 h-2 w-2 rounded-full bg-purple-500" />}
-                        
-                        <div className="flex items-start gap-3">
-                           <div className="mt-0.5">
+                      <motion.div 
+                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                         key={notif.id} 
+                         className="group flex flex-col gap-1.5 p-2.5 rounded-xl border relative transition-all" 
+                         style={{borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)"}}
+                      >
+                        <div className="flex items-start gap-2.5">
+                           <div className="mt-1">
                               {notif.type === 'request_accepted' ? (
-                                <UserCheck className="w-4 h-4 text-green-500" />
+                                <UserCheck className="w-3.5 h-3.5 text-blue-400" />
+                              ) : notif.type.includes('story') ? (
+                                <Zap className="w-3.5 h-3.5 text-pink-500" />
                               ) : (
-                                <Bell className="w-4 h-4 text-purple-500" />
+                                <Bell className="w-3.5 h-3.5 text-purple-500" />
                               )}
                            </div>
-                           <div className="flex-1 min-w-0 pr-4">
-                              <p className="text-xs break-words font-semibold" style={{color: "var(--text-primary)"}}>{notif.message}</p>
-                              <p className="text-[10px] opacity-70 mt-1" style={{color: "var(--text-muted)"}}>{notif.time}</p>
+                           <div className="flex-1 min-w-0 pr-6 cursor-pointer" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
+                              <p className="text-[11px] leading-tight font-medium" style={{color: "var(--text-primary)"}}>
+                                 {notif.message}
+                              </p>
+                              <p className="text-[9px] opacity-40 mt-0.5 font-bold uppercase tracking-tight">{notif.time}</p>
                            </div>
                         </div>
                         
                         {notif.type === 'request_back_prompt' && (
-                          <div className="mt-1 flex justify-end">
-                             <button
-                               onClick={() => {
-                                 const fakeThread = {"username": notif.from_username};
-                                 handleSendConnectionRequest(fakeThread as any);
+                          <div className="mt-1.5 flex justify-end">
+                             <motion.button
+                               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
+                               onClick={async () => {
+                                 const me = localStorage.getItem("nexora_signup_username") || "";
+                                 try {
+                                   await nexoraFetch("/api/connections/request", {
+                                     method: "POST",
+                                     body: JSON.stringify({ from: me, fromName: me, to: notif.from_username }),
+                                   });
+                                   setNotifications(prev => prev.filter(n => n.id !== notif.id));
+                                   alert(`Follow request sent to @${notif.from_username}`);
+                                 } catch (e) { console.error(e); }
                                }}
-                               className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-white bg-purple-500 hover:bg-purple-600 transition-colors shadow-md shadow-purple-500/20"
+                               className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#00d4ff] border border-[#00d4ff]/20 bg-[#00d4ff]/5 hover:bg-[#00d4ff]/10"
                              >
-                               Request Back
-                             </button>
+                               Follow Back
+                             </motion.button>
                           </div>
                         )}
+                        
                         <button 
-                          className="absolute bottom-2 right-2 text-[10px] font-bold text-blue-500 hover:underline"
+                          className="absolute top-2.5 right-2.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all text-muted-foreground"
                           onClick={() => {
                             setNotifications(prev => prev.filter(n => n.id !== notif.id));
                             nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
                           }}
                         >
-                          Clear
+                          <X className="w-3 h-3" />
                         </button>
-                      </div>
+                      </motion.div>
                     ))}
                   </motion.div>
-                )}
+                                )}
              </div>
           )}
 
@@ -2195,7 +2286,7 @@ export default function ChatsPage() {
                   style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
                   <div className="relative shrink-0">
                     <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color}`} flex items-center justify-center text-white font-bold text-sm shadow-md`}
-                      onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedUserProfile(thread); }}>
+                      onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
                       {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.name[0]}
                     </div>
                     {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
@@ -2957,65 +3048,6 @@ export default function ChatsPage() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {selectedProfileUser && (
-          <UserProfileModal
-            isOpen={!!selectedProfileUser}
-            onClose={() => setSelectedProfileUser(null)}
-            user={selectedProfileUser}
-            onConnect={() => {
-              handleSendConnectionRequest(selectedProfileUser);
-              setSelectedProfileUser(null);
-            }}
-            alreadyRequested={sentRequests.includes(selectedProfileUser.username)}
-            alreadyConnected={threads.some((t: any) => t.username === selectedProfileUser.username)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Profile Modal for existing contacts */}
-      <AnimatePresence>
-        {selectedUserProfile && (
-          <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md" onClick={() => setSelectedUserProfile(null)}>
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl glass-panel relative"
-              style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}
-              onClick={e => e.stopPropagation()}>
-              <div className={`h-32 bg-gradient-to-br ${selectedUserProfile.color} relative`}>
-                <button onClick={() => setSelectedUserProfile(null)} className="absolute top-4 right-4 p-2 rounded-full bg-black/20 text-white hover:bg-black/40"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="px-6 pb-8 -mt-12 text-center">
-                <div className="w-24 h-24 rounded-full border-4 border-[#0c0c14] mx-auto bg-gradient-to-tr from-gray-800 to-black flex items-center justify-center text-3xl font-bold text-white shadow-xl mb-4">
-                  {selectedUserProfile.name[0]}
-                </div>
-                <h2 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>{selectedUserProfile.name}</h2>
-                <p className="text-sm font-medium mb-6" style={{ color: "var(--text-muted)" }}>Protocol Active Since 2024</p>
-
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                  <div className="p-3 rounded-2xl" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.04)" }}>
-                    <p className="text-[10px] uppercase font-bold tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>Status</p>
-                    <p className="text-xs font-bold text-green-500">Encrypted</p>
-                  </div>
-                  <div className="p-3 rounded-2xl" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.04)" }}>
-                    <p className="text-[10px] uppercase font-bold tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>Nodes</p>
-                    <p className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>12 Relay Points</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { startCall("voice"); setSelectedUserProfile(null); }}
-                    className="flex-1 py-3 rounded-xl font-bold text-xs bg-[#6c5ce7] text-white shadow-lg shadow-purple-500/20">Secure Call</button>
-                  <button
-                    onClick={() => { handleBlockThread(); setSelectedUserProfile(null); }}
-                    className="flex-1 py-3 rounded-xl font-bold text-xs border" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(108,92,231,0.2)", color: "var(--text-primary)" }}>Block Port</button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* ═══ FULL SCREEN CALL UI ═══ */}
       <AnimatePresence>
@@ -3310,42 +3342,155 @@ export default function ChatsPage() {
         )}
       </AnimatePresence>
 
+      {/* ═══ PREMIUM USER PROFILE MODAL ═══ */}
+      <AnimatePresence>
+        {selectedProfileUser && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 backdrop-blur-3xl bg-black/50"
+            onClick={() => setSelectedProfileUser(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 40, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 40, opacity: 0 }}
+              className="w-full max-w-[440px] overflow-hidden rounded-[40px] shadow-[0_32px_80px_rgba(0,0,0,0.5)] relative border border-white/10"
+              style={{ background: isDark ? "rgba(18, 18, 30, 0.95)" : "rgba(255, 255, 255, 0.98)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`h-36 w-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} relative`}>
+                <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
+                <button 
+                  onClick={() => setSelectedProfileUser(null)}
+                  className="absolute top-6 right-6 p-2.5 rounded-2xl bg-black/20 hover:bg-black/40 text-white transition-all backdrop-blur-md active:scale-90"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-10 pb-10 -mt-20 relative z-10">
+                <div className="flex flex-col items-center">
+                  <div className={`h-36 w-36 rounded-[36px] bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
+                    <span className="group-hover/avatar:scale-110 transition-transform duration-500">
+                      {selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?'}
+                    </span>
+                    {(selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)) && (
+                      <motion.div 
+                        initial={{ scale: 0 }} animate={{ scale: 1 }}
+                        className="absolute top-2 right-2 h-7 w-7 rounded-full bg-[#2ed573] border-[5px] border-inherit shadow-lg" 
+                      />
+                    )}
+                  </div>
+
+                  <div className="text-center mb-8">
+                    <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>
+                      {selectedProfileUser.name || selectedProfileUser.username}
+                    </h2>
+                    <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
+                      @{selectedProfileUser.username}
+                    </p>
+                    
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm">
+                        Official Node
+                      </span>
+                      <span className="px-3.5 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm">
+                        Encrypted
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full mb-8 p-6 rounded-[32px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 backdrop-blur-md">
+                     <div className="flex items-center gap-2 mb-3 opacity-40">
+                        <Lock className="w-3 h-3" />
+                        <h4 className="text-[10px] uppercase font-black tracking-[0.2em]">Identity Memo</h4>
+                     </div>
+                     <p className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                      {loadingProfile ? (
+                        <span className="opacity-30 italic animate-pulse">Decrypting protocol memo...</span>
+                      ) : profileData?.bio || "No secure bio established for this node yet."}
+                    </p>
+                    <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between opacity-50 font-black text-[10px] tracking-widest uppercase">
+                       <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> EST. {profileData?.created_at ? new Date(profileData.created_at).getFullYear() : '2026'}</div>
+                       <div className="flex items-center gap-2"><Shield className="w-3.5 h-3.5" /> Phase 1.2</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 w-full mb-4">
+                     {threads.some(t => t.username === selectedProfileUser.username) ? (
+                       <>
+                          <motion.button 
+                            whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.95 }}
+                            onClick={() => { setSelectedProfileUser(null); startCall('voice'); }}
+                            className="flex flex-col items-center justify-center gap-3 p-5 rounded-[32px] bg-[#6c5ce7] text-white shadow-xl shadow-purple-500/30 group transition-all"
+                          >
+                            <div className="p-3 rounded-2xl bg-white/15 group-hover:bg-white/20">
+                               <Phone className="w-6 h-6" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Connect Voice</span>
+                          </motion.button>
+                          <motion.button 
+                            whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.95 }}
+                            onClick={() => { setSelectedProfileUser(null); startCall('video'); }}
+                            className="flex flex-col items-center justify-center gap-3 p-5 rounded-[32px] bg-[#00d4ff] text-white shadow-xl shadow-cyan-500/30 group transition-all"
+                          >
+                            <div className="p-3 rounded-2xl bg-white/15 group-hover:bg-white/20">
+                               <Video className="w-6 h-6" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Video Stream</span>
+                          </motion.button>
+                       </>
+                     ) : (
+                       <div className="col-span-2 p-5 rounded-[32px] bg-amber-500/5 border border-amber-500/10 flex flex-col items-center text-center">
+                          <div className="p-2.5 rounded-2xl bg-amber-500/10 mb-2">
+                             <ShieldOff className="w-5 h-5 text-amber-500" />
+                          </div>
+                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Protocol Restriction</p>
+                          <p className="text-[9px] text-amber-600/60 font-bold mt-1">Direct communication requires mutual connection</p>
+                       </div>
+                     )}
+                  </div>
+
+                  <div className="flex gap-3 w-full">
+                    <motion.button 
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                      onClick={() => { 
+                        const thread = threads.find(t => t.username === selectedProfileUser.username);
+                        if (thread) { handleOpenThread(thread); setSelectedProfileUser(null); }
+                      }}
+                      className="flex-1 py-4.5 rounded-[28px] bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      Open Session
+                    </motion.button>
+                    
+                    {blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                        onClick={() => handleUnblockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
+                        className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
+                      >
+                        Unblock
+                      </motion.button>
+                    ) : (
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                        onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
+                        className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
+                      >
+                        Block Node
+                      </motion.button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
 
 function UserProfileModal({ isOpen, onClose, user, onConnect, alreadyRequested, alreadyConnected }: any) {
-  const { isDark } = useTheme();
-  return (
-    <div className={`fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md`} onClick={onClose}>
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-        className="w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl relative"
-        style={{ background: isDark ? "#0c0c14" : "white", border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(108,92,231,0.1)"}` }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className={`h-40 bg-gradient-to-br ${user.color || "from-purple-600 to-blue-600"} relative`}>
-          <button onClick={onClose} className="absolute top-6 right-6 p-2 rounded-full bg-black/20 text-white hover:bg-black/40"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="px-8 pb-10 -mt-16 text-center">
-          <div className="w-32 h-32 rounded-full border-8 border-[#0c0c14] mx-auto bg-gradient-to-tr from-gray-800 to-black flex items-center justify-center text-4xl font-extrabold text-white shadow-2xl mb-6">
-            {user.fullName?.[0] || user.username?.[0]?.toUpperCase()}
-          </div>
-          <h2 className="text-2xl font-black mb-1" style={{ color: "var(--text-primary)" }}>{user.fullName}</h2>
-          <p className="text-sm font-bold text-[#6c5ce7] mb-6">@{user.username}</p>
-
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="p-4 rounded-3xl" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.04)", border: "1px solid rgba(108,92,231,0.1)" }}>
-              <p className="text-[10px] uppercase font-black tracking-widest mb-1 opacity-50" style={{ color: "var(--text-primary)" }}>Status</p>
-              <p className="text-xs font-extrabold text-green-500">Verified</p>
-            </div>
-            <div className="p-4 rounded-3xl" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.04)", border: "1px solid rgba(108,92,231,0.1)" }}>
-              <p className="text-[10px] uppercase font-black tracking-widest mb-1 opacity-50" style={{ color: "var(--text-primary)" }}>Security</p>
-              <p className="text-xs font-extrabold" style={{ color: "var(--text-primary)" }}>End-to-End</p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
+    return null; // Deprecated - Integrated into ChatsPage for high performance
 }
