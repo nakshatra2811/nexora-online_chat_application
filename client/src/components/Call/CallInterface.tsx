@@ -63,29 +63,32 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const [isFlipping, setIsFlipping] = useState(false);
 
-  // Attach local stream to video element
+  // ── Always play remote audio (works for BOTH voice and video calls) ──
+  // This hidden <audio> element ensures voice is always audible regardless
+  // of whether the video element is visible.
+  useEffect(() => {
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  }, [remoteStream]);
+
+  // ── Attach local stream to local video PIP ──
   useEffect(() => {
     if (localVideoRef.current && localStream) {
-      if (localVideoRef.current.srcObject !== localStream) {
-        localVideoRef.current.srcObject = localStream;
-        localVideoRef.current
-          .play()
-          .catch((e) => console.warn("[CallInterface] Local video play error:", e));
-      }
+      localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(() => {});
     }
   }, [localStream]);
 
-  // Attach remote stream to video element
+  // ── Attach remote stream to remote video element ──
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      if (remoteVideoRef.current.srcObject !== remoteStream) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current
-          .play()
-          .catch((e) => console.warn("[CallInterface] Remote video play error:", e));
-      }
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(() => {});
     }
   }, [remoteStream]);
 
@@ -119,6 +122,10 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
       }`}
       onClick={() => !isFullscreen && onMaximize()}
     >
+      {/* ── CRITICAL: Hidden audio element for remote voice playback ── */}
+      {/* This ensures remote audio is ALWAYS audible for both voice AND video calls */}
+      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: "none" }} />
+
       {/* ── Top Header Controls ──────────────────────────────── */}
       <AnimatePresence>
         {isFullscreen && (

@@ -27,6 +27,8 @@ export interface CallEvents {
 export class WebRTCService {
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
+  private remoteStream: MediaStream | null = null;
+  private _connected = false;
   private events: CallEvents | null = null;
   private targetUserId: string | null = null;
   private callType: CallType = "voice";
@@ -86,7 +88,9 @@ export class WebRTCService {
         try {
           await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           await this._processPendingIce();
-          this.events?.onCallConnected();
+          // DO NOT call onCallConnected here — wait for actual P2P connection
+          // (connectionstatechange === 'connected') so timer starts only after
+          // audio/video is actually flowing
         } catch (e) {
           console.error("[WebRTC] Failed to set remote description (answer):", e);
         }
@@ -141,14 +145,29 @@ export class WebRTCService {
 
   private _createPC() {
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    this._connected = false;
 
-    // Handle incoming remote tracks
+    // Persistent remote stream — tracks accumulate here
+    // (audio and video ontrack events fire separately)
+    this.remoteStream = new MediaStream();
+
+    // Handle incoming remote tracks — ACCUMULATE into one stream
     this.pc.ontrack = (event) => {
-      console.log("[WebRTC] Remote track received:", event.track.kind);
-      const stream = event.streams[0] ?? new MediaStream([event.track]);
-      // Force a new reference so React re-renders
-      const cloned = new MediaStream(stream.getTracks());
-      this.events?.onRemoteStream(cloned);
+      console.log("[WebRTC] Remote track received:", event.track.kind,
+        "readyState:", event.track.readyState);
+
+      // Add track to our persistent remoteStream
+      if (this.remoteStream) {
+        // Remove existing track of same kind if any (prevents duplicates)
+        const existing = this.remoteStream.getTracks().find(t => t.kind === event.track.kind);
+        if (existing) this.remoteStream.removeTrack(existing);
+        this.remoteStream.addTrack(event.track);
+      }
+
+      // Clone the full accumulated stream so React gets a new object reference
+      // and re-renders the video element with ALL tracks (audio + video)
+      const fullStream = new MediaStream(this.remoteStream!.getTracks());
+      this.events?.onRemoteStream(fullStream);
     };
 
     // ICE candidate relay
@@ -162,11 +181,12 @@ export class WebRTCService {
       }
     };
 
-    // Connection state monitoring
+    // Connection state monitoring — ONLY source of onCallConnected
     this.pc.onconnectionstatechange = () => {
       const state = this.pc?.connectionState;
       console.log("[WebRTC] Connection state:", state);
-      if (state === "connected") {
+      if (state === "connected" && !this._connected) {
+        this._connected = true;
         this.events?.onCallConnected();
       }
       if (state === "disconnected" || state === "failed" || state === "closed") {
@@ -178,6 +198,12 @@ export class WebRTCService {
       const state = this.pc?.iceConnectionState;
       if (state) {
         this.events?.onIceConnectionChange?.(state);
+        // Fallback: some browsers fire iceConnectionState 'connected'
+        // but not connectionState 'connected'
+        if (state === "connected" && !this._connected) {
+          this._connected = true;
+          this.events?.onCallConnected();
+        }
       }
     };
   }
@@ -416,9 +442,11 @@ export class WebRTCService {
       this.pc = null;
     }
 
+    this.remoteStream = null;
     this.targetUserId = null;
     this.pendingIceCandidates = [];
     this.currentFacingMode = "user";
+    this._connected = false;
 
     const cb = this.events?.onCallEnded;
     this.events = null;
