@@ -10,7 +10,7 @@ import {
   AlertTriangle, ChevronRight, ChevronLeft, Pin, ArrowUp, ArrowDown, Wallpaper, Upload, XCircle, Eye, EyeOff,
   Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film, Heart,
   BarChart3, Users, UserPlus, MessageSquare, Share2, Plus, ToggleLeft, ToggleRight, Mail, Smartphone,
-  RefreshCcw, Bell, UserCheck, Clock
+  RefreshCcw, Bell, UserCheck, Clock, Star
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
 import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, KeyStore } from "@/lib/crypto";
@@ -1705,6 +1705,12 @@ export default function ChatsPage() {
     }
   };
 
+  useEffect(() => {
+    if (liveVideoRef.current && cameraView.stream) {
+      liveVideoRef.current.srcObject = cameraView.stream;
+    }
+  }, [cameraView.stream, cameraView.active]);
+
   const flipSnapCamera = async () => {
     const newMode = cameraView.facingMode === "user" ? "environment" : "user";
     if (cameraView.stream) {
@@ -2152,10 +2158,28 @@ export default function ChatsPage() {
 
   const TickIcon = ({ status, isSelf }: { status: string; isSelf: boolean }) => {
     if (!isSelf) return null;
-    if (status === "sending") return <Check className="w-3 h-3 opacity-40" />;
-    if (status === "delivered") return <CheckCheck className="w-3 h-3" style={{ color: "rgba(255,255,255,0.6)" }} />;
-    if (status === "seen") return <CheckCheck className="w-3 h-3" style={{ color: "#00d4ff" }} />;
-    return null;
+    return (
+      <div className="relative flex items-center justify-center w-4 h-4 ml-0.5">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {status === "sending" && (
+            <motion.div key="sending" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="absolute">
+              <Check className="w-3.5 h-3.5 text-white" />
+            </motion.div>
+          )}
+          {status === "delivered" && (
+            <motion.div key="delivered" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5, rotate: -90 }} transition={{ duration: 0.3 }} className="absolute">
+              <CheckCheck className="w-3.5 h-3.5 text-white" />
+            </motion.div>
+          )}
+          {status === "seen" && (
+            <motion.div key="seen" initial={{ opacity: 0, scale: 0.3, rotate: 90 }} animate={{ opacity: 1, scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className="absolute flex -space-x-1.5 drop-shadow-[0_0_5px_rgba(250,204,21,0.6)]">
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 mt-0.5" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
   };
 
   const surface = (alpha: number) => isDark ? `rgba(18,18,28,${alpha})` : `rgba(255,255,255,${alpha})`;
@@ -2350,7 +2374,7 @@ export default function ChatsPage() {
           {/* Online Users Horizontal Scroll */}
           <div className="flex gap-3 overflow-x-auto pb-4 pt-1 px-1 mb-2 no-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={() => { window.location.href = '/dashboard/stories'; }}
+                onClick={() => { window.location.href = '/dashboard/stories?user=me'; }}
                 className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                 <div className="relative">
                 <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
@@ -2387,7 +2411,7 @@ export default function ChatsPage() {
               
               return (
                 <motion.div key={user.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => hasStory ? (window.location.href = '/dashboard/stories') : handleOpenThread(user)}
+                  onClick={() => hasStory ? (window.location.href = `/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                   <div className="relative">
                     <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
@@ -2974,83 +2998,180 @@ export default function ChatsPage() {
               )}
 
               {/* Input Field / Audio Preview / Recording */}
-              {audioPreviewUrl ? (
-                <div className="flex-1 flex items-center bg-black/5 dark:bg-white/5 rounded-2xl p-2 gap-3 mx-2">
-                  <motion.button whileHover={{ scale: 1.1 }} onClick={() => { if(audioPreviewRef.current) { audioPreviewRef.current.paused ? audioPreviewRef.current.play() : audioPreviewRef.current.pause(); setIsPlayingPreview(!audioPreviewRef.current.paused); } }} className="w-8 h-8 rounded-full bg-[#6c5ce7] text-white flex items-center justify-center shrink-0">
-                    {isPlayingPreview ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                  </motion.button>
-                  <div className="flex-1 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
-                     <div className="h-full bg-[#6c5ce7] rounded-full" style={{ width: isPlayingPreview ? '100%' : '0%', transition: 'width 2s linear' }} />
-                  </div>
-                  <span className="text-xs font-bold font-mono">{fmt(recordingTime)}</span>
-                  <audio ref={audioPreviewRef} src={audioPreviewUrl} onEnded={() => setIsPlayingPreview(false)} className="hidden" />
-                  <button onClick={cancelAudioPreview} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
-                </div>
-              ) : isRecording ? (
-                <div className="flex-1 flex items-center bg-red-500/10 rounded-2xl px-4 py-2 mx-1 gap-4">
-                  <div className="flex items-center gap-2 text-red-500 font-bold shrink-0">
-                    <div className={`w-2.5 h-2.5 rounded-full bg-red-500 ${isRecordingPaused ? "" : "animate-pulse"}`} />
-                    {fmt(recordingTime)}
-                  </div>
-                  <div className="flex-1 flex items-center justify-center gap-1 opacity-70">
-                    {visualizerData.map((val, i) => (
-                      <motion.div key={i} 
-                         animate={{ height: isRecordingPaused ? 4 : val }}
-                         transition={{ duration: 0.05, ease: "linear" }}
-                         className="w-1 bg-red-500 rounded-full inline-block" 
-                      />
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2">
-                     <button onClick={isRecordingPaused ? resumeRecording : pauseRecording} className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center hover:scale-110 transition-transform">
-                        {isRecordingPaused ? <Play className="w-3.5 h-3.5 ml-0.5" /> : <Pause className="w-3.5 h-3.5" />}
-                     </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 neumorphic-input rounded-2xl flex items-center px-4 py-2.5 h-11">
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => handleInputChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault(); // 🚫 Prevent default form behavior/bubbles
-                        handleSendMessage();
-                      }
+              <AnimatePresence mode="wait" initial={false}>
+                {audioPreviewUrl ? (
+                  /* ── AUDIO PREVIEW BAR ── */
+                  <motion.div
+                    key="audio-preview"
+                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 8 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex-1 flex items-center gap-3 mx-1 px-3 py-2 rounded-2xl border"
+                    style={{
+                      background: isDark ? "linear-gradient(135deg,rgba(108,92,231,0.18),rgba(0,212,255,0.10))" : "linear-gradient(135deg,rgba(108,92,231,0.10),rgba(0,212,255,0.07))",
+                      borderColor: isDark ? "rgba(108,92,231,0.35)" : "rgba(108,92,231,0.20)",
+                      backdropFilter: "blur(12px)",
                     }}
-                    placeholder="Type message..."
-                    className="w-full bg-transparent outline-none text-sm font-medium"
-                    style={{ color: "var(--text-primary)" }}
-                  />
-                </div>
-              )}
+                  >
+                    {/* Play/Pause */}
+                    <motion.button
+                      whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.92 }}
+                      onClick={() => {
+                        if (!audioPreviewRef.current) return;
+                        if (audioPreviewRef.current.paused) { audioPreviewRef.current.play(); setIsPlayingPreview(true); }
+                        else { audioPreviewRef.current.pause(); setIsPlayingPreview(false); }
+                      }}
+                      className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-lg"
+                      style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}
+                    >
+                      {isPlayingPreview ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
+                    </motion.button>
 
-              {/* Recording & Send */}
-              <div className="flex items-center gap-2">
+                    {/* Waveform progress bar */}
+                    <div className="flex-1 flex flex-col gap-1">
+                      <div className="relative h-2 rounded-full overflow-hidden" style={{ background: "rgba(108,92,231,0.18)" }}>
+                        <motion.div
+                          className="absolute left-0 top-0 h-full rounded-full"
+                          style={{ background: "linear-gradient(90deg,#6c5ce7,#00d4ff)" }}
+                          animate={{ width: isPlayingPreview ? "100%" : "0%" }}
+                          transition={{ duration: recordingTime, ease: "linear" }}
+                        />
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[10px] font-bold text-[#6c5ce7]">🎙 Voice</span>
+                        <span className="text-[10px] font-mono font-bold opacity-60">{fmt(recordingTime)}</span>
+                      </div>
+                    </div>
+
+                    <audio ref={audioPreviewRef} src={audioPreviewUrl} onEnded={() => setIsPlayingPreview(false)} className="hidden" />
+
+                    {/* Trash */}
+                    <motion.button whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                      onClick={cancelAudioPreview}
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-500/15 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </motion.button>
+
+                    {/* SEND BUTTON — inside the preview bar so it's always visible */}
+                    <motion.button
+                      whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
+                      onClick={sendAudioPreview}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg text-white"
+                      style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}
+                    >
+                      <Send className="w-4 h-4 ml-0.5" />
+                    </motion.button>
+                  </motion.div>
+
+                ) : isRecording ? (
+                  /* ── LIVE RECORDING BAR ── */
+                  <motion.div
+                    key="recording"
+                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 8 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex-1 flex items-center gap-3 mx-1 px-4 py-2.5 rounded-2xl border"
+                    style={{
+                      background: isDark ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.07)",
+                      borderColor: "rgba(239,68,68,0.30)",
+                    }}
+                  >
+                    {/* Pulse dot + timer */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`w-2.5 h-2.5 rounded-full bg-red-500 ${isRecordingPaused ? "opacity-40" : "animate-pulse"}`} />
+                      <span className="text-red-500 font-bold font-mono text-sm">{fmt(recordingTime)}</span>
+                    </div>
+
+                    {/* Live Waveform */}
+                    <div className="flex-1 flex items-end justify-center gap-[2px] h-8 overflow-hidden">
+                      {visualizerData.map((val, i) => (
+                        <motion.span
+                          key={i}
+                          animate={{ height: isRecordingPaused ? 4 : Math.max(4, val * 0.28) }}
+                          transition={{ duration: 0.06, ease: "linear" }}
+                          className="inline-block rounded-full shrink-0"
+                          style={{
+                            width: 3,
+                            background: isRecordingPaused
+                              ? "rgba(239,68,68,0.35)"
+                              : `hsl(${345 - i * 4},90%,60%)`,
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Pause / Resume */}
+                    <motion.button whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                      onClick={isRecordingPaused ? resumeRecording : pauseRecording}
+                      className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shrink-0">
+                      {isRecordingPaused ? <Play className="w-3.5 h-3.5 ml-0.5" /> : <Pause className="w-3.5 h-3.5" />}
+                    </motion.button>
+
+                    {/* Stop → goes to preview */}
+                    <motion.button whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                      onClick={stopRecording}
+                      className="w-8 h-8 rounded-full text-white flex items-center justify-center shrink-0 shadow-md"
+                      style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}>
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                    </motion.button>
+                  </motion.div>
+
+                ) : (
+                  /* ── NORMAL TEXT INPUT ── */
+                  <motion.div
+                    key="text-input"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex-1 neumorphic-input rounded-2xl flex items-center px-4 py-2.5 h-11"
+                  >
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => handleInputChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); handleSendMessage(); }
+                      }}
+                      placeholder="Type message..."
+                      className="w-full bg-transparent outline-none text-sm font-medium"
+                      style={{ color: "var(--text-primary)" }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Right-side action buttons (mic / send) */}
+              <AnimatePresence mode="popLayout" initial={false}>
                 {!audioPreviewUrl && !inputValue.trim() && (
-                  <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${isRecording ? "bg-red-500 text-white shadow-lg shadow-red-500/20" : "neumorphic-btn text-[var(--text-secondary)]"}`}>
-                    {isRecording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-5 h-5" />}
+                  /* MIC button — start recording */
+                  <motion.button
+                    key="mic-btn"
+                    initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
+                    whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                    onClick={isRecording ? undefined : startRecording}
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isRecording ? "bg-red-500 text-white shadow-lg shadow-red-500/25" : "neumorphic-btn text-[var(--text-secondary)]"}`}
+                  >
+                    <Mic className="w-5 h-5" />
                   </motion.button>
                 )}
 
-                {audioPreviewUrl ? (
-                  <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                    onClick={sendAudioPreview}
-                    className="w-10 h-10 rounded-2xl flex items-center justify-center bg-[#6c5ce7] text-white shadow-lg shadow-purple-500/30">
-                    <Send className="w-5 h-5 ml-0.5" />
-                  </motion.button>
-                ) : (!isRecording && (
-                  <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                {/* SEND button (text or audio-already-has-its-own-send, so only show for text) */}
+                {!audioPreviewUrl && !isRecording && (
+                  <motion.button
+                    key="send-btn"
+                    initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }}
+                    whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                     onClick={handleSendMessage}
                     disabled={!inputValue.trim()}
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${inputValue.trim() ? "bg-[#6c5ce7] text-white shadow-xl shadow-purple-500/30" : "glass-panel opacity-40 text-muted"}`}>
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${inputValue.trim() ? "bg-[#6c5ce7] text-white shadow-xl shadow-purple-500/30" : "glass-panel opacity-40 text-muted"}`}
+                  >
                     <Send className="w-5 h-5 ml-0.5" />
                   </motion.button>
-                ))}
-              </div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -3472,29 +3593,26 @@ export default function ChatsPage() {
                     
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
                       <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-                        Official Node
+                        Nexora User
                       </span>
                       <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-                        Encrypted
+                        🔒 End-to-End Encrypted
                       </span>
                     </div>
                   </div>
 
                   <div className="w-full mb-8 p-6 rounded-[32px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 backdrop-blur-md">
-                     <div className="flex items-center gap-2 mb-3 opacity-40">
-                        <Lock className="w-3 h-3" />
-                        <h4 className="text-[10px] uppercase font-black tracking-[0.2em]">Identity Memo</h4>
+                     <div className="flex items-center gap-2 mb-3 opacity-50">
+                        <span className="text-base">📝</span>
+                        <h4 className="text-[11px] uppercase font-black tracking-[0.15em]" style={{ color: "var(--text-primary)" }}>About Me</h4>
                      </div>
                      <div className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                       {loadingProfile ? (
                         <div className="py-2">
-                           <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Decrypting memo..." />
+                           <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Loading..." />
                         </div>
-                      ) : profileData?.bio || "No secure bio established for this node yet."}
+                      ) : profileData?.bio ? profileData.bio : <span className="opacity-50 italic">No bio yet.</span>}
                     </div>
-                     <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-center opacity-40 font-black text-[9px] tracking-[0.3em] uppercase">
-                        SECURE NODE ACCESS &bull; ENCRYPTED PROTOCOL
-                     </div>
                   </div>
 
                   {/* Voice/Video calls removed per user request */}
@@ -3509,7 +3627,7 @@ export default function ChatsPage() {
                       className="flex-1 py-4.5 rounded-[28px] bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      Open Session
+                      Message
                     </motion.button>
                     
                     {blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
@@ -3526,7 +3644,7 @@ export default function ChatsPage() {
                         onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
                         className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
                       >
-                        Block Node
+                        Block
                       </motion.button>
                     )}
                   </div>

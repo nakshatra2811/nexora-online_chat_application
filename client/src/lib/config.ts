@@ -17,6 +17,7 @@ export const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774
 export async function nexoraFetch(endpoint: string, options: RequestInit = {}) {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      cache: 'no-store',
       ...options,
       headers: {
         'Content-Type': 'application/json',

@@ -33,6 +33,7 @@ interface CallInterfaceProps {
   isMuted: boolean;
   isVideoOff: boolean;
   isFullscreen: boolean;
+  facingMode?: "user" | "environment";
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   onToggleMute: () => void;
@@ -52,6 +53,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   isMuted,
   isVideoOff,
   isFullscreen,
+  facingMode = "user",
   localStream,
   remoteStream,
   onToggleMute,
@@ -294,7 +296,11 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
                 playsInline
                 muted
                 className={`w-full h-full object-cover transition-all duration-300 ${
-                  isFlipping ? "scale-x-0 opacity-0" : "scale-x-[-1] opacity-100"
+                  isFlipping 
+                    ? "scale-x-0 opacity-0" 
+                    : facingMode === "environment" 
+                      ? "scale-x-100 opacity-100" 
+                      : "scale-x-[-1] opacity-100"
                 }`}
               />
             )}

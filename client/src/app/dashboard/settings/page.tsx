@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, Shield, Palette, Lock, Moon, Zap, Video,
   KeyRound, Eye, EyeOff, ChevronRight, Check,
-  HelpCircle, RefreshCw, Smartphone, X
+  HelpCircle, RefreshCw, Smartphone, X, LogOut
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
@@ -379,6 +379,18 @@ export default function SettingsPage() {
     setConfirmSetting({ si: sectionIdx, ii: itemIdx, label });
   };
 
+  const handleLogout = () => {
+    // Clear cookies and local user data
+    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    localStorage.removeItem("nexora_assigned_role");
+    localStorage.removeItem("nexora_signup_username");
+    localStorage.removeItem("nexora_signup_name");
+    localStorage.removeItem("nexora_signup_email");
+    localStorage.removeItem("nexora_signup_phone");
+    localStorage.removeItem("nexora_signup_color");
+    router.push("/auth");
+  };
+
   const handleDangerZone = (action: string) => {
     setConfirmSetting({ si: -1, ii: -1, label: action, isDanger: true });
   };
@@ -406,11 +418,24 @@ export default function SettingsPage() {
         { size: 260, x: "-5%", y: "55%", color: "#2ed573", duration: 16, delay: 3, blur: 90 },
       ]} />
 
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 relative z-10 text-right sm:text-left">
-        <h1 className="text-4xl font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm flex items-center justify-end sm:justify-start gap-2" style={{ color: "var(--text-muted)" }}>
-          <Shield className="w-4 h-4" /><span>Configure your Nexora privacy account.</span>
-        </p>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-5 w-full max-w-5xl">
+        <div className="text-left">
+          <h1 className="text-4xl font-extrabold tracking-tight">Settings</h1>
+          <p className="mt-1 text-sm flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
+            <Shield className="w-4 h-4" /><span>Configure your Nexora privacy account.</span>
+          </p>
+        </div>
+        
+        <motion.button 
+          whileHover={{ scale: 1.05 }} 
+          whileTap={{ scale: 0.95 }}
+          onClick={handleLogout}
+          className="flex items-center justify-center gap-2 px-6 py-3 sm:py-2.5 rounded-xl text-sm font-bold w-full sm:w-auto shadow-lg backdrop-blur-md transition-all border"
+          style={{ background: "rgba(225, 29, 72, 0.15)", color: "#f43f5e", borderColor: "rgba(225, 29, 72, 0.3)" }}
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Secure Logout</span>
+        </motion.button>
       </motion.div>
 
       {/* ─── LOCK SYSTEMS ─── */}

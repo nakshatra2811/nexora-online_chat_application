@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical } from "lucide-react";
+import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical, RefreshCcw } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 
 const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
+
+// Zero-pads a number to always be at least 4 digits wide (e.g. 3 → "0003", 1024 → "1024")
+const padCount = (n: number) => String(n).padStart(4, "0");
 
 const getTimeAgo = (dateStr: string, currentTime: number) => {
   const date = new Date(dateStr);
@@ -53,7 +56,7 @@ export default function StoriesPage() {
   };
 
   // Real-time Camera
-  const [cameraView, setCameraView] = useState<{ active: boolean; stream: MediaStream | null; capturedUrl: string | null }>({ active: false, stream: null, capturedUrl: null });
+  const [cameraView, setCameraView] = useState<{ active: boolean; stream: MediaStream | null; capturedUrl: string | null; facingMode: "user" | "environment" }>({ active: false, stream: null, capturedUrl: null, facingMode: "environment" });
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   
   // Real-time viewer tracking
@@ -231,6 +234,37 @@ export default function StoriesPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Handle URL params for auto-opening stories or camera
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetUser = urlParams.get('user');
+    const action = urlParams.get('action');
+
+    if (action === 'camera' && !cameraView.active) {
+       startCameraView();
+       // Clean up URL so it doesn't trigger again on re-renders
+       const newUrl = window.location.pathname;
+       window.history.replaceState({}, '', newUrl);
+    } else if (targetUser && !activeStory) {
+       const myUsername = localStorage.getItem("nexora_signup_username");
+       if (targetUser === myUsername || targetUser === 'me') {
+          if (myStories.length > 0) {
+            setActiveStory(myStories[0]);
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+          }
+       } else {
+          const userStories = allOtherStories.filter((s: any) => s.username === targetUser);
+          if (userStories.length > 0) {
+            setActiveStory(userStories[0]);
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+          }
+       }
+    }
+  }, [myStories, allOtherStories, cameraView.active]);
+
   useEffect(() => {
     if (cameraView.active && !cameraView.capturedUrl && cameraView.stream && liveVideoRef.current) {
       liveVideoRef.current.srcObject = cameraView.stream;
@@ -274,6 +308,50 @@ export default function StoriesPage() {
     return () => document.body.classList.remove("chat-active");
   }, [activeStory]);
 
+  const advanceStory = (direction: "next" | "prev" = "next") => {
+    setActiveStory((prev: any) => {
+      if (!prev) return null;
+      
+      const username = prev.username;
+      const myUsername = localStorage.getItem("nexora_signup_username");
+      const currentStories = username === myUsername 
+        ? myStories
+        : otherStories.find(g => g.username === username)?.stories || [];
+      
+      const internalIdx = currentStories.findIndex((s: any) => s.id === prev.id);
+      
+      if (direction === "next") {
+        if (internalIdx >= 0 && internalIdx < currentStories.length - 1) {
+          return currentStories[internalIdx + 1];
+        }
+        if (username === myUsername) {
+           return otherStories.length > 0 ? otherStories[0].stories[0] : null;
+        }
+        const groupIdx = otherStories.findIndex((g) => g.username === username);
+        if (groupIdx >= 0 && groupIdx < otherStories.length - 1) {
+          return otherStories[groupIdx + 1].stories[0];
+        }
+        return null; // End of stories
+      } else {
+        if (internalIdx > 0) {
+          return currentStories[internalIdx - 1];
+        }
+        if (username === myUsername) {
+           return null; // Can't go back further
+        }
+        const groupIdx = otherStories.findIndex((g) => g.username === username);
+        if (groupIdx > 0) {
+          const prevGroup = otherStories[groupIdx - 1].stories;
+          return prevGroup[prevGroup.length - 1];
+        } else if (myStories.length > 0) {
+          return myStories[myStories.length - 1];
+        }
+        return null;
+      }
+    });
+    setProgress(0);
+  };
+
   useEffect(() => {
     if (!activeStory || isPaused) {
       if (progressRef.current) clearInterval(progressRef.current);
@@ -283,33 +361,7 @@ export default function StoriesPage() {
     progressRef.current = setInterval(() => {
       setProgress((p) => {
         if (p >= 100) {
-          setActiveStory((prev: any) => {
-            if (!prev) return null;
-            
-            // 1. Is there another story for the SAME user?
-            const username = prev.username;
-            const currentStories = username === myUsername 
-              ? myStories
-              : otherStories.find(g => g.username === username)?.stories || [];
-            
-            const internalIdx = currentStories.findIndex((s: any) => s.id === prev.id);
-            if (internalIdx >= 0 && internalIdx < currentStories.length - 1) {
-              return currentStories[internalIdx + 1];
-            }
-
-            // 2. No more stories for this user, find NEXT user
-            if (username === myUsername) {
-               // If it was my story, go to first other user
-               return otherStories.length > 0 ? otherStories[0].stories[0] : null;
-            }
-
-            const groupIdx = otherStories.findIndex((g) => g.username === username);
-            if (groupIdx >= 0 && groupIdx < otherStories.length - 1) {
-              return otherStories[groupIdx + 1].stories[0];
-            }
-            
-            return null; // End of stories
-          });
+          advanceStory("next");
           return 0;
         }
         return p + 0.5; // 5 seconds total (100 / 0.5 * 25ms ≈ 5s)
@@ -391,34 +443,148 @@ export default function StoriesPage() {
   const handleNewSnap = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = await new Promise<string>((resolve) => {
+    
+    const fileDataUrl = await new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onload = (ev) => resolve(ev.target?.result as string);
       reader.readAsDataURL(file);
     });
+
+    // Create an image to read dimensions
+    const img = new Image();
+    img.src = fileDataUrl;
+    await new Promise<void>((resolve) => {
+      img.onload = () => resolve();
+    });
+
+    // Force 1080x1920 (9:16)
+    const targetW = 1080;
+    const targetH = 1920;
+    const targetAspect = targetW / targetH;
+    const imgAspect = img.width / img.height;
+
+    let drawW, drawH, drawX, drawY;
+
+    if (imgAspect > targetAspect) {
+      // Image is too wide, crop sides
+      drawH = img.height;
+      drawW = img.height * targetAspect;
+      drawX = (img.width - drawW) / 2;
+      drawY = 0;
+    } else {
+      // Image is too tall
+      drawW = img.width;
+      drawH = img.width / targetAspect;
+      drawX = 0;
+      drawY = (img.height - drawH) / 2;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
     
-    // Instead of immediate submit, show preview
-    setCameraView({ active: true, stream: null, capturedUrl: url });
+    if (ctx) {
+      // White background for safety
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.drawImage(img, drawX, drawY, drawW, drawH, 0, 0, targetW, targetH);
+      const url = canvas.toDataURL("image/jpeg", 0.9);
+      
+      setCameraView({ active: true, stream: null, capturedUrl: url, facingMode: "environment" });
+    } else {
+      // Fallback
+      setCameraView({ active: true, stream: null, capturedUrl: fileDataUrl, facingMode: "environment" });
+    }
+
     if (e.target) e.target.value = '';
   };
 
-  const startCameraView = async () => {
+  const startCameraView = async (facingMode: "user" | "environment" = "environment") => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      setCameraView({ active: true, stream, capturedUrl: null });
+      // 1. First try to force exact facing mode (solves mobile stubbornness)
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: { exact: facingMode },
+              width: { ideal: 1080 },
+              height: { ideal: 1920 }
+            } 
+        });
+      } catch (err) {
+        // Fallback for laptops/desktops with only one camera
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode,
+              width: { ideal: 1080 },
+              height: { ideal: 1920 }
+            } 
+        });
+      }
+      setCameraView({ active: true, stream, capturedUrl: null, facingMode });
     } catch {
       alert("Camera access denied. Opening file picker instead.");
       fileInputRef.current?.click();
     }
   };
 
+
+
+  const flipCamera = async () => {
+    const newMode = cameraView.facingMode === "user" ? "environment" : "user";
+    if (cameraView.stream) {
+      cameraView.stream.getTracks().forEach(t => t.stop());
+    }
+    await startCameraView(newMode);
+  };
+
   const capturePhoto = () => {
     if (!liveVideoRef.current) return;
+    const video = liveVideoRef.current;
+    
+    // Force 1080x1920 (9:16 Aspect Ratio) exactly
+    const targetW = 1080;
+    const targetH = 1920;
+    const targetAspect = targetW / targetH;
+    
+    const videoW = video.videoWidth;
+    const videoH = video.videoHeight;
+    const videoAspect = videoW / videoH;
+    
+    let drawW, drawH, drawX, drawY;
+    
+    if (videoAspect > targetAspect) {
+      // Video is too wide, crop horizontally
+      drawH = videoH;
+      drawW = videoH * targetAspect;
+      drawX = (videoW - drawW) / 2;
+      drawY = 0;
+    } else {
+      // Video is too tall, crop vertically
+      drawW = videoW;
+      drawH = videoW / targetAspect;
+      drawX = 0;
+      drawY = (videoH - drawH) / 2;
+    }
+
     const canvas = document.createElement("canvas");
-    canvas.width = liveVideoRef.current.videoWidth;
-    canvas.height = liveVideoRef.current.videoHeight;
-    canvas.getContext("2d")?.drawImage(liveVideoRef.current, 0, 0);
-    const url = canvas.toDataURL("image/jpeg", 0.8);
+    canvas.width = targetW;
+    canvas.height = targetH;
+    
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    
+    // Mirror the image if it's the front camera so it captures as the user sees it
+    if (cameraView.facingMode === "user") {
+      ctx.translate(targetW, 0);
+      ctx.scale(-1, 1);
+    }
+    
+    // Draw cropped portion from video exactly into 1080x1920 canvas
+    ctx.drawImage(video, drawX, drawY, drawW, drawH, 0, 0, targetW, targetH);
+    
+    const url = canvas.toDataURL("image/jpeg", 0.9);
     setCameraView(p => ({ ...p, capturedUrl: url }));
   };
 
@@ -457,7 +623,7 @@ export default function StoriesPage() {
     if (cameraView.stream) {
       cameraView.stream.getTracks().forEach(t => t.stop());
     }
-    setCameraView({ active: false, stream: null, capturedUrl: null });
+    setCameraView({ active: false, stream: null, capturedUrl: null, facingMode: "environment" });
   };
 
   const handleDeleteStory = async (storyId: number) => {
@@ -517,7 +683,7 @@ export default function StoriesPage() {
         <motion.button
           whileHover={{ scale: 1.05, boxShadow: "0 0 28px rgba(108,92,231,0.45)" }}
           whileTap={{ scale: 0.95 }}
-          onClick={startCameraView}
+          onClick={() => startCameraView()}
           className="flex items-center gap-2 px-5 py-3 rounded-full text-white font-bold text-sm shadow-lg"
           style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
           <Camera className="w-4 h-4" />
@@ -570,12 +736,12 @@ export default function StoriesPage() {
                 <Plus className="w-4 h-4 text-white stroke-[3px]" />
               </motion.div>
 
-              {/* View + Like Count Badge */}
+              {/* View + Like Count Badge — with zero-padded 4-digit format */}
               {myStories.length > 0 && (
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap">
-                  <Eye className="w-3 h-3" /> {myStories.reduce((acc, s) => acc + (s.views || 0), 0)}
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap font-mono tracking-widest">
+                  <Eye className="w-3 h-3 shrink-0" /> {padCount(myStories.reduce((acc, s) => acc + (s.views || 0), 0))}
                   <span className="opacity-30">·</span>
-                  <Heart className="w-3 h-3 text-[#ff006e]" fill="#ff006e" /> {myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0)}
+                  <Heart className="w-3 h-3 text-[#ff006e] shrink-0" fill="#ff006e" /> {padCount(myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0))}
                 </div>
               )}
             </div>
@@ -705,6 +871,15 @@ export default function StoriesPage() {
                     "{activeStory.content}"
                   </p>
                 )}
+                {/* Touch Zones for Navigation */}
+                <div 
+                  className="absolute left-0 top-0 bottom-0 w-[30%] z-20"
+                  onClick={(e) => { e.stopPropagation(); advanceStory("prev"); }}
+                />
+                <div 
+                  className="absolute right-0 top-0 bottom-0 w-[70%] z-20"
+                  onClick={(e) => { e.stopPropagation(); advanceStory("next"); }}
+                />
               </div>
 
               {/* ─── BOTTOM BAR: Like + Reaction + Reply ─── */}
@@ -800,8 +975,8 @@ export default function StoriesPage() {
                         onClick={(e) => { e.stopPropagation(); setShowViewers(v => !v); setShowLikers(false); }}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
                         style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>{activeStory.views ?? viewersList.length ?? 0}</span>
+                      <Eye className="w-3.5 h-3.5" />
+                        <span className="font-mono tracking-widest">{padCount(activeStory.views ?? viewersList.length ?? 0)}</span>
                         <span className="opacity-60 font-medium text-[10px]">views</span>
                       </motion.button>
 
@@ -812,7 +987,7 @@ export default function StoriesPage() {
                         className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
                         style={{ background: "rgba(255,0,110,0.18)", color: "white", borderColor: "rgba(255,0,110,0.3)" }}>
                         <Heart className="w-3.5 h-3.5" fill="#ff006e" style={{ color: "#ff006e" }} />
-                        <span>{likeCount[activeStory.id] ?? activeStory.likes ?? 0}</span>
+                        <span className="font-mono tracking-widest">{padCount(likeCount[activeStory.id] ?? activeStory.likes ?? 0)}</span>
                         <span className="opacity-60 font-medium text-[10px]">likes</span>
                       </motion.button>
                     </div>
@@ -902,7 +1077,8 @@ export default function StoriesPage() {
               {cameraView.capturedUrl ? (
                 <img src={cameraView.capturedUrl} alt="Preview" className="w-full h-full object-contain" />
               ) : (
-                <video ref={liveVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                <video ref={liveVideoRef} autoPlay playsInline muted className="w-full h-full object-cover"
+                  style={{ transform: cameraView.facingMode === "user" ? "scaleX(-1)" : "none" }} />
               )}
             </div>
 
@@ -929,7 +1105,9 @@ export default function StoriesPage() {
                     className="h-20 w-20 rounded-full border-4 border-white/30 flex items-center justify-center p-1">
                     <div className="w-full h-full bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.8)]" />
                   </motion.button>
-                  <button onClick={closeCameraView} className="p-4 bg-transparent text-white opacity-50"><Trash2 className="w-6 h-6" /></button>
+                  <button onClick={flipCamera} className="p-4 bg-white/20 rounded-full backdrop-blur-md hover:bg-white/30 text-white shadow-xl" title="Flip Camera">
+                    <RefreshCcw className="w-6 h-6" />
+                  </button>
                 </>
               )}
             </div>

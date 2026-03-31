@@ -250,6 +250,8 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN phone_hash TEXT"); } catch (e) { }
         // Migration for avatar_url
         try { await db.run("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL"); } catch (e) { }
+        // Migration for bio
+        try { await db.run("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL"); } catch (e) { }
 
         // SEED DATA
         const seedUsers = [
@@ -669,6 +671,7 @@ async function nexoraMailProtocol(type, to, data) {
             from: `"${GMAIL_NAME}" <${GMAIL_USER}>`,
             to: to,
             subject: subject,
+            text: `Nexora Notice: Your request was processed. Please view the HTML version of this email to see your secure payload.`,
             html: html
         });
         console.log(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
@@ -1198,8 +1201,9 @@ app.post('/api/admin/announcement', (req, res) => {
 const otpStore = new Map();
 
 app.post('/api/auth/recovery', async (req, res) => {
-    const { email } = req.body;
+    let { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
+    email = email.trim();
     try {
         if (!db) return res.status(500).json({ error: "Database not ready" });
         // Only send to registered emails
@@ -1215,67 +1219,7 @@ app.post('/api/auth/recovery', async (req, res) => {
         // Store OTP
         otpStore.set(email.toLowerCase(), { otp, expiry, verified: false });
 
-        const recoveryHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <style>
-                    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
-                    .wrapper { padding: 60px 20px; }
-                    .container { max-width: 550px; margin: 0 auto; background: #ffffff; border-radius: 48px; overflow: hidden; box-shadow: 0 40px 100px rgba(108,92,231,0.06); border: 1px solid #eef2f7; text-align: center; }
-                    .content { padding: 60px 45px; }
-                    .header-logo { width: 90px; height: 90px; object-fit: contain; margin-bottom: 35px; border-radius: 24px; }
-                    .protocol-badge { display: inline-block; background: rgba(108,92,231,0.06); color: #6c5ce7; padding: 10px 20px; border-radius: 100px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 30px; }
-                    .recover-title { font-size: 28px; font-weight: 900; color: #1a1a2e; margin: 0 0 15px 0; letter-spacing: -1px; }
-                    .recover-desc { font-size: 15px; color: #64748b; line-height: 1.8; margin-bottom: 40px; }
-                    
-                    .otp-vault { background: #f8fafc; border: 1px dashed #6c5ce7; border-radius: 32px; padding: 45px; margin-bottom: 35px; position: relative; }
-                    .otp-label { font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; display: block; }
-                    .otp-code { font-size: 48px; font-weight: 900; letter-spacing: 14px; color: #6c5ce7; margin: 0; }
-                    .otp-expiry { font-size: 13px; color: #94a3b8; margin-top: 25px; font-weight: 600; }
-                    
-                    .security-infobox { background: rgba(46,213,115,0.05); border: 1px solid rgba(46,213,115,0.1); border-radius: 20px; padding: 20px; margin-top: 35px; }
-                    .security-text { font-size: 11px; font-weight: 800; color: #15c35a; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
-                    
-                    .footer { background: #fafbfc; padding: 45px; border-top: 1px solid #f1f5f9; }
-                    .privacy-note { font-size: 11px; color: #94a3b8; line-height: 1.8; margin-bottom: 25px; text-align: left; }
-                    .copyright { font-size: 10px; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
-                </style>
-            </head>
-            <body>
-                <div class="wrapper">
-                    <div class="container">
-                        <div class="content">
-                            <img src="${APP_LOGO_URL}" alt="Nexora" class="header-logo" />
-                            <div class="protocol-badge">Security Link Verification</div>
-                            <h2 class="recover-title">Verify Your Identity</h2>
-                            <p class="recover-desc">A request was made to unlock the recovery vault for your Nexora account. Use the encrypted authorization code below to establish a secure link.</p>
-                            
-                            <div class="otp-vault">
-                                <span class="otp-label">Encryption Key Segment</span>
-                                <div class="otp-code">${otp}</div>
-                                <p class="otp-expiry">Universal expiry in 10 minutes.</p>
-                            </div>
 
-                            <div class="security-infobox">
-                                <p class="security-text">Transmission Integrity Verified - AES-256-GCM</p>
-                            </div>
-                        </div>
-
-                        <div class="footer">
-                            <div class="privacy-note">
-                                This is an automated security transmission from Nexora Core. All recovery protocols are strictly zero-knowledge. If you did not initiate this request, your account remains secure and no further action is required.
-                            </div>
-                            <div class="copyright">
-                                &copy; ${new Date().getFullYear()} NEXORA SYSTEMS &bull; PRIVACY PROTOCOL
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </body>
-            </html>
-        `;
         await nexoraMailProtocol('otp', email, { otp: otp });
         res.json({ status: "success", message: "Recovery code transmitted to your email." });
     } catch (err) {
@@ -1286,8 +1230,9 @@ app.post('/api/auth/recovery', async (req, res) => {
 
 // Verify OTP
 app.post('/api/auth/verify-otp', (req, res) => {
-    const { email, otp } = req.body;
+    let { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
+    email = email.trim();
 
     const record = otpStore.get(email.toLowerCase());
     if (!record) {
@@ -1851,7 +1796,7 @@ app.get('/api/users/profile', async (req, res) => {
     const username = (req.query.username || '').toLowerCase();
     try {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl" FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: "User not found" });
         
         // Decrypt sensitive info for the client
@@ -1862,6 +1807,20 @@ app.get('/api/users/profile', async (req, res) => {
         res.json({ user });
     } catch (err) {
         res.status(500).json({ error: "Server error" });
+    }
+});
+
+// Update user bio
+app.patch('/api/users/bio', async (req, res) => {
+    const { username, bio } = req.body;
+    if (!username) return res.status(400).json({ error: "Username required" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('UPDATE users SET bio = ? WHERE LOWER(username) = LOWER(?)', [bio || null, username]);
+        res.json({ status: "success" });
+    } catch (err) {
+        console.error("Bio update error:", err);
+        res.status(500).json({ error: "Failed to update bio" });
     }
 });
 

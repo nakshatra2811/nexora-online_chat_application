@@ -4,34 +4,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Edit3, Camera, Shield, Zap, MapPin, Network, Link2, UserCheck, X,
-  QrCode, Share2, Copy, Check, UserPlus, Mail, Phone, Search,
+  Share2, Copy, Check, UserPlus, Mail, Phone, Search,
   MessageCircle, Send, ShieldOff, Bell, UserX, Clock, RefreshCcw
 } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
-import QRCode from "qrcode";
 
 /* ─── Mock contacts ─── */
 const MOCK_CONTACTS: any[] = [];
-
-/* ─── QR Code generator using canvas ─── */
-async function generateRealQRCode(text: string): Promise<string> {
-  try {
-    return await QRCode.toDataURL(text, {
-      margin: 2,
-      scale: 10,
-      color: {
-        dark: "#6c5ce7",
-        light: "#ffffff"
-      },
-      errorCorrectionLevel: 'H'
-    });
-  } catch (err) {
-    console.error("QR Generation Error:", err);
-    return "";
-  }
-}
 
 /* ─── Share Profile Modal ─── */
 function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose: () => void; isDark: boolean }) {
@@ -299,7 +280,7 @@ export default function ProfilePage() {
         username: signupUsername,
         email: signupEmail,
         phone: signupPhone,
-        bio: role === "Authorized Account" ? "Chief Protocol Officer." : "Protocol Enthusiast.",
+        bio: "",
         joinedDate: "March 2026",
         avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
       };
@@ -314,6 +295,10 @@ export default function ProfilePage() {
                 currentProfile.email = data.user.email || currentProfile.email;
                 currentProfile.phone = data.user.phoneNumber || currentProfile.phone;
                 currentProfile.avatarUrl = data.user.avatarUrl || "";
+                // Load bio from DB (takes priority over localStorage)
+                if (data.user.bio !== undefined && data.user.bio !== null) {
+                  currentProfile.bio = data.user.bio;
+                }
                 // Cache avatar separately for quick cross-page access
                 if (data.user.avatarUrl) localStorage.setItem("nexora_avatar_url", data.user.avatarUrl);
                 if (data.user.created_at) {
@@ -330,8 +315,8 @@ export default function ProfilePage() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          currentProfile.bio = parsed.bio || currentProfile.bio;
-          // Only sync back if not already set by DB
+          // Only use localStorage bio if DB returned nothing
+          if (!currentProfile.bio && parsed.bio) currentProfile.bio = parsed.bio;
           if (currentProfile.phone === "+91 00000 00000") currentProfile.phone = parsed.phone || currentProfile.phone;
         } catch (e) {
           console.error("Failed to load local profile overrides", e);
@@ -469,16 +454,13 @@ export default function ProfilePage() {
     setSentCount(parseInt(totalSent));
   }, []);
 
-  const [qrDataUrl, setQrDataUrl] = useState("");
+
   const [showShare, setShowShare] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
-    // Generate QR code - Pointing to the actual production profile URL
-    const url = `https://nexora31.vercel.app/u/${profile.username}`;
-    generateRealQRCode(url).then(qr => setQrDataUrl(qr));
 
     // Initial fetch
     fetchIncomingRequests();
@@ -612,32 +594,39 @@ export default function ProfilePage() {
                     style={{ color: "var(--text-secondary)" }} placeholder="Phone Number" />
                 </div>
 
-                <button onClick={async () => {
+                 <button onClick={async () => {
                   const saved = localStorage.getItem("nexora_user_profile");
                   const oldProfile = saved ? JSON.parse(saved) : null;
                   const myUsername = localStorage.getItem("nexora_signup_username");
 
                   if (oldProfile && oldProfile.email !== profile.email) {
                     setTempEmail(profile.email);
-                    // Revert email in current state temporarily for OTP flow
                     setProfile({ ...profile, email: oldProfile.email });
-                    
                     try {
                         const { nexoraFetch } = await import("@/lib/config");
                         const res = await nexoraFetch('/api/profile/request-email-change', {
                             method: "POST",
                             body: JSON.stringify({ username: myUsername, newEmail: profile.email })
                         });
-                        
                         if (res && res.status === "success") {
                             setShowOTPModal(true);
                         } else {
-                            alert(res.error || "Failed to send verification code. Ensure email is not already in use.");
+                            alert(res.error || "Failed to send verification code.");
                         }
                     } catch (e) {
-                        alert("Network error while requesting verification.");
+                        alert("Network error.");
                     }
                   } else {
+                    // Save bio to server
+                    try {
+                      const { nexoraFetch } = await import("@/lib/config");
+                      await nexoraFetch('/api/users/bio', {
+                        method: "PATCH",
+                        body: JSON.stringify({ username: myUsername, bio: profile.bio })
+                      });
+                    } catch (e) {
+                      console.error("Bio save failed:", e);
+                    }
                     localStorage.setItem("nexora_user_profile", JSON.stringify(profile));
                     setIsEditing(false);
                   }
@@ -721,32 +710,6 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* QR Code Card */}
-          <div className="glass-panel p-6 flex flex-col items-center gap-3 shadow-lg rounded-2xl"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-            <div className="flex items-center gap-2 w-full mb-1">
-              <QrCode className="w-4 h-4 text-[#6c5ce7]" />
-              <h3 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>My QR Code</h3>
-            </div>
-
-            {/* QR Image */}
-            {qrDataUrl && (
-              <div className="p-3 rounded-2xl border-2" style={{ borderColor: "rgba(108,92,231,0.2)", background: "#fff" }}>
-                <img src={qrDataUrl} alt="Profile QR Code" className="w-40 h-40" />
-              </div>
-            )}
-
-            {/* Username and joined date below QR */}
-            <div className="text-center">
-              <p className="font-extrabold text-sm text-[#6c5ce7]">@{profile.username}</p>
-              <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>Joined {profile.joinedDate}</p>
-            </div>
-
-            <p className="text-[10px] text-center tracking-wider uppercase font-semibold" style={{ color: "var(--text-muted)" }}>
-              Scan to connect on Nexora
-            </p>
           </div>
 
           {/* Stats Card */}

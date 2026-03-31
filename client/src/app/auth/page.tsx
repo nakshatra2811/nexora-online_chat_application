@@ -19,6 +19,7 @@ function AuthContent() {
   const [usernameStatus, setUsernameStatus] = useState<"none" | "checking" | "available" | "taken">("none");
   const [announcement, setAnnouncement] = useState("");
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [successOverlay, setSuccessOverlay] = useState<{ show: boolean; isLogin: boolean; name: string } | null>(null);
 
   // Form State
   const [fullName, setFullName] = useState("");
@@ -164,7 +165,8 @@ function AuthContent() {
           localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
           localStorage.setItem("nexora_signup_color", data.color);
           localStorage.removeItem("nexora_user_profile");
-          router.push("/dashboard/chats");
+          setSuccessOverlay({ show: true, isLogin: true, name: data.fullName || username });
+          setTimeout(() => router.push("/dashboard/chats"), 2200);
         } else {
           alert("Authentication failed: Server unreachable.");
         }
@@ -209,7 +211,8 @@ function AuthContent() {
             localStorage.setItem("nexora_signup_phone", u.phoneNumber || "Not Set");
             localStorage.setItem("nexora_signup_color", u.color);
             localStorage.removeItem("nexora_user_profile");
-            router.push("/dashboard/chats");
+            setSuccessOverlay({ show: true, isLogin: false, name: u.fullName || u.username });
+            setTimeout(() => router.push("/dashboard/chats"), 2200);
           }
         } else {
           alert("Signup failed: Server unreachable.");
@@ -316,6 +319,95 @@ function AuthContent() {
   }
 
   return (
+    <>
+      {/* ── SUCCESS OVERLAY ── */}
+      <AnimatePresence>
+        {successOverlay?.show && (
+          <motion.div
+            key="success-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+            style={{ background: "var(--bg-base)" }}
+          >
+            {/* Blurred glow blobs */}
+            <div className="absolute top-1/4 left-1/3 w-80 h-80 rounded-full blur-[120px] pointer-events-none" style={{ background: "rgba(108,92,231,0.25)" }} />
+            <div className="absolute bottom-1/4 right-1/3 w-80 h-80 rounded-full blur-[120px] pointer-events-none" style={{ background: "rgba(0,212,255,0.18)" }} />
+
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0, y: 30 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 280, damping: 22, delay: 0.08 }}
+              className="relative z-10 flex flex-col items-center gap-6 text-center px-6"
+            >
+              {/* Glowing logo ring */}
+              <div className="relative">
+                <motion.div
+                  animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.7, 0.4] }}
+                  transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+                  className="absolute inset-0 rounded-full blur-2xl"
+                  style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}
+                />
+                <div className="relative w-24 h-24 rounded-[2rem] flex items-center justify-center shadow-2xl border border-white/10"
+                  style={{ background: "linear-gradient(135deg,rgba(108,92,231,0.15),rgba(0,212,255,0.10))", backdropFilter: "blur(20px)" }}>
+                  <img src={APP_LOGO} alt="Nexora" className="w-14 h-14 object-contain drop-shadow-2xl" />
+                </div>
+              </div>
+
+              {/* Welcome text */}
+              <div className="space-y-2">
+                <motion.h2
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+                  className="text-3xl font-black tracking-tight"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  {successOverlay.isLogin ? `Welcome back` : `Welcome to Nexora`} 👋
+                </motion.h2>
+                <motion.p
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+                  className="text-base font-semibold"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  {successOverlay.isLogin ? `Logging you in...` : `Your account is ready. Entering Nexora...`}
+                </motion.p>
+              </div>
+
+              {/* Animated progress bar */}
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+                className="w-56 h-1.5 rounded-full overflow-hidden"
+                style={{ background: "rgba(108,92,231,0.18)" }}
+              >
+                <motion.div
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 2, ease: "easeInOut" }}
+                  className="h-full rounded-full"
+                  style={{ background: "linear-gradient(90deg,#6c5ce7,#00d4ff)" }}
+                />
+              </motion.div>
+
+              {/* Spinning dots */}
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+                className="flex gap-2"
+              >
+                {[0, 1, 2].map(i => (
+                  <motion.span
+                    key={i}
+                    animate={{ y: [0, -8, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.18, ease: "easeInOut" }}
+                    className="w-2.5 h-2.5 rounded-full inline-block"
+                    style={{ background: i === 0 ? "#6c5ce7" : i === 1 ? "#a855f7" : "#00d4ff" }}
+                  />
+                ))}
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     <div className="flex min-h-[100dvh] w-full items-center justify-center p-3 sm:p-6" style={{ background: "var(--bg-base)" }}>
 
@@ -487,6 +579,7 @@ function AuthContent() {
         </div>
       </motion.div>
     </div>
+    </>
   );
 }
 

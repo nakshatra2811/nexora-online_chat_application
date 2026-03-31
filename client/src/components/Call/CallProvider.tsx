@@ -44,6 +44,7 @@ export interface CallState {
   isFullscreen: boolean;
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
+  facingMode: "user" | "environment";
 }
 
 interface CallContextType {
@@ -87,6 +88,7 @@ const IDLE_STATE: CallState = {
   isFullscreen: true,
   localStream: null,
   remoteStream: null,
+  facingMode: "user",
 };
 
 // ─── Pending Incoming Call (stored outside React to avoid stale closures) ───
@@ -256,6 +258,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         duration: "00:00",
         localStream: null,
         remoteStream: null,
+        facingMode: "user",
       }));
 
       webRTCService
@@ -292,6 +295,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       status: "ringing",
       type,
       isFullscreen: true,
+      facingMode: "user",
     }));
 
     webRTCService
@@ -330,7 +334,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   const flipCamera = useCallback(async () => {
     const newStream = await webRTCService.flipCamera();
     if (newStream) {
-      setCallState((prev) => ({ ...prev, localStream: newStream }));
+      setCallState((prev) => ({ 
+        ...prev, 
+        localStream: newStream,
+        facingMode: webRTCService.currentFacingMode 
+      }));
     }
   }, []);
 
@@ -391,6 +399,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
             isMuted={callState.isMuted}
             isVideoOff={callState.isVideoOff}
             isFullscreen={callState.isFullscreen}
+            facingMode={callState.facingMode}
             localStream={callState.localStream}
             remoteStream={callState.remoteStream}
             onToggleMute={toggleMute}
