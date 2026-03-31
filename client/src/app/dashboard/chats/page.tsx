@@ -2927,17 +2927,26 @@ export default function ChatsPage() {
         </div>
       ) : (
         <div className="hidden lg:flex flex-1 flex-col items-center justify-center relative p-8 text-center" style={{ background: isDark ? "rgba(12,12,20,0.5)" : "rgba(240,242,250,0.5)" }}>
-          <div className="w-24 h-24 rounded-full flex items-center justify-center shadow-lg" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "white", border: `1px solid ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}` }}>
-            <MessageSquare className="w-10 h-10" style={{ color: "var(--text-muted)" }} />
+          {/* Animated background blobs for the greeting */}
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#6c5ce7]/20 rounded-full blur-[100px] pointer-events-none animate-pulse-slow" />
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#00d4ff]/20 rounded-full blur-[100px] pointer-events-none animate-pulse-slow" style={{ animationDelay: "2s" }} />
+
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="w-28 h-28 rounded-[2rem] flex items-center justify-center shadow-2xl mb-8 border" style={{ background: "linear-gradient(135deg, rgba(108,92,231,0.1), rgba(0,212,255,0.1))", borderColor: "rgba(255,255,255,0.05)", backdropFilter: "blur(20px)" }}>
+              <img src="/logo.svg" alt="Nexora" className="w-14 h-14 drop-shadow-lg" />
+            </div>
+            <h1 className="text-5xl font-black mb-4 tracking-tighter" style={{ background: "linear-gradient(to right, #6c5ce7, #00d4ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Welcome to Nexora</h1>
+            <p className="text-base max-w-md mb-8 leading-relaxed font-medium" style={{ color: "var(--text-muted)" }}>
+              The deeply encrypted, privacy-first communication protocol. 
+              Select a conversation from the sidebar to establish a secure tunnel.
+            </p>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              onClick={() => { setShowGlobalSearch(true); setGlobalSearchQuery(""); setGlobalSearchResults([]); }}
+              className="px-8 py-4 rounded-2xl text-sm font-black text-white shadow-xl shadow-purple-500/20 flex items-center gap-3 transition-all"
+              style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+              <Search className="w-4 h-4" /> Start a Secure Chat
+            </motion.button>
           </div>
-          <h2 className="text-2xl font-bold mt-6 mb-2" style={{ color: "var(--text-primary)" }}>No Secure Channel Selected</h2>
-          <p className="text-sm max-w-sm mb-6" style={{ color: "var(--text-muted)" }}>End-to-end encrypted tunnels require an active connection. Select a contact from the sidebar or accept a new request.</p>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => { setShowGlobalSearch(true); setGlobalSearchQuery(""); setGlobalSearchResults([]); }}
-            className="px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg"
-            style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-            Search & Connect
-          </motion.button>
         </div>
       )}
 

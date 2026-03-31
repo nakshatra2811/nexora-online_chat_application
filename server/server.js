@@ -733,8 +733,8 @@ app.post('/api/auth/signup', async (req, res) => {
         // 2. Insert into database
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
         const role = isAuthorized ? 'PendingAuthorized' : 'Standard';
-        const finalEmail = email.toLowerCase().trim();
-        const finalUsername = username.toLowerCase().trim();
+        const finalEmail = email.trim();
+        const finalUsername = username.trim();
         
         await db.run(
             'INSERT INTO users (full_name, email, username, password, role, color, phone_number) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -1120,7 +1120,7 @@ app.get('/api/users/profile', async (req, res) => {
     const username = (req.query.username || '').toLowerCase();
     try {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS fullName, email, role, created_at, color, phone_number AS phoneNumber FROM users WHERE username = ?', [username]);
+        const user = await db.get('SELECT username, full_name AS fullName, email, role, created_at, color, phone_number AS phoneNumber FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: "User not found" });
         res.json({ user });
     } catch (err) {
@@ -1231,8 +1231,8 @@ app.get('/api/connections', async (req, res) => {
             SELECT u.id, u.username, u.full_name as name, u.color
             FROM connections c
             JOIN users u ON
-                (c.user_a = u.username AND c.user_b = ?) OR
-                (c.user_b = u.username AND c.user_a = ?)
+                (c.user_a = LOWER(u.username) AND c.user_b = ?) OR
+                (c.user_b = LOWER(u.username) AND c.user_a = ?)
         `, [username, username]);
         // Attach real-time online status from the live room adapter
         const enriched = rows.map(r => {
@@ -1393,7 +1393,7 @@ app.get('/api/stories', async (req, res) => {
             (SELECT COUNT(*) FROM story_likes WHERE story_id = s.id) as likes_count,
             (SELECT EXISTS(SELECT 1 FROM story_likes WHERE story_id = s.id AND liker_username = ?)) as is_liked
             FROM stories s
-            JOIN users u ON s.username = u.username
+            JOIN users u ON s.username = LOWER(u.username)
             WHERE s.username IN (${placeholders}) AND s.created_at >= datetime('now', '-1 day')
             ORDER BY s.created_at DESC
         `, [username, username, ...friends]);
@@ -1546,13 +1546,13 @@ app.get('/api/stories/stats', async (req, res) => {
         
         const views = await db.all(`
             SELECT u.username, u.full_name as name, u.color 
-            FROM story_views sv JOIN users u ON sv.viewer_username = u.username 
+            FROM story_views sv JOIN users u ON sv.viewer_username = LOWER(u.username) 
             WHERE sv.story_id = ? ORDER BY sv.created_at DESC
         `, [storyId]);
         
         const likes = await db.all(`
             SELECT u.username, u.full_name as name, u.color 
-            FROM story_likes sl JOIN users u ON sl.liker_username = u.username 
+            FROM story_likes sl JOIN users u ON sl.liker_username = LOWER(u.username) 
             WHERE sl.story_id = ? ORDER BY sl.created_at DESC
         `, [storyId]);
 
