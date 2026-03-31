@@ -4,6 +4,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
+import { NavigationProgressBar } from "@/components/NavigationProgressBar";
+import Script from "next/script";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -47,16 +49,17 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
+        <NavigationProgressBar />
         <ThemeProvider>
           {children}
         </ThemeProvider>
         <SpeedInsights />
         <Analytics />
         {/* Umami Analytics */}
-        <script 
-          async 
-          src={process.env.NEXT_PUBLIC_UMAMI_URL || "https://analytics.umami.is/script.js"} 
-          data-website-id={process.env.NEXT_PUBLIC_UMAMI_ID || "PASTE_YOUR_UMAMI_ID_HERE"}
+        <Script
+          src={process.env.NEXT_PUBLIC_UMAMI_URL || "https://cloud.umami.is/script.js"}
+          data-website-id={process.env.NEXT_PUBLIC_UMAMI_ID || "8d2fedf2-2c7d-4d48-9c83-de1260e2215b"}
+          strategy="afterInteractive"
         />
       </body>
     </html>

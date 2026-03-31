@@ -4,6 +4,7 @@ import { useState } from "react";
 import { UserPlus, Share2, UserCheck } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
 import { motion, AnimatePresence } from "framer-motion";
+import { ButtonLoader } from "@/components/Loader";
 
 export function SuggestedUsers() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -70,9 +71,9 @@ export function SuggestedUsers() {
         <button 
           onClick={syncContacts}
           disabled={isSyncing}
-          className="text-xs font-extrabold text-[#6c5ce7] hover:text-[#00d4ff] transition-colors flex items-center gap-1 bg-[#6c5ce7]/5 px-3 py-1.5 rounded-full"
+          className="text-xs font-extrabold text-[#6c5ce7] hover:text-[#00d4ff] transition-colors flex items-center gap-2 bg-[#6c5ce7]/5 px-4 py-2 rounded-full"
         >
-          {isSyncing ? "Establishing..." : "Sync Contacts"}
+          {isSyncing ? <><ButtonLoader size="sm" /> Establishing...</> : "Sync Contacts"}
         </button>
       </div>
 

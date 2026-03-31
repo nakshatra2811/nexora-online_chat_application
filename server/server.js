@@ -231,11 +231,9 @@ let pgPool;
             );
         `);
 
-        // Migration for phone_number and phone_hash
-        if (dbType === 'sqlite') {
-            try { await db.exec('ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT "Not Set"'); } catch (e) { }
-            try { await db.exec('ALTER TABLE users ADD COLUMN phone_hash TEXT'); } catch (e) { }
-        }
+        // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
+        try { await db.run("ALTER TABLE users ADD COLUMN phone_number TEXT DEFAULT 'Not Set'"); } catch (e) { }
+        try { await db.run("ALTER TABLE users ADD COLUMN phone_hash TEXT"); } catch (e) { }
 
         // SEED DATA
         const seedUsers = [
@@ -1045,23 +1043,30 @@ app.post('/api/auth/signup', async (req, res) => {
             </html>
             `;
 
-            const welcomeMailOptions = {
-                from: `"${process.env.GMAIL_NAME || 'Nexora Private Chat'}" <${process.env.GMAIL_USER}>`,
-                to: email,
-                subject: 'Welcome to Nexora: Protocol Established',
-                html: welcomeHtml
-            };
-            await emailTransporter.sendMail(welcomeMailOptions);
+            // Attempt to send welcome email (Non-blocking: don't fail signup if email fails)
+            try {
+                const welcomeMailOptions = {
+                    from: `"${process.env.GMAIL_NAME || 'Nexora Private Chat'}" <${process.env.GMAIL_USER}>`,
+                    to: email,
+                    subject: 'Welcome to Nexora: Protocol Established',
+                    html: welcomeHtml
+                };
+                await emailTransporter.sendMail(welcomeMailOptions);
+                console.log(`[SIGNUP] Welcome email transmitted to @${username}`);
+            } catch (mailErr) {
+                console.error(`[SIGNUP] Welcome email transmission FAILED for @${username}:`, mailErr.message);
+                // Continue to respond success as the user is already created in DB
+            }
 
             res.status(201).json({ 
                 status: "success", 
                 user: newUser,
-                message: "User identity initialized. Welcome transmission sent." 
+                message: "User identity initialized." 
             });
         }
     } catch (err) {
-        console.error("Signup error:", err);
-        res.status(500).json({ error: "Server Error: Failed to process signup." });
+        console.error("Signup error details:", err);
+        res.status(500).json({ error: "Server Error: Failed to process signup. Check server logs." });
     }
 });
 

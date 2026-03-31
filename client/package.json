@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.46.0",
+    "@sentry/node": "^10.46.0",
+    "@sentry/profiling-node": "^10.46.0",
     "@splinetool/react-spline": "^4.1.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
