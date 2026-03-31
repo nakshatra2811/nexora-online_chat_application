@@ -1133,8 +1133,10 @@ export default function ChatsPage() {
           localStorage.setItem("nexora_secure_connections", JSON.stringify(updated));
           return updated;
         });
+        
+        // Update currently active chat if it's the person who changed their DP
         if (activeThreadRef.current?.username === data.from) {
-          activeThreadRef.current.avatarUrl = data.avatarUrl;
+          setActiveThread(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
         }
       });
 

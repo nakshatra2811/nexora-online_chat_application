@@ -27,10 +27,12 @@ export default function StoriesPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [liked, setLiked] = useState<Record<number, boolean>>({});
   const [likeCount, setLikeCount] = useState<Record<number, number>>({});
-  const [otherStories, setOtherStories] = useState<any[]>([]);
+  const [otherStories, setOtherStories] = useState<any[]>([]); // Grouped other users' stories
+  const [allOtherStories, setAllOtherStories] = useState<any[]>([]); // Flattened list for the viewer navigation
   
   // Your story state
-  const [myStory, setMyStory] = useState<any | null>(null);
+  const [myStories, setMyStories] = useState<any[]>([]); // All my stories
+  const [myStory, setMyStory] = useState<any | null>(null); // Legacy compatibility/shortcut for first story
   const [myUsername, setMyUsername] = useState("");
 
   const [reply, setReply] = useState("");
@@ -164,10 +166,35 @@ export default function StoriesPage() {
         }));
         
         const mine = mapped.filter((s: any) => s.username === username);
-        const others = mapped.filter((s: any) => s.username !== username);
+        const othersFlattened = mapped.filter((s: any) => s.username !== username);
         
+        // Group others by username
+        const groupedMap: Record<string, any> = {};
+        othersFlattened.forEach((s: any) => {
+          if (!groupedMap[s.username]) {
+            groupedMap[s.username] = {
+              id: s.username, // Use username as ID for the group
+              username: s.username,
+              user: s.user,
+              avatarUrl: s.avatarUrl || s.avatar_url,
+              color: s.color,
+              created_at: s.created_at,
+              isViewed: true, // Will calculate below
+              stories: []
+            };
+          }
+          groupedMap[s.username].stories.push(s);
+          if (!s.isViewed) groupedMap[s.username].isViewed = false;
+        });
+
+        const othersGrouped = Object.values(groupedMap).sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        setMyStories(mine);
         setMyStory(mine.length > 0 ? mine[0] : null);
-        setOtherStories(others);
+        setOtherStories(othersGrouped);
+        setAllOtherStories(othersFlattened);
         
         // Update activeStory to reflect new real-time views/likes
         setActiveStory((prev: any) => {
@@ -255,12 +282,29 @@ export default function StoriesPage() {
         if (p >= 100) {
           setActiveStory((prev: any) => {
             if (!prev) return null;
-            if (prev.username === myUsername) return null; // Done with my story
-            // Find next story
-            const idx = otherStories.findIndex((s) => s.id === prev.id);
-            if (idx >= 0 && idx < otherStories.length - 1) {
-              return otherStories[idx + 1];
+            
+            // 1. Is there another story for the SAME user?
+            const username = prev.username;
+            const currentStories = username === myUsername 
+              ? myStories
+              : otherStories.find(g => g.username === username)?.stories || [];
+            
+            const internalIdx = currentStories.findIndex((s: any) => s.id === prev.id);
+            if (internalIdx >= 0 && internalIdx < currentStories.length - 1) {
+              return currentStories[internalIdx + 1];
             }
+
+            // 2. No more stories for this user, find NEXT user
+            if (username === myUsername) {
+               // If it was my story, go to first other user
+               return otherStories.length > 0 ? otherStories[0].stories[0] : null;
+            }
+
+            const groupIdx = otherStories.findIndex((g) => g.username === username);
+            if (groupIdx >= 0 && groupIdx < otherStories.length - 1) {
+              return otherStories[groupIdx + 1].stories[0];
+            }
+            
             return null; // End of stories
           });
           return 0;
@@ -492,11 +536,11 @@ export default function StoriesPage() {
               {/* Ring: Instagram gradient if story exists, dashed if not */}
               <div
                 className={`p-[3px] rounded-full transition-all duration-500 cursor-pointer ${
-                  myStory
+                  myStories.length > 0
                     ? 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888] shadow-lg shadow-pink-500/20'
                     : isDark ? 'bg-white/10' : 'bg-black/10'
                 }`}
-                onClick={() => myStory ? setActiveStory(myStory) : startCameraView()}>
+                onClick={() => myStories.length > 0 ? setActiveStory(myStories[0]) : startCameraView()}>
 
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#f0f0f0", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
@@ -514,23 +558,21 @@ export default function StoriesPage() {
                 </div>
               </div>
 
-              {/* Plus Badge (only if no story) */}
-              {!myStory && (
-                <motion.div
-                  initial={{ scale: 0 }} animate={{ scale: 1 }} whileHover={{ scale: 1.15 }}
-                  onClick={(e) => { e.stopPropagation(); startCameraView(); }}
-                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center shadow-lg z-20 border-[3px]"
-                  style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", borderColor: isDark ? "#0a0a12" : "#ffffff" }}>
-                  <Plus className="w-4 h-4 text-white stroke-[3px]" />
-                </motion.div>
-              )}
+              {/* Plus Badge - ALWAYS visible on your story */}
+              <motion.div
+                initial={{ scale: 0 }} animate={{ scale: 1 }} whileHover={{ scale: 1.15 }}
+                onClick={(e) => { e.stopPropagation(); startCameraView(); }}
+                className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center shadow-lg z-20 border-[3px]"
+                style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", borderColor: isDark ? "#0a0a12" : "#ffffff" }}>
+                <Plus className="w-4 h-4 text-white stroke-[3px]" />
+              </motion.div>
 
               {/* View + Like Count Badge */}
-              {myStory && (
+              {myStories.length > 0 && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap">
-                  <Eye className="w-3 h-3" /> {myStory.views ?? 0}
+                  <Eye className="w-3 h-3" /> {myStories.reduce((acc, s) => acc + (s.views || 0), 0)}
                   <span className="opacity-30">·</span>
-                  <Heart className="w-3 h-3 text-[#ff006e]" fill="#ff006e" /> {likeCount[myStory.id] ?? myStory.likes ?? 0}
+                  <Heart className="w-3 h-3 text-[#ff006e]" fill="#ff006e" /> {myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0)}
                 </div>
               )}
             </div>
@@ -539,25 +581,25 @@ export default function StoriesPage() {
               Your Story
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1 justify-center" style={{ color: "var(--text-muted)" }}>
-              {myStory ? <><Clock className="w-2.5 h-2.5" /> {getTimeAgo(myStory.created_at, now)}</> : "Add to story"}
+              {myStories.length > 0 ? <><Clock className="w-2.5 h-2.5" /> {getTimeAgo(myStories[0].created_at, now)}</> : "Add to story"}
             </p>
           </motion.div>
 
-        {otherStories.map((story, i) => (
-          <motion.div key={story.id}
+        {otherStories.map((group, i) => (
+          <motion.div key={group.username}
             initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 + 0.05, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ scale: 1.04, y: -4 }} whileTap={{ scale: 0.97 }}
             className="flex flex-col items-center cursor-pointer group relative"
           >            {/* Ring + Avatar */}
-            <div className="relative mb-3" onClick={() => setActiveStory(story)}>
-              <div className={`p-[3px] rounded-full bg-gradient-to-tr ${story.isViewed ? 'from-gray-400 to-gray-600' : 'from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888]'} shadow-lg group-hover:shadow-2xl transition-shadow`}>
+            <div className="relative mb-3" onClick={() => setActiveStory(group.stories[0])}>
+              <div className={`p-[3px] rounded-full bg-gradient-to-tr ${group.isViewed ? 'from-gray-400 to-gray-600' : 'from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888]'} shadow-lg group-hover:shadow-2xl transition-shadow`}>
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#ffffff", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
-                  {story.avatarUrl ? (
-                    <img src={story.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  {group.avatarUrl ? (
+                    <img src={group.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(story.user || story.username || "?")[0].toUpperCase()}</span>
+                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(group.user || group.username || "?")[0].toUpperCase()}</span>
                   )}
                   {/* Play hover */}
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
@@ -569,13 +611,11 @@ export default function StoriesPage() {
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
-              {story.user}
+              {group.user}
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              <Clock className="w-2.5 h-2.5" /> {getTimeAgo(story.created_at, now)}
+              <Clock className="w-2.5 h-2.5" /> {getTimeAgo(group.stories[0].created_at, now)}
             </p>
-
-
           </motion.div>
         ))}
       </div>

@@ -1656,6 +1656,7 @@ app.get('/api/users/profile', async (req, res) => {
         // Decrypt sensitive info for the client
         user.fullName = decryptField(user.fullName);
         user.phoneNumber = decryptField(user.phoneNumber);
+        user.avatarUrl = decryptField(user.avatarUrl); // Decrypt avatar URL for UI
         
         res.json({ user });
     } catch (err) {
@@ -1669,7 +1670,10 @@ app.post('/api/users/avatar', async (req, res) => {
     if (!username || !avatarBase64) return res.status(400).json({ error: "username and avatarBase64 required" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        await db.run('UPDATE users SET avatar_url = ? WHERE LOWER(username) = LOWER(?)', [avatarBase64, username]);
+        
+        // Encrypt profile picture URL/Base64 in database
+        const encryptedAvatar = encryptField(avatarBase64);
+        await db.run('UPDATE users SET avatar_url = ? WHERE LOWER(username) = LOWER(?)', [encryptedAvatar, username]);
         
         // Broadcast the avatar update to all connected friends
         const connections = await db.all('SELECT user_a, user_b FROM connections WHERE user_a = LOWER(?) OR user_b = LOWER(?)', [username, username]);
@@ -1969,8 +1973,13 @@ app.get('/api/stories', async (req, res) => {
             ORDER BY s.created_at DESC
         `, [username, username, ...friends]);
 
-        // Decrypt full_name for each story before sending to client
-        const decrypted = stories.map(s => ({ ...s, name: decryptField(s.name) }));
+        // Decrypt full_name, avatarUrl and media_url for each story before sending to client
+        const decrypted = stories.map(s => ({ 
+            ...s, 
+            name: decryptField(s.name),
+            avatarUrl: decryptField(s.avatarUrl),
+            media_url: decryptField(s.media_url) 
+        }));
 
         res.json({ stories: decrypted });
     } catch (err) {
@@ -1985,7 +1994,13 @@ app.post('/api/stories', async (req, res) => {
     if (!username || !mediaUrl) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        await db.run('INSERT INTO stories (username, media_url, media_type, caption) VALUES (?, ?, ?, ?)', [username.toLowerCase(), mediaUrl, mediaType || 'image', caption || '']);
+        
+        // Encrypt story media URL so nobody can see it from DB raw view
+        const encryptedMediaUrl = encryptField(mediaUrl);
+
+        await db.run('INSERT INTO stories (username, media_url, media_type, caption) VALUES (?, ?, ?, ?)', 
+            [username.toLowerCase(), encryptedMediaUrl, mediaType || 'image', caption || '']);
+        
         res.json({ status: "success" });
     } catch (err) {
         console.error("Post Story Error:", err);
