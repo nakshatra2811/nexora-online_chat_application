@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Phone, Video, Send, Mic, MicOff, Paperclip, Lock,
   ArrowLeft, X, FileText, Image as ImageIcon, Camera, PhoneOff,
-  VideoOff, Maximize2, Minimize2, MoreVertical, Zap, Check,
+  VideoOff, Maximize2, Minimize2, MoreVertical, Zap, Check, Edit3,
   CheckCheck, Smile, Trash2, Reply, Timer, ShieldOff, Shield, MapPin,
   AlertTriangle, ChevronRight, ChevronLeft, Pin, ArrowUp, ArrowDown, Wallpaper, Upload, XCircle, Eye, EyeOff,
   Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film,
@@ -226,6 +226,9 @@ export default function ChatsPage() {
   const acceptIncomingCall = () => handleAccept();
   const endCall = () => handleEnd();
   const [showChatMenu, setShowChatMenu] = useState(false);
+  const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [showNicknameModal, setShowNicknameModal] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
   const [showDisappearSubmenu, setShowDisappearSubmenu] = useState(false);
   const [disappearTimer, setDisappearTimer] = useState<"off" | "1h" | "24h" | "after_view">("off");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -419,6 +422,8 @@ export default function ChatsPage() {
 
     const saved = localStorage.getItem("nexora_secure_connections");
     if (saved) setThreads(JSON.parse(saved));
+    const savedNicknames = localStorage.getItem("nexora_nicknames");
+    if (savedNicknames) setNicknames(JSON.parse(savedNicknames));
     const blocked = localStorage.getItem("nexora_blocked_threads");
     if (blocked) setBlockedThreads(JSON.parse(blocked));
     const sent = localStorage.getItem("nexora_sent_requests");
@@ -805,16 +810,31 @@ export default function ChatsPage() {
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setLocationCoords(coords);
+        const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         const locMsg: ChatMessage = {
-          id: Math.random().toString(), senderId: myUsernameRef.current,
+          id: msgId, senderId: myUsernameRef.current,
           text: "📍 Shared Live Location",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          timestamp,
           createdAt: Date.now(),
           isSelf: true, status: "delivered", reactions: {},
-          attachment: { name: "Location", type: "location", url: `https://maps.google.com/maps?q=${coords.lat},${coords.lng}` },
+          attachment: { name: "Location", type: "location", url: `${coords.lat},${coords.lng}` },
         };
         setMessages(prev => [...prev, locMsg]);
         setSharingLocation(false);
+
+        // Send to other user via socket
+        const socket = socketService.getSocket();
+        if (socket && activeThread?.username) {
+          socket.emit("dm:location", {
+            to: activeThread.username,
+            from: myUsernameRef.current,
+            msgId,
+            timestamp,
+            lat: coords.lat,
+            lng: coords.lng,
+          });
+        }
       },
       () => { setSharingLocation(false); alert("Location access denied"); }
     );
@@ -1106,6 +1126,18 @@ export default function ChatsPage() {
         ));
       });
 
+      // 7b. Real-time Full Avatar Sync Update
+      socket.on("dm:avatar_update", (data: { from: string; avatarUrl: string }) => {
+        setThreads(prev => {
+          const updated = prev.map(t => t.username === data.from ? { ...t, avatarUrl: data.avatarUrl } : t);
+          localStorage.setItem("nexora_secure_connections", JSON.stringify(updated));
+          return updated;
+        });
+        if (activeThreadRef.current?.username === data.from) {
+          activeThreadRef.current.avatarUrl = data.avatarUrl;
+        }
+      });
+
       // 8. Initial online users list
       socket.on("current_online_users", (onlineUsernames: string[]) => {
         setLiveOnlineUsers(onlineUsernames);
@@ -1262,6 +1294,190 @@ export default function ChatsPage() {
       socket.on("dm:view_once_ack", (data: { from: string; msgId: string }) => {
         setMessages(prev => prev.map(m => m.id === data.msgId ? { ...m, isViewOnce: true, viewedOnce: true, attachment: undefined, text: "📷 Photo viewed" } : m));
       });
+
+      // ═══ INCOMING LOCATION ═══
+      socket.on("dm:location", (data: any) => {
+        const senderUsername = data.from;
+        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
+        const newMsg: ChatMessage = {
+          id: data.msgId || Math.random().toString(),
+          senderId: senderUsername,
+          text: "📍 Shared Live Location",
+          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          createdAt: Date.now(),
+          isSelf: isFromSelf,
+          status: "delivered",
+          reactions: {},
+          attachment: { name: "Location", type: "location", url: `${data.lat},${data.lng}` },
+        };
+        const currentThread = activeThreadRef.current;
+        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase()) {
+          setMessages(prev => {
+            if (prev.find(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        } else {
+          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+          const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+          if (senderThread) {
+            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
+            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
+              threadMsgs.push(newMsg);
+              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
+            }
+          }
+          if (!isFromSelf) {
+            setUnreadCounts(prev => {
+              const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
+              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
+              return next;
+            });
+            setThreads(prev => prev.map(t =>
+              t.username?.toLowerCase() === senderUsername?.toLowerCase()
+                ? { ...t, preview: "📍 Location", unread: (t.unread || 0) + 1 }
+                : t
+            ));
+            pushService.showLocalNotification(
+              senderThread?.name || senderUsername,
+              "📍 Shared a location",
+              { from: senderUsername }
+            );
+          }
+        }
+      });
+
+      // ═══ INCOMING POLL ═══
+      socket.on("dm:poll", (data: any) => {
+        const senderUsername = data.from;
+        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
+        const newMsg: ChatMessage = {
+          id: data.msgId || Math.random().toString(),
+          senderId: senderUsername,
+          text: "",
+          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          createdAt: Date.now(),
+          isSelf: isFromSelf,
+          status: "delivered",
+          reactions: {},
+          poll: { ...data.poll, votedOptions: [] },
+        };
+        const currentThread = activeThreadRef.current;
+        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase()) {
+          setMessages(prev => {
+            if (prev.find(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        } else {
+          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+          const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+          if (senderThread) {
+            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
+            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
+              threadMsgs.push(newMsg);
+              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
+            }
+          }
+          if (!isFromSelf) {
+            setUnreadCounts(prev => {
+              const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
+              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
+              return next;
+            });
+            setThreads(prev => prev.map(t =>
+              t.username?.toLowerCase() === senderUsername?.toLowerCase()
+                ? { ...t, preview: "📊 Poll", unread: (t.unread || 0) + 1 }
+                : t
+            ));
+            pushService.showLocalNotification(
+              senderThread?.name || senderUsername,
+              `📊 Poll: ${data.poll?.question || 'New poll'}`,
+              { from: senderUsername }
+            );
+          }
+        }
+      });
+
+      // ═══ INCOMING POLL VOTE (Real-time vote sync) ═══
+      socket.on("dm:poll_vote", (data: { from: string; msgId: string; optId: string; action: string }) => {
+        setMessages(prev => prev.map(m => {
+          if (m.id !== data.msgId || !m.poll) return m;
+          const delta = data.action === "add" ? 1 : -1;
+          const newOpts = m.poll.options.map(opt =>
+            opt.id === data.optId ? { ...opt, votes: Math.max(0, opt.votes + delta) } : opt
+          );
+          return { ...m, poll: { ...m.poll, options: newOpts } };
+        }));
+        // Also persist to localStorage for any matching thread
+        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        connections.forEach((conn: any) => {
+          const key = `nexora_msgs_${conn.id}`;
+          const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
+          let changed = false;
+          const updated = currentMsgs.map((m: any) => {
+            if (m.id === data.msgId && m.poll) {
+              changed = true;
+              const delta = data.action === "add" ? 1 : -1;
+              const newOpts = m.poll.options.map((opt: any) =>
+                opt.id === data.optId ? { ...opt, votes: Math.max(0, opt.votes + delta) } : opt
+              );
+              return { ...m, poll: { ...m.poll, options: newOpts } };
+            }
+            return m;
+          });
+          if (changed) localStorage.setItem(key, JSON.stringify(updated));
+        });
+      });
+
+      // ═══ INCOMING CONTACT ═══
+      socket.on("dm:contact", (data: any) => {
+        const senderUsername = data.from;
+        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
+        const newMsg: ChatMessage = {
+          id: data.msgId || Math.random().toString(),
+          senderId: senderUsername,
+          text: "",
+          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          createdAt: Date.now(),
+          isSelf: isFromSelf,
+          status: "delivered",
+          reactions: {},
+          contact: data.contact,
+        };
+        const currentThread = activeThreadRef.current;
+        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase()) {
+          setMessages(prev => {
+            if (prev.find(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        } else {
+          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+          const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+          if (senderThread) {
+            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
+            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
+              threadMsgs.push(newMsg);
+              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
+            }
+          }
+          if (!isFromSelf) {
+            setUnreadCounts(prev => {
+              const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
+              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
+              return next;
+            });
+            setThreads(prev => prev.map(t =>
+              t.username?.toLowerCase() === senderUsername?.toLowerCase()
+                ? { ...t, preview: "👤 Contact shared", unread: (t.unread || 0) + 1 }
+                : t
+            ));
+            pushService.showLocalNotification(
+              senderThread?.name || senderUsername,
+              `👤 Shared a contact: ${data.contact?.name || 'Contact'}`,
+              { from: senderUsername }
+            );
+          }
+        }
+      });
     };
     initProtocol();
     // 🛡️ REMOVED: Global socket disconnect — Dashboard Layout needs it for notifications
@@ -1281,6 +1497,10 @@ export default function ChatsPage() {
         socket.off("dm:wallpaper");
         socket.off("dm:disappear_setting");
         socket.off("dm:view_once_ack");
+        socket.off("dm:location");
+        socket.off("dm:poll");
+        socket.off("dm:poll_vote");
+        socket.off("dm:contact");
       }
     };
   }, []);
@@ -1744,40 +1964,48 @@ export default function ChatsPage() {
   const handleCreatePoll = () => {
     const validOptions = pollOptions.filter(o => o.trim());
     if (!pollQuestion.trim() || validOptions.length < 2) return;
+    const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const pollData = {
+      question: pollQuestion.trim(),
+      options: validOptions.map((o, i) => ({ id: `opt_${i}`, text: o.trim(), votes: 0 })),
+      isMultiple: pollMultiple,
+      votedOptions: [] as string[],
+    };
     const pollMsg: ChatMessage = {
-      id: Math.random().toString(),
+      id: msgId,
       senderId: myProfile.username,
       text: "",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp,
       createdAt: Date.now(),
       isSelf: true, status: "delivered", reactions: {},
-      poll: {
-        question: pollQuestion.trim(),
-        options: validOptions.map((o, i) => ({ id: `opt_${i}`, text: o.trim(), votes: 0 })),
-        isMultiple: pollMultiple,
-        votedOptions: [],
-      },
+      poll: pollData,
     };
     setMessages(prev => [...prev, pollMsg]);
     setShowPollCreator(false);
     setPollQuestion("");
     setPollOptions(["", ""]);
     setPollMultiple(false);
-    // Simulate other user voting after 2-5 seconds
-    setTimeout(() => {
-      setMessages(prev => prev.map(m => {
-        if (m.id !== pollMsg.id || !m.poll) return m;
-        const randIdx = Math.floor(Math.random() * m.poll.options.length);
-        const newOpts = m.poll.options.map((opt, i) => i === randIdx ? { ...opt, votes: opt.votes + 1 } : opt);
-        return { ...m, poll: { ...m.poll, options: newOpts } };
-      }));
-    }, 2000 + Math.random() * 3000);
+
+    // Send to other user via socket
+    const socket = socketService.getSocket();
+    if (socket && activeThread?.username) {
+      socket.emit("dm:poll", {
+        to: activeThread.username,
+        from: myUsernameRef.current,
+        msgId,
+        timestamp,
+        poll: pollData,
+      });
+    }
   };
 
   const handleVotePoll = (msgId: string, optId: string) => {
+    let voteAction: "add" | "remove" = "add";
     setMessages(prev => prev.map(m => {
       if (m.id !== msgId || !m.poll) return m;
       const alreadyVoted = m.poll.votedOptions.includes(optId);
+      voteAction = alreadyVoted ? "remove" : "add";
       let newVoted: string[];
       let newOpts = m.poll.options;
       if (m.poll.isMultiple) {
@@ -1799,6 +2027,17 @@ export default function ChatsPage() {
       }
       return { ...m, poll: { ...m.poll, options: newOpts, votedOptions: newVoted } };
     }));
+
+    // Sync vote to other user via socket
+    const socket = socketService.getSocket();
+    if (socket && activeThread?.username) {
+      socket.emit("dm:poll_vote", {
+        to: activeThread.username,
+        msgId,
+        optId,
+        action: voteAction,
+      });
+    }
   };
 
   const addPollOption = () => {
@@ -1813,18 +2052,33 @@ export default function ChatsPage() {
 
   // ─── CONTACT SHARING ───
   const handleShareContact = (contact: any) => {
+    const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const contactData = { name: contact.name, phone: contact.phone, email: contact.email, color: contact.color };
     const contactMsg: ChatMessage = {
-      id: Math.random().toString(),
+      id: msgId,
       senderId: myProfile.username,
       text: "",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp,
       createdAt: Date.now(),
       isSelf: true, status: "delivered", reactions: {},
-      contact: { name: contact.name, phone: contact.phone, email: contact.email, color: contact.color },
+      contact: contactData,
     };
     setMessages(prev => [...prev, contactMsg]);
     setShowContactPicker(false);
     setContactSearch("");
+
+    // Send to other user via socket
+    const socket = socketService.getSocket();
+    if (socket && activeThread?.username) {
+      socket.emit("dm:contact", {
+        to: activeThread.username,
+        from: myUsernameRef.current,
+        msgId,
+        timestamp,
+        contact: contactData,
+      });
+    }
   };
 
   // ─── CONNECT REQUEST (SMS/WhatsApp/Email) ───
@@ -2119,7 +2373,7 @@ export default function ChatsPage() {
                         style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
                   </div>
-                  <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>{user?.name?.split(" ")[0]}</span>
+                  <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>{(nicknames[user?.username] || user?.name || "").split(" ")[0]}</span>
                 </motion.div>
               );
             })}
@@ -2161,7 +2415,7 @@ export default function ChatsPage() {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <h3 className={`font-bold text-sm truncate ${isLockedDisplay ? 'italic text-white/50' : ''}`}
                           style={{ color: "var(--text-primary)" }}>
-                          {isLockedDisplay ? "Locked Conversation" : thread.name}
+                          {isLockedDisplay ? "Locked Conversation" : (nicknames[thread.username] || thread.name)}
                         </h3>
                         {isPinned && <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />}
                       </div>
@@ -2243,14 +2497,23 @@ export default function ChatsPage() {
                     <div className="flex items-center gap-1.5 min-w-0">
                       <h3 className="font-extrabold text-[13px] md:text-base truncate transition-all group-hover:text-[#6c5ce7]"
                         style={{ color: "var(--text-primary)" }}>
-                        {activeThread.name}
+                        {nicknames[activeThread.username] || activeThread.name}
                       </h3>
                       <span className="inline-flex text-[7px] md:text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center shadow-sm">Verified</span>
                     </div>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <div className={`h-1.5 w-1.5 rounded-full ${activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "bg-green-500 shadow-[0_0_5px_#2ed573]" : "bg-gray-500"}`} />
-                      <span className="text-[9px] md:text-[10px] uppercase font-black tracking-wider truncate" style={{ color: activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "#2ed573" : "var(--text-muted)" }}>
-                        {peerTyping[activeThread.username] ? "Typing..." : (activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "Active Protocol" : "Offline")}
+                      <span className="text-[9px] md:text-[10px] uppercase font-black tracking-wider truncate" style={{ color: activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "#2ed573" : "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
+                        {peerTyping[activeThread.username] ? (
+                          <>
+                            TYPING
+                            <span className="flex items-center gap-[2px] mt-[1px]">
+                              <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '300ms' }} />
+                            </span>
+                          </>
+                        ) : (activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "Active Protocol" : "Offline")}
                       </span>
                     </div>
                   </div>
@@ -2280,6 +2543,7 @@ export default function ChatsPage() {
                   style={{ background: isDark ? "#161622" : "#ffffff", borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }}>
                   <button onClick={() => { setShowWallpaperPicker(true); setShowChatMenu(false); }} className="flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-[var(--text-primary)]"><Wallpaper className="w-4 h-4 text-purple-500" /> Wallpaper</button>
                   <button onClick={() => { openSearchInChat(); setShowChatMenu(false); }} className="flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-[var(--text-primary)]"><Search className="w-4 h-4 text-blue-500" /> Search</button>
+                  <button onClick={() => { setShowNicknameModal(true); setNicknameInput(nicknames[activeThread.username] || activeThread.name); setShowChatMenu(false); }} className="flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-[var(--text-primary)]"><Edit3 className="w-4 h-4 text-pink-500" /> Set Nickname</button>
                   {/* Disappearing submenu */}
                   <div className="relative">
                     <button
@@ -2472,14 +2736,14 @@ export default function ChatsPage() {
                         {isLocation && m.attachment?.url && (
                           <div className="rounded-xl overflow-hidden mb-2">
                             <iframe
-                              src={`https://www.google.com/maps?q=${m.attachment.url}&output=embed`}
+                              src={`https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d1000!2d${m.attachment.url.split(',')[1]}!3d${m.attachment.url.split(',')[0]}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sin`}
                               width="100%"
                               height="150"
                               style={{ border: 0 }}
                               loading="lazy"
                               allowFullScreen
                             />
-                            <a href={`https://www.google.com/maps?q=${m.attachment.url}`} target="_blank" className="text-[10px] underline block mt-2 text-center opacity-80 font-bold">View full map</a>
+                            <a href={`https://www.google.com/maps?q=${m.attachment.url}`} target="_blank" rel="noopener noreferrer" className="text-[10px] underline block mt-2 text-center opacity-80 font-bold">📍 View full map</a>
                           </div>
                         )}
 
@@ -3289,6 +3553,27 @@ export default function ChatsPage() {
                   {callState.isVideoOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
                </motion.button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showNicknameModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }} className="glass-panel w-full max-w-sm rounded-[2rem] p-6 shadow-2xl flex flex-col items-center">
+              <h2 className="text-xl font-black mb-4 gradient-text">Set Nickname</h2>
+              <input value={nicknameInput} onChange={e => setNicknameInput(e.target.value)} placeholder="Instagram-friendly nickname..." autoFocus className="w-full bg-black/5 dark:bg-white/5 p-4 rounded-2xl outline-none font-bold text-center mb-6" style={{ color: "var(--text-primary)" }} />
+              <div className="flex gap-4 w-full">
+                <button onClick={() => setShowNicknameModal(false)} className="flex-1 py-3 rounded-xl bg-black/10 dark:bg-white/10 font-bold uppercase text-[10px] tracking-widest hover:opacity-80" style={{ color: "var(--text-primary)" }}>Cancel</button>
+                <button onClick={() => {
+                   if (!activeThread?.username) return;
+                   const updated = { ...nicknames, [activeThread.username]: nicknameInput || activeThread.name };
+                   setNicknames(updated);
+                   localStorage.setItem("nexora_nicknames", JSON.stringify(updated));
+                   setShowNicknameModal(false);
+                }} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#6c5ce7] to-[#00d4ff] text-white font-bold uppercase text-[10px] tracking-widest hover:opacity-90 shadow-[0_10px_20px_rgba(108,92,231,0.3)]">Save</button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

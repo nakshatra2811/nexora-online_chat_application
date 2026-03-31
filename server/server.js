@@ -543,7 +543,8 @@ function deliverQueuedMessages(username, socket) {
     if (!queue || queue.length === 0) return;
     console.log(`[QUEUE] Delivering ${queue.length} queued message(s) to ${username}`);
     for (const msg of queue) {
-        socket.emit(msg.isMedia ? 'dm:media' : 'dm:message', msg);
+        const eventName = msg.isLocation ? 'dm:location' : msg.isPoll ? 'dm:poll' : msg.isContact ? 'dm:contact' : msg.isMedia ? 'dm:media' : 'dm:message';
+        socket.emit(eventName, msg);
     }
     offlineMessageQueue.delete(username);
 }
@@ -677,6 +678,13 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('dm:typing', (data) => {
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:typing', { from: senderId, isTyping: data.isTyping });
+        }
+    });
+
     socket.on('dm:clear_chat', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
@@ -690,6 +698,71 @@ io.on('connection', (socket) => {
         if (senderId) {
             io.to(data.to?.toLowerCase()).emit('dm:reaction', { from: senderId, msgId: data.msgId, emoji: data.emoji });
             socket.to(senderId).emit('dm:reaction', { from: senderId, msgId: data.msgId, emoji: data.emoji });
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    // LOCATION SHARING RELAY
+    // ═══════════════════════════════════════════════
+    socket.on('dm:location', (data) => {
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            const enriched = { ...data, from: senderId };
+            const targetId = (data.to || '').toLowerCase();
+            const targetRoom = io.sockets.adapter.rooms.get(targetId);
+            if (targetRoom && targetRoom.size > 0) {
+                io.to(targetId).emit('dm:location', enriched);
+            } else {
+                queueMessageForUser(targetId, { ...enriched, isLocation: true });
+            }
+            socket.to(senderId).emit('dm:location', enriched);
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    // POLL SHARING RELAY
+    // ═══════════════════════════════════════════════
+    socket.on('dm:poll', (data) => {
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            const enriched = { ...data, from: senderId };
+            const targetId = (data.to || '').toLowerCase();
+            const targetRoom = io.sockets.adapter.rooms.get(targetId);
+            if (targetRoom && targetRoom.size > 0) {
+                io.to(targetId).emit('dm:poll', enriched);
+            } else {
+                queueMessageForUser(targetId, { ...enriched, isPoll: true });
+            }
+            socket.to(senderId).emit('dm:poll', enriched);
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    // POLL VOTE RELAY (Real-time vote sync)
+    // ═══════════════════════════════════════════════
+    socket.on('dm:poll_vote', (data) => {
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            io.to(data.to?.toLowerCase()).emit('dm:poll_vote', { from: senderId, msgId: data.msgId, optId: data.optId, action: data.action });
+            socket.to(senderId).emit('dm:poll_vote', { from: senderId, msgId: data.msgId, optId: data.optId, action: data.action });
+        }
+    });
+
+    // ═══════════════════════════════════════════════
+    // CONTACT SHARING RELAY
+    // ═══════════════════════════════════════════════
+    socket.on('dm:contact', (data) => {
+        const senderId = socketToUser.get(socket.id);
+        if (senderId) {
+            const enriched = { ...data, from: senderId };
+            const targetId = (data.to || '').toLowerCase();
+            const targetRoom = io.sockets.adapter.rooms.get(targetId);
+            if (targetRoom && targetRoom.size > 0) {
+                io.to(targetId).emit('dm:contact', enriched);
+            } else {
+                queueMessageForUser(targetId, { ...enriched, isContact: true });
+            }
+            socket.to(senderId).emit('dm:contact', enriched);
         }
     });
 
@@ -1597,6 +1670,14 @@ app.post('/api/users/avatar', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         await db.run('UPDATE users SET avatar_url = ? WHERE LOWER(username) = LOWER(?)', [avatarBase64, username]);
+        
+        // Broadcast the avatar update to all connected friends
+        const connections = await db.all('SELECT user_a, user_b FROM connections WHERE user_a = LOWER(?) OR user_b = LOWER(?)', [username, username]);
+        const friends = connections.map(c => c.user_a === username.toLowerCase() ? c.user_b : c.user_a);
+        friends.forEach(f => {
+            io.to(f).emit('dm:avatar_update', { from: username, avatarUrl: avatarBase64 });
+        });
+
         res.json({ status: "success", message: "Profile picture updated." });
     } catch (err) {
         console.error("Avatar update error:", err);

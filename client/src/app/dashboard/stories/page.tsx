@@ -234,6 +234,16 @@ export default function StoriesPage() {
     }
   }, [activeStory?.id]);
 
+  // Hide mobile navbar when story is open
+  useEffect(() => {
+    if (activeStory) {
+      document.body.classList.add("chat-active");
+    } else {
+      document.body.classList.remove("chat-active");
+    }
+    return () => document.body.classList.remove("chat-active");
+  }, [activeStory]);
+
   useEffect(() => {
     if (!activeStory || isPaused) {
       if (progressRef.current) clearInterval(progressRef.current);
@@ -243,7 +253,16 @@ export default function StoriesPage() {
     progressRef.current = setInterval(() => {
       setProgress((p) => {
         if (p >= 100) {
-          setActiveStory(null);
+          setActiveStory((prev: any) => {
+            if (!prev) return null;
+            if (prev.username === myUsername) return null; // Done with my story
+            // Find next story
+            const idx = otherStories.findIndex((s) => s.id === prev.id);
+            if (idx >= 0 && idx < otherStories.length - 1) {
+              return otherStories[idx + 1];
+            }
+            return null; // End of stories
+          });
           return 0;
         }
         return p + 0.5; // 5 seconds total (100 / 0.5 * 25ms ≈ 5s)
@@ -251,7 +270,7 @@ export default function StoriesPage() {
     }, 25);
     
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
-  }, [activeStory, isPaused]);
+  }, [activeStory, isPaused, otherStories, myUsername]);
 
   const handleLike = async (storyId: number, e?: React.MouseEvent | React.TouchEvent) => {
     if (e) e.stopPropagation();
@@ -646,25 +665,25 @@ export default function StoriesPage() {
               </div>
 
               {/* ─── BOTTOM BAR: Like + Reaction + Reply ─── */}
-              <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-5 pt-4 safe-bottom"
-                   style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)", backdropFilter: "blur(4px)" }}>
+              <div className="absolute bottom-0 left-0 right-0 z-20 px-3 md:px-5 pb-4 md:pb-6 pt-6 safe-bottom"
+                   style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)", pointerEvents: "auto" }}>
 
                 {/* Sent reaction feedback */}
                 <AnimatePresence>
                   {sentReaction && (
                     <motion.div key="sent-reaction-feedback" initial={{ y: 8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 8, opacity: 0 }}
-                      className="text-center mb-2 text-2xl">{sentReaction}</motion.div>
+                      className="text-center mb-3 text-2xl font-black">{sentReaction}</motion.div>
                   )}
                 </AnimatePresence>
 
                 {/* Snap reactions row */}
                 <AnimatePresence>
                   {showSnapReactions && (
-                    <motion.div key="snap-reactions-row" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
-                      className="flex justify-center gap-3 mb-3">
+                    <motion.div key="snap-reactions-row" initial={{ y: 15, opacity: 0, scale: 0.9 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 10, opacity: 0, scale: 0.9 }}
+                      className="flex justify-center gap-2 md:gap-4 mb-4 bg-black/40 backdrop-blur-xl py-3 px-4 rounded-full border border-white/10 w-max mx-auto shadow-2xl">
                       {SNAP_REACTIONS.map((emoji) => (
-                        <motion.button key={emoji} whileHover={{ scale: 1.3 }} whileTap={{ scale: 0.9 }}
-                          className="text-2xl" onClick={() => handleSnapReaction(emoji)}>
+                        <motion.button key={emoji} whileHover={{ scale: 1.35 }} whileTap={{ scale: 0.85 }}
+                          className="text-3xl text-shadow-xl" onClick={() => handleSnapReaction(emoji)}>
                           {emoji}
                         </motion.button>
                       ))}
@@ -673,48 +692,57 @@ export default function StoriesPage() {
                 </AnimatePresence>
 
                 {activeStory.username !== myUsername && (
-                  <div className="flex items-center gap-2">
-                    {/* Like button with count */}
-                    <div className="flex flex-col items-center gap-1">
-                      <motion.button
-                        whileTap={{ scale: 0.8 }}
-                        onClick={(e) => handleLike(activeStory.id, e)}
-                        className="h-10 w-10 rounded-full flex items-center justify-center transition-all shrink-0 shadow-lg"
-                        style={{ background: liked[activeStory.id] ? "rgba(255,0,110,0.3)" : "rgba(255,255,255,0.15)", backdropFilter: "blur(10px)" }}>
-                        <motion.span animate={{ scale: liked[activeStory.id] ? [1, 1.6, 1] : 1 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
-                          <Heart className="w-5 h-5 transition-all" fill={liked[activeStory.id] ? "#ff006e" : "none"}
-                                 color={liked[activeStory.id] ? "#ff006e" : "white"} />
-                        </motion.span>
-                      </motion.button>
-                      <span className="text-[9px] font-black tracking-tighter text-white/90 drop-shadow-md">
-                        {likeCount[activeStory.id] || 0} Likes
-                      </span>
-                    </div>
-
-                    {/* Emoji reaction */}
-                    <motion.button whileTap={{ scale: 0.9 }}
-                      onClick={() => setShowSnapReactions(!showSnapReactions)}
-                      className="h-10 w-10 rounded-full flex items-center justify-center text-xl shrink-0"
-                      style={{ background: "rgba(255,255,255,0.1)" }}>
-                      🔥
-                    </motion.button>
-
+                  <div className="flex items-center gap-2 md:gap-3 w-full">
                     {/* Reply input */}
-                    <div className="flex-1 flex items-center rounded-full px-4 py-2 gap-2"
-                         style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(8px)" }}>
+                    <div className="flex-1 flex items-center rounded-[24px] px-4 py-[11px] gap-2 min-w-0 shadow-xl transition-all"
+                         style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(16px)" }}>
                       <input
                         type="text"
                         value={reply}
                         onChange={(e) => setReply(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleReply()}
                         placeholder="Reply to story..."
-                        className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/40"
+                        className="flex-1 bg-transparent shrink min-w-0 outline-none text-[14px] text-white placeholder:text-white/70 font-semibold"
                       />
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => handleReply()}
-                        className="text-white/70 hover:text-white transition-colors">
-                        <Send className="w-4 h-4" />
+                      <motion.button whileTap={{ scale: 0.85 }} onClick={() => handleReply()}
+                        className="text-white hover:text-[#00d4ff] transition-colors shrink-0">
+                        <Send className="w-[18px] h-[18px]" />
                       </motion.button>
                     </div>
+
+                    {/* Like button with badge count */}
+                    <motion.button
+                      whileTap={{ scale: 0.85 }}
+                      onClick={(e) => handleLike(activeStory.id, e)}
+                      className="h-[44px] w-[44px] rounded-full flex items-center justify-center transition-all shrink-0 shadow-xl relative border"
+                      style={{ 
+                        background: liked[activeStory.id] ? "rgba(255,0,110,0.3)" : "rgba(255,255,255,0.15)", 
+                        borderColor: liked[activeStory.id] ? "rgba(255,0,110,0.5)" : "rgba(255,255,255,0.25)",
+                        backdropFilter: "blur(16px)" 
+                      }}>
+                      <motion.span animate={{ scale: liked[activeStory.id] ? [1, 1.6, 1] : 1 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
+                        <Heart className="w-[22px] h-[22px] transition-all" fill={liked[activeStory.id] ? "#ff006e" : "none"}
+                               color={liked[activeStory.id] ? "#ff006e" : "white"} />
+                      </motion.span>
+                      
+                      {/* Minimalist Like Counter Badge */}
+                      {(likeCount[activeStory.id] > 0 || liked[activeStory.id]) && (
+                        <motion.span 
+                          initial={{ scale: 0 }} 
+                          animate={{ scale: 1 }}
+                          className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-[#ff006e] text-white flex items-center justify-center text-[10px] font-black shadow-lg border-2 border-[#1a1a30]">
+                          {likeCount[activeStory.id] || 0}
+                        </motion.span>
+                      )}
+                    </motion.button>
+
+                    {/* Emoji reaction quick-toggle */}
+                    <motion.button whileTap={{ scale: 0.85 }}
+                      onClick={() => setShowSnapReactions(!showSnapReactions)}
+                      className="h-[44px] w-[44px] rounded-full flex items-center justify-center text-[22px] shrink-0 shadow-xl border border-white/20"
+                      style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(16px)" }}>
+                      🔥
+                    </motion.button>
                   </div>
                 )}
 
