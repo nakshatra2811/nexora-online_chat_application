@@ -727,6 +727,7 @@ io.on('connection', (socket) => {
                 callType: data.callType,
                 callerName: data.callerName,
                 callerColor: data.callerColor,
+                roomId: data.roomId // Pass along room ID if provided
             });
             // Push notification for incoming call
             const sub = pushSubscriptions.get(targetId);
@@ -751,7 +752,46 @@ io.on('connection', (socket) => {
     socket.on('call:ice-candidate', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
+            // Target can be a userId or a roomId
             io.to(data.to?.toLowerCase()).emit('call:ice-candidate', { from: senderId, candidate: data.candidate });
+        }
+    });
+
+    // ── NEW ROOM-BASED CALL SIGNALING (CallManager Support) ──
+    socket.on('create-room', ({ roomId, offer }) => {
+        const senderId = socketToUser.get(socket.id);
+        socket.join(roomId);
+        console.log(`[Call] Room Created: ${roomId} by ${senderId}`);
+        // For direct calls, the 'to' is usually the user we are calling.
+        // If roomId is used for signaling, we broadcast 'offer-received' to the other peer(s).
+        // Since Nexora usually calls 1-on-1, 'roomId' is typically shared via another channel or known ID.
+        socket.to(roomId).emit('offer-received', { offer, roomId, from: senderId });
+    });
+
+    socket.on('join-room', ({ roomId }) => {
+        const senderId = socketToUser.get(socket.id);
+        socket.join(roomId);
+        console.log(`[Call] Peer Joined: ${roomId} (${senderId})`);
+    });
+
+    socket.on('send-answer', ({ roomId, answer }) => {
+        const senderId = socketToUser.get(socket.id);
+        socket.to(roomId).emit('answer-received', { answer, from: senderId });
+    });
+
+    socket.on('ice-candidate', ({ roomId, candidate }) => {
+        socket.to(roomId).emit('ice-candidate', { candidate });
+    });
+
+    socket.on('end-call', ({ roomId }) => {
+        io.to(roomId).emit('call-ended');
+        // Clean up: make all sockets in room leave
+        const clients = io.sockets.adapter.rooms.get(roomId);
+        if (clients) {
+            for (const socketId of clients) {
+                const s = io.sockets.sockets.get(socketId);
+                if (s) s.leave(roomId);
+            }
         }
     });
 
@@ -768,9 +808,7 @@ io.on('connection', (socket) => {
     socket.on('call:hangup', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
-            // Forward to recipient
             io.to(data.to?.toLowerCase()).emit('call:hangup', { from: senderId });
-            // Sync with all sender's other devices
             socket.to(senderId).emit('call:hangup', { from: senderId });
         }
     });
@@ -778,9 +816,7 @@ io.on('connection', (socket) => {
     socket.on('call:reject', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId) {
-            // Forward to recipient
             io.to(data.to?.toLowerCase()).emit('call:reject', { from: senderId });
-            // Sync with all sender's other devices
             socket.to(senderId).emit('call:reject', { from: senderId });
         }
     });

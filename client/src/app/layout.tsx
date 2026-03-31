@@ -43,6 +43,8 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
+import { CallWrapper } from "@/components/Call/CallWrapper";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,7 +58,9 @@ export default function RootLayout({
         </Suspense>
         <ToastProvider />
         <ThemeProvider>
-          {children}
+          <CallWrapper>
+            {children}
+          </CallWrapper>
         </ThemeProvider>
         <SpeedInsights />
         <Analytics />

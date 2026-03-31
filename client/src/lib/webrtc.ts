@@ -1,7 +1,7 @@
 // lib/webrtc.ts
-// Pure WebRTC P2P Call Engine — Unlimited Free Calls
-// Uses native SRTP (AES-128/256) encryption built into WebRTC.
-// No third-party service needed. Server only relays signaling.
+// Nexora WebRTC P2P Call Engine — Real-Time Voice & Video
+// Uses native SRTP encryption built into WebRTC.
+// Server only relays signaling — ZERO knowledge.
 
 import { socketService } from "./socket";
 
@@ -14,122 +14,141 @@ const ICE_SERVERS: RTCIceServer[] = [
 ];
 
 export type CallType = "voice" | "video";
-export type CallDirection = "outgoing" | "incoming";
 
 export interface CallEvents {
+  onLocalStream: (stream: MediaStream) => void;
   onRemoteStream: (stream: MediaStream) => void;
-  onCallAccepted: () => void;
+  onCallConnected: () => void;
   onCallEnded: (reason: string) => void;
   onCallRejected: () => void;
-  onIceConnectionChange: (state: RTCIceConnectionState) => void;
-  onRemoteMuteToggle?: (isMuted: boolean) => void;
-  onRemoteVideoToggle?: (isVideoOff: boolean) => void;
+  onIceConnectionChange?: (state: RTCIceConnectionState) => void;
 }
 
 export class WebRTCService {
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
-  private remoteStream: MediaStream | null = null;
   private events: CallEvents | null = null;
   private targetUserId: string | null = null;
   private callType: CallType = "voice";
-  private isInitiator = false;
-  private _isCleaning = false; // Guard against recursive cleanup
+  private _isCleaning = false;
+  private pendingIceCandidates: RTCIceCandidateInit[] = [];
+  private listenersAttached = false;
   public currentFacingMode: "user" | "environment" = "user";
 
-  private onIncomingCallCallback: ((data: { from: string; sdp: RTCSessionDescriptionInit; callType: CallType; callerName?: string; callerColor?: string }) => void) | null = null;
+  // Incoming call handler
+  private onIncomingCallCb:
+    | ((data: {
+        from: string;
+        sdp: RTCSessionDescriptionInit;
+        callType: CallType;
+        callerName?: string;
+        callerColor?: string;
+      }) => void)
+    | null = null;
 
-  constructor() {
-    this.setupSocketListeners();
-  }
+  constructor() {}
 
-  public onIncomingCall(callback: (data: { from: string; sdp: RTCSessionDescriptionInit; callType: CallType; callerName?: string; callerColor?: string }) => void) {
-    this.onIncomingCallCallback = callback;
-  }
+  // ─── Listener Setup ────────────────────────────────────────────────────────
 
-  private setupSocketListeners() {
+  public attachListeners() {
+    if (this.listenersAttached) return;
     const socket = socketService.getSocket();
     if (!socket) return;
 
-    // Clear old listeners first to avoid duplicates
+    this.listenersAttached = true;
+
     socket.off("call:offer");
     socket.off("call:answer");
     socket.off("call:ice-candidate");
     socket.off("call:hangup");
     socket.off("call:reject");
+    socket.off("call:state-update");
 
-    socket.on("call:offer", async (data: { from: string; sdp: RTCSessionDescriptionInit; callType: CallType; callerName?: string; callerColor?: string }) => {
-      if (this.onIncomingCallCallback) {
-        this.onIncomingCallCallback(data);
+    socket.on(
+      "call:offer",
+      (data: {
+        from: string;
+        sdp: RTCSessionDescriptionInit;
+        callType: CallType;
+        callerName?: string;
+        callerColor?: string;
+      }) => {
+        console.log("[WebRTC] Incoming call:offer from:", data.from, "type:", data.callType);
+        this.onIncomingCallCb?.(data);
       }
-    });
+    );
 
-    socket.on("call:answer", async (data: { from: string; sdp: RTCSessionDescriptionInit }) => {
-      if (this.pc) {
+    socket.on(
+      "call:answer",
+      async (data: { from: string; sdp: RTCSessionDescriptionInit }) => {
+        console.log("[WebRTC] call:answer received from:", data.from);
+        if (!this.pc) return;
         try {
           await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          this.events?.onCallAccepted();
-          
-          // CRITICAL: Process ICE candidates that arrived before the remote answer was set!
-          await this.processPendingIceCandidates();
+          await this._processPendingIce();
+          this.events?.onCallConnected();
         } catch (e) {
           console.error("[WebRTC] Failed to set remote description (answer):", e);
         }
       }
-    });
+    );
 
-    socket.on("call:ice-candidate", async (data: { from: string; candidate: RTCIceCandidateInit }) => {
-      await this.tryAddIceCandidate(data.candidate);
-    });
-
-    socket.on("call:hangup", (data: { from: string }) => {
-      this.cleanup("Remote user ended the call");
-    });
-
-    socket.on("call:reject", (data: { from: string }) => {
-      this.cleanup("Call was rejected");
-      this.events?.onCallRejected();
-    });
-
-    socket.on("call:state-update", (data: { from: string; state: { isMuted?: boolean; isVideoOff?: boolean } }) => {
-      if (data.state.isMuted !== undefined) this.events?.onRemoteMuteToggle?.(data.state.isMuted);
-      if (data.state.isVideoOff !== undefined) this.events?.onRemoteVideoToggle?.(data.state.isVideoOff);
-    });
-  }
-
-
-  // Re-attach socket listeners (e.g. after reconnect)
-  public reattachListeners() {
-    this.setupSocketListeners();
-  }
-
-  private pendingIceCandidates: RTCIceCandidateInit[] = [];
-
-  private createPeerConnection() {
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    this.remoteStream = new MediaStream();
-
-    // Handle incoming remote tracks (Robust stream population)
-    this.pc.ontrack = (event) => {
-      console.log("[WebRTC] Incoming track:", event.track.kind);
-      
-      let newStream: MediaStream;
-      if (event.streams && event.streams[0]) {
-        newStream = event.streams[0];
-      } else {
-        if (!this.remoteStream) {
-            this.remoteStream = new MediaStream();
-        }
-        this.remoteStream.addTrack(event.track);
-        newStream = this.remoteStream;
+    socket.on(
+      "call:ice-candidate",
+      async (data: { from: string; candidate: RTCIceCandidateInit }) => {
+        await this._tryAddIce(data.candidate);
       }
-      
-      // Update our internal reference
-      this.remoteStream = newStream;
-      
-      // Force a new stream Object reference creation so React state triggers a re-render
-      const clonedStream = new MediaStream(newStream.getTracks());
-      this.events?.onRemoteStream(clonedStream);
+    );
+
+    socket.on("call:hangup", () => {
+      console.log("[WebRTC] call:hangup received");
+      this._cleanup("Remote user ended the call");
+    });
+
+    socket.on("call:reject", () => {
+      console.log("[WebRTC] call:reject received");
+      const cb = this.events?.onCallRejected;
+      this._cleanup("Call was rejected");
+      cb?.();
+    });
+  }
+
+  public detachListeners() {
+    const socket = socketService.getSocket();
+    if (!socket) return;
+    socket.off("call:offer");
+    socket.off("call:answer");
+    socket.off("call:ice-candidate");
+    socket.off("call:hangup");
+    socket.off("call:reject");
+    socket.off("call:state-update");
+    this.listenersAttached = false;
+  }
+
+  public onIncomingCall(
+    cb: (data: {
+      from: string;
+      sdp: RTCSessionDescriptionInit;
+      callType: CallType;
+      callerName?: string;
+      callerColor?: string;
+    }) => void
+  ) {
+    this.onIncomingCallCb = cb;
+  }
+
+  // ─── Peer Connection ────────────────────────────────────────────────────────
+
+  private _createPC() {
+    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+    // Handle incoming remote tracks
+    this.pc.ontrack = (event) => {
+      console.log("[WebRTC] Remote track received:", event.track.kind);
+      const stream = event.streams[0] ?? new MediaStream([event.track]);
+      // Force a new reference so React re-renders
+      const cloned = new MediaStream(stream.getTracks());
+      this.events?.onRemoteStream(cloned);
     };
 
     // ICE candidate relay
@@ -144,25 +163,31 @@ export class WebRTCService {
     };
 
     // Connection state monitoring
+    this.pc.onconnectionstatechange = () => {
+      const state = this.pc?.connectionState;
+      console.log("[WebRTC] Connection state:", state);
+      if (state === "connected") {
+        this.events?.onCallConnected();
+      }
+      if (state === "disconnected" || state === "failed" || state === "closed") {
+        this._cleanup(`Connection ${state}`);
+      }
+    };
+
     this.pc.oniceconnectionstatechange = () => {
       const state = this.pc?.iceConnectionState;
       if (state) {
-        this.events?.onIceConnectionChange(state);
-        if (state === "disconnected" || state === "failed" || state === "closed") {
-          this.cleanup(`Connection ${state}`);
-        }
+        this.events?.onIceConnectionChange?.(state);
       }
     };
   }
 
-  private async tryAddIceCandidate(candidate: RTCIceCandidateInit) {
+  private async _tryAddIce(candidate: RTCIceCandidateInit) {
     if (!this.pc) return;
     try {
-      // We can only add ICE candidates after the remote description is set
-      if (this.pc.remoteDescription && this.pc.remoteDescription.type) {
+      if (this.pc.remoteDescription?.type) {
         await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
       } else {
-        // Queue candidate to be added later
         this.pendingIceCandidates.push(candidate);
       }
     } catch (e) {
@@ -170,23 +195,47 @@ export class WebRTCService {
     }
   }
 
-  private async processPendingIceCandidates() {
-    if (!this.pc || !this.pc.remoteDescription) return;
+  private async _processPendingIce() {
+    if (!this.pc?.remoteDescription) return;
     while (this.pendingIceCandidates.length > 0) {
-      const candidate = this.pendingIceCandidates.shift();
-      if (candidate) {
-        try {
-          await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-          console.warn("[WebRTC] Failed to add queued ICE candidate:", e);
-        }
+      const c = this.pendingIceCandidates.shift()!;
+      try {
+        await this.pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch (e) {
+        console.warn("[WebRTC] Failed to add queued ICE candidate:", e);
       }
     }
   }
 
-  // ═══════════════════════════════════════════════
-  // OUTGOING CALL — Initiator creates SDP Offer
-  // ═══════════════════════════════════════════════
+  // ─── Get Media Stream ───────────────────────────────────────────────────────
+
+  private async _getStream(type: CallType): Promise<MediaStream> {
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
+    const constraints: MediaStreamConstraints =
+      type === "video"
+        ? {
+            audio: audioConstraints,
+            video: {
+              facingMode: { ideal: this.currentFacingMode },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 },
+            },
+          }
+        : { audio: audioConstraints };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    this.localStream = stream;
+    return stream;
+  }
+
+  // ─── Outgoing Call ──────────────────────────────────────────────────────────
+
   public async startCall(
     targetUserId: string,
     type: CallType,
@@ -196,38 +245,17 @@ export class WebRTCService {
     this.events = events;
     this.targetUserId = targetUserId;
     this.callType = type;
-    this.isInitiator = true;
 
-    // Use optimized constraints for high-quality audio
-    const audioConstraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    };
+    const stream = await this._getStream(type);
+    events.onLocalStream(stream);
 
-    const constraints: MediaStreamConstraints =
-      type === "video"
-        ? { 
-            audio: audioConstraints, 
-            video: { 
-              facingMode: { ideal: this.currentFacingMode }, 
-              width: { ideal: 1280 }, 
-              height: { ideal: 720 },
-              frameRate: { ideal: 30 }
-            } 
-          }
-        : { audio: audioConstraints };
+    this._createPC();
+    stream.getTracks().forEach((t) => this.pc!.addTrack(t, stream));
 
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    // Create peer connection and add tracks
-    this.createPeerConnection();
-    this.localStream.getTracks().forEach((track) => {
-      this.pc?.addTrack(track, this.localStream!);
+    const offer = await this.pc!.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: type === "video",
     });
-
-    // Create and send offer
-    const offer = await this.pc!.createOffer();
     await this.pc!.setLocalDescription(offer);
 
     const socket = socketService.getSocket();
@@ -239,12 +267,11 @@ export class WebRTCService {
       callerColor: metadata?.callerColor,
     });
 
-    return this.localStream;
+    return stream;
   }
 
-  // ═══════════════════════════════════════════════
-  // INCOMING CALL — Receiver creates SDP Answer
-  // ═══════════════════════════════════════════════
+  // ─── Incoming Call Accept ───────────────────────────────────────────────────
+
   public async acceptCall(
     fromUserId: string,
     offer: RTCSessionDescriptionInit,
@@ -254,39 +281,15 @@ export class WebRTCService {
     this.events = events;
     this.targetUserId = fromUserId;
     this.callType = type;
-    this.isInitiator = false;
 
-    // Use optimized constraints for high-quality audio
-    const audioConstraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    };
+    const stream = await this._getStream(type);
+    events.onLocalStream(stream);
 
-    const constraints: MediaStreamConstraints =
-      type === "video"
-        ? { 
-            audio: audioConstraints, 
-            video: { 
-              facingMode: { ideal: this.currentFacingMode }, 
-              width: { ideal: 1280 }, 
-              height: { ideal: 720 },
-              frameRate: { ideal: 30 }
-            } 
-          }
-        : { audio: audioConstraints };
-
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    this.createPeerConnection();
-    this.localStream.getTracks().forEach((track) => {
-      this.pc?.addTrack(track, this.localStream!);
-    });
+    this._createPC();
+    stream.getTracks().forEach((t) => this.pc!.addTrack(t, stream));
 
     await this.pc!.setRemoteDescription(new RTCSessionDescription(offer));
-    
-    // Process any ICE candidates that arrived before the remote description was set
-    await this.processPendingIceCandidates();
+    await this._processPendingIce();
 
     const answer = await this.pc!.createAnswer();
     await this.pc!.setLocalDescription(answer);
@@ -297,41 +300,77 @@ export class WebRTCService {
       sdp: answer,
     });
 
-    return this.localStream;
+    return stream;
   }
 
-  // ═══════════════════════════════════════════════
-  // CALL CONTROLS
-  // ═══════════════════════════════════════════════
+  // ─── Controls ───────────────────────────────────────────────────────────────
 
   public toggleMute(): boolean {
-    if (!this.localStream) return false;
-    const track = this.localStream.getAudioTracks()[0];
-    if (track) {
-      track.enabled = !track.enabled;
-      const muted = !track.enabled;
-      
-      const socket = socketService.getSocket();
-      socket?.emit("call:state-update", { to: this.targetUserId, state: { isMuted: muted } });
-      
-      return muted;
-    }
-    return false;
+    const track = this.localStream?.getAudioTracks()[0];
+    if (!track) return false;
+    track.enabled = !track.enabled;
+    const muted = !track.enabled;
+    const socket = socketService.getSocket();
+    socket?.emit("call:state-update", {
+      to: this.targetUserId,
+      state: { isMuted: muted },
+    });
+    return muted;
   }
 
   public toggleVideo(): boolean {
-    if (!this.localStream) return false;
-    const track = this.localStream.getVideoTracks()[0];
-    if (track) {
-      track.enabled = !track.enabled;
-      const videoOff = !track.enabled;
+    const track = this.localStream?.getVideoTracks()[0];
+    if (!track) return false;
+    track.enabled = !track.enabled;
+    const videoOff = !track.enabled;
+    const socket = socketService.getSocket();
+    socket?.emit("call:state-update", {
+      to: this.targetUserId,
+      state: { isVideoOff: videoOff },
+    });
+    return videoOff;
+  }
 
-      const socket = socketService.getSocket();
-      socket?.emit("call:state-update", { to: this.targetUserId, state: { isVideoOff: videoOff } });
+  /** Flip between front/back camera. Returns new local stream for React to update. */
+  public async flipCamera(): Promise<MediaStream | null> {
+    if (!this.localStream || this.callType !== "video") return null;
 
-      return videoOff;
+    this.currentFacingMode =
+      this.currentFacingMode === "user" ? "environment" : "user";
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: this.currentFacingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const oldVideoTrack = this.localStream.getVideoTracks()[0];
+
+      // Replace track in peer connection without renegotiation
+      if (this.pc) {
+        const sender = this.pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) await sender.replaceTrack(newVideoTrack);
+      }
+
+      // Update local stream
+      if (oldVideoTrack) {
+        this.localStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+      }
+      this.localStream.addTrack(newVideoTrack);
+
+      // Return new stream reference so React re-renders the video element
+      return new MediaStream(this.localStream.getTracks());
+    } catch (e) {
+      console.error("[WebRTC] Flip camera failed:", e);
+      this.currentFacingMode =
+        this.currentFacingMode === "user" ? "environment" : "user";
+      return null;
     }
-    return false;
   }
 
   public rejectCall(fromUserId: string) {
@@ -344,82 +383,43 @@ export class WebRTCService {
       const socket = socketService.getSocket();
       socket?.emit("call:hangup", { to: this.targetUserId });
     }
-    this.cleanup("You ended the call");
+    this._cleanup("You ended the call");
   }
 
   public getLocalStream(): MediaStream | null {
     return this.localStream;
   }
 
-  public getRemoteStream(): MediaStream | null {
-    return this.remoteStream;
+  public getCallType(): CallType {
+    return this.callType;
   }
 
-  public async flipCamera(): Promise<boolean> {
-    if (!this.localStream || this.callType !== "video") return false;
-
-    this.currentFacingMode = this.currentFacingMode === "user" ? "environment" : "user";
-    
-    try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: { ideal: this.currentFacingMode }, 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 } 
-        }
-      });
-      
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = this.localStream.getVideoTracks()[0];
-
-      if (this.pc) {
-        const senders = this.pc.getSenders();
-        const sender = senders.find(s => s.track?.kind === "video");
-        if (sender) {
-          await sender.replaceTrack(newVideoTrack);
-        }
-      }
-
-      if (oldVideoTrack) {
-        this.localStream.removeTrack(oldVideoTrack);
-        oldVideoTrack.stop();
-      }
-
-      this.localStream.addTrack(newVideoTrack);
-      return true;
-    } catch (e) {
-      console.error("[WebRTC] Failed to flip camera:", e);
-      this.currentFacingMode = this.currentFacingMode === "user" ? "environment" : "user";
-      return false;
-    }
+  public isInCall(): boolean {
+    return this.pc !== null && !this._isCleaning;
   }
 
-  private cleanup(reason: string) {
-    // ── GUARD: prevent re-entrant / recursive cleanup ──
+  // ─── Cleanup ─────────────────────────────────────────────────────────────────
+
+  private _cleanup(reason: string) {
     if (this._isCleaning) return;
     this._isCleaning = true;
 
-    // Stop all local tracks
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.localStream = null;
 
-    // Close peer connection (disable all its event handlers first)
     if (this.pc) {
       this.pc.oniceconnectionstatechange = null;
+      this.pc.onconnectionstatechange = null;
       this.pc.ontrack = null;
       this.pc.onicecandidate = null;
       this.pc.close();
       this.pc = null;
     }
 
-    this.remoteStream = null;
     this.targetUserId = null;
-    this.currentFacingMode = "user";
     this.pendingIceCandidates = [];
+    this.currentFacingMode = "user";
 
-    // Capture and CLEAR the callback before invoking it.
-    // This is the key fix: if onCallEnded → endCall → hangup → cleanup,
-    // this.events is already null so the second cleanup() returns immediately.
     const cb = this.events?.onCallEnded;
     this.events = null;
     this._isCleaning = false;
