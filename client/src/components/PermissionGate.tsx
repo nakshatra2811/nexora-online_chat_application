@@ -8,6 +8,23 @@ interface PermissionGateProps {
     children: React.ReactNode;
 }
 
+const PermissionItem = ({ icon, title, desc, active, onClick }: { icon: any, title: string, desc: string, active: boolean, onClick: () => void }) => (
+    <motion.div 
+        onClick={onClick}
+        whileHover={{ x: 5 }}
+        className="flex items-center gap-5 p-5 rounded-3xl bg-gray-50 border border-gray-100/50 text-left hover:bg-white hover:shadow-lg transition-all cursor-pointer group relative overflow-hidden"
+    >
+        <div className={`p-4 rounded-2xl bg-white shadow-sm transition-colors ${active ? 'text-green-500 bg-green-50' : 'text-[#6c5ce7]'}`}>
+            {active ? <CheckCircle2 className="w-5 h-5" /> : icon}
+        </div>
+        <div className="flex-1 min-w-0">
+            <h4 className="text-[15px] font-bold text-[#1a1a2e] truncate">{title}</h4>
+            <p className="text-[12px] font-medium text-[#94a3b8] leading-tight truncate">{desc}</p>
+        </div>
+        <div className={`w-2 h-2 rounded-full transition-colors ${active ? 'bg-green-500' : 'bg-gray-200'}`} />
+    </motion.div>
+);
+
 export const PermissionGate: React.FC<PermissionGateProps> = ({ children }) => {
     const [showModal, setShowModal] = useState(false);
     const [permissions, setPermissions] = useState({
@@ -136,20 +153,3 @@ export const PermissionGate: React.FC<PermissionGateProps> = ({ children }) => {
         </>
     );
 };
-
-const PermissionItem = ({ icon, title, desc, active, onClick }: { icon: any, title: string, desc: string, active: boolean, onClick: () => void }) => (
-    <motion.div 
-        onClick={onClick}
-        whileHover={{ x: 5 }}
-        className="flex items-center gap-5 p-5 rounded-3xl bg-gray-50 border border-gray-100/50 text-left hover:bg-white hover:shadow-lg transition-all cursor-pointer group relative overflow-hidden"
-    >
-        <div className={`p-4 rounded-2xl bg-white shadow-sm transition-colors ${active ? 'text-green-500 bg-green-50' : 'text-[#6c5ce7]'}`}>
-            {active ? <CheckCircle2 className="w-5 h-5" /> : icon}
-        </div>
-        <div className="flex-1 min-w-0">
-            <h4 className="text-[15px] font-bold text-[#1a1a2e] truncate">{title}</h4>
-            <p className="text-[12px] font-medium text-[#94a3b8] leading-tight truncate">{desc}</p>
-        </div>
-        <div className={`w-2 h-2 rounded-full transition-colors ${active ? 'bg-green-500' : 'bg-gray-200'}`} />
-    </motion.div>
-);
