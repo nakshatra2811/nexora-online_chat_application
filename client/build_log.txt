@@ -1,0 +1,88 @@
+﻿
+> client@0.1.0 build
+> next build
+
+node.exe : ΓÜá Warning: 
+Next.js inferred your 
+workspace root, but it 
+may not be correct.
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (Γ  
+  Üá Warning: Ne...not    
+ be correct.:String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+ We detected multiple 
+lockfiles and selected 
+the directory of 
+D:\Nexora 1.0 
+ANTI\package-lock.json as 
+the root directory.
+ To silence this warning, 
+set `turbopack.root` in 
+your Next.js config, or 
+consider removing one of 
+the lockfiles if it's not 
+needed.
+   See https://nextjs.org/
+docs/app/api-reference/con
+fig/next-config-js/turbopa
+ck#root-directory for 
+more information.
+ Detected additional 
+lockfiles: 
+   * D:\Nexora 1.0 ANTI\cl
+ient\package-lock.json
+
+Γû▓ Next.js 16.2.1 (Turbopack)
+- Environments: .env.local
+
+ΓÜá The "middleware" file 
+convention is deprecated. 
+Please use "proxy" 
+instead. Learn more: https
+://nextjs.org/docs/message
+s/middleware-to-proxy
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 7.1s
+  Running TypeScript ...
+  Finished TypeScript in 7.1s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/15) ...
+  Generating static pages using 11 workers (3/15) 
+  Generating static pages using 11 workers (7/15) 
+  Generating static pages using 11 workers (11/15) 
+Γ£ô Generating static pages using 11 workers (15/15) in 857ms
+  Finalizing page optimization ...
+
+Route (app)
+Γöî Γùï /
+Γö£ Γùï /_not-found
+Γö£ Γùï /admin
+Γö£ Γùï /auth
+Γö£ Γùï /dashboard
+Γö£ Γùï /dashboard/chats
+Γö£ Γùï /dashboard/cinema
+Γö£ Γùï /dashboard/profile
+Γö£ Γùï /dashboard/settings
+Γö£ Γùï /dashboard/stories
+Γö£ Γùï /dashboard/vault
+Γö£ Γùï /icon.svg
+Γöö Γùï /policies
+
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)  prerendered as static content
+

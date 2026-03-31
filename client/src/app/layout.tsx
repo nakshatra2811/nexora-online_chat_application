@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
@@ -13,15 +13,11 @@ const inter = Inter({
 import fs from "fs";
 import path from "path";
 
-export const viewport: Metadata = {
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-}
-
-// Next.js 14+ specific viewport config
-export const viewportConfig = {
   interactiveWidget: 'resizes-content'
 };
 
