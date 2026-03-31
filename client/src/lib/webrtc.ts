@@ -359,55 +359,87 @@ export class WebRTCService {
 
   /** Flip between front/back camera. Returns new local stream for React to update. */
   public async flipCamera(): Promise<MediaStream | null> {
-    if (!this.localStream || this.callType !== "video") return null;
+    if (!this.localStream || this.callType !== "video" || !this.pc) return null;
 
+    const oldVideoTrack = this.localStream.getVideoTracks()[0];
     const nextFacing = this.currentFacingMode === "user" ? "environment" : "user";
+    
+    console.log("[WebRTC] Flipping camera to:", nextFacing);
 
     try {
-      // Use { exact } to FORCE the back/front camera on mobile.
-      // { ideal } is a soft hint that browsers often ignore.
+      // 1. Release previous camera hardware before requesting new one
+      // This is CRITICAL for many mobile browsers to allow switching cameras.
+      if (oldVideoTrack) {
+        oldVideoTrack.stop();
+        this.localStream.removeTrack(oldVideoTrack);
+      }
+
+      // 2. Request new stream with exact constraints
       let newStream: MediaStream;
       try {
+        // Find all video devices to be more specific if possible
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        
+        console.log("[WebRTC] Available video devices:", videoDevices.length);
+
+        // Try exact facing mode first
         newStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { exact: nextFacing },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
+          audio: false // DO NOT request audio again
         });
-      } catch {
-        // Fallback: if exact fails (e.g. desktop with only one camera), try ideal
+      } catch (err) {
+        console.warn("[WebRTC] Exact facingMode failed, falling back to ideal:", err);
+        // Fallback to ideal if exact fails
         newStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: nextFacing,
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
+          audio: false
         });
       }
 
       this.currentFacingMode = nextFacing;
-
       const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = this.localStream.getVideoTracks()[0];
 
-      // Replace track in peer connection without renegotiation
-      if (this.pc) {
-        const sender = this.pc.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) await sender.replaceTrack(newVideoTrack);
+      // 3. Replace track in peer connection
+      const sender = this.pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        await sender.replaceTrack(newVideoTrack);
       }
 
-      // Update local stream
-      if (oldVideoTrack) {
-        this.localStream.removeTrack(oldVideoTrack);
-        oldVideoTrack.stop();
-      }
+      // 4. Update local stream
       this.localStream.addTrack(newVideoTrack);
 
-      // Return new stream reference so React re-renders the video element
+      console.log("[WebRTC] Camera flip successful. Mode:", this.currentFacingMode);
+
+      // Return a fresh stream object so React triggers a re-render
       return new MediaStream(this.localStream.getTracks());
     } catch (e) {
-      console.error("[WebRTC] Flip camera failed:", e);
+      console.error("[WebRTC] Flip camera failed completely:", e);
+      
+      // Recovery: If flip failed, try to restart the original camera
+      try {
+        const recoveryStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: this.currentFacingMode },
+          audio: false
+        });
+        const recTrack = recoveryStream.getVideoTracks()[0];
+        if (this.pc && recTrack) {
+           const sender = this.pc.getSenders().find((s) => s.track?.kind === "video");
+           if (sender) await sender.replaceTrack(recTrack);
+           this.localStream.addTrack(recTrack);
+        }
+      } catch (recErr) {
+        console.error("[WebRTC] Recovery failed:", recErr);
+      }
+      
       return null;
     }
   }
