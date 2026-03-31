@@ -24,7 +24,16 @@ export async function nexoraFetch(endpoint: string, options: RequestInit = {}) {
       },
     });
     
-    const data = await response.json();
+    const contentType = response.headers.get("content-type");
+    let data;
+    if (contentType && contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      // Handle non-JSON response (e.g., HTML error page from proxy/Next.js)
+      const text = await response.text();
+      console.warn(`[Nexora Protocol] Non-JSON payload from ${endpoint}:`, text.slice(0, 50) + "...");
+      data = { error: "Non-JSON response received", status: response.status, _isHtml: true };
+    }
     
     if (!response.ok) {
       // Return the error body with a flag so callers can check

@@ -43,6 +43,13 @@ export default function StoriesPage() {
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Toast notification
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   // Real-time Camera
   const [cameraView, setCameraView] = useState<{ active: boolean; stream: MediaStream | null; capturedUrl: string | null }>({ active: false, stream: null, capturedUrl: null });
   const liveVideoRef = useRef<HTMLVideoElement>(null);
@@ -340,13 +347,13 @@ export default function StoriesPage() {
       });
       
       if (!res || res._httpError) {
-         alert("Failed to submit story (File might be too large).");
+         showToast("Upload failed. File might be too large.", "error");
       } else {
-         await fetchStories(); // Refresh after publish
-         alert("Story uploaded successfully!");
+         await fetchStories();
+         showToast("Your story is live! ✨", "success");
       }
     } catch (e) {
-      alert("Failed to submit story.");
+      showToast("Failed to submit story.", "error");
     } finally {
       setIsUploading(false);
     }
@@ -378,6 +385,24 @@ export default function StoriesPage() {
   };
 
   return (
+    <>
+    {/* Toast Notification */}
+    <AnimatePresence>
+      {toast && (
+        <motion.div
+          key="story-toast"
+          initial={{ opacity: 0, y: 60, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 60, scale: 0.9 }}
+          className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[9999] px-6 py-3 rounded-full text-white text-sm font-bold shadow-2xl flex items-center gap-2 backdrop-blur-md"
+          style={{ background: toast.type === "success" ? "linear-gradient(135deg,#2ed573,#00d4ff)" : "linear-gradient(135deg,#ff006e,#ff4757)" }}
+        >
+          <span>{toast.type === "success" ? "✓" : "✗"}</span>
+          {toast.message}
+        </motion.div>
+      )}
+    </AnimatePresence>
+
     <div className="relative flex flex-col w-full h-full overflow-y-auto p-6 md:p-8"
          style={{ color: "var(--text-primary)" }}>
       <input ref={fileInputRef} type="file" className="hidden" accept="image/*,video/*" onChange={handleNewSnap} />
@@ -423,22 +448,29 @@ export default function StoriesPage() {
             className="flex flex-col items-center cursor-pointer group relative"
           >
             <div className="relative mb-3">
-              {/* Ring logic */}
-              <div className={`p-[3px] rounded-full transition-all duration-500 ${myStory ? 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888] scale-100 shadow-lg group-hover:shadow-pink-500/20' : 'bg-transparent scale-95'}`}
-                   onClick={() => myStory ? setActiveStory(myStory) : startCameraView()}>
-                <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative bg-[#1a1a2e]"
-                     style={{ border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
-                  {/* User Profile or Story Content */}
+              {/* Ring: Instagram gradient if story exists, dashed if not */}
+              <div
+                className={`p-[3px] rounded-full transition-all duration-500 cursor-pointer ${
+                  myStory
+                    ? 'bg-gradient-to-tr from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888] shadow-lg shadow-pink-500/20'
+                    : isDark ? 'bg-white/10' : 'bg-black/10'
+                }`}
+                onClick={() => myStory ? setActiveStory(myStory) : startCameraView()}>
+
+                <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
+                     style={{ background: isDark ? "#1a1a2e" : "#f0f0f0", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
+
+                  {/* Show uploaded story image or placeholder */}
                   {myStory ? (
-                    <img src={myStory.content} alt="" className="w-full h-full object-cover" />
+                    <img src={myStory.content} alt="Your story" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-                       <span className="font-extrabold text-3xl text-white/20">{(myUsername || "Y")[0].toUpperCase()}</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-[#6c5ce7]/20 to-[#00d4ff]/10">
+                      <Camera className="w-7 h-7" style={{ color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.2)" }} />
                     </div>
                   )}
-                  
+
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
-                    className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-full">
+                    className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-full">
                     {myStory ? <Play className="w-6 h-6 text-white" fill="white" /> : <Camera className="w-6 h-6 text-white" />}
                   </motion.div>
                 </div>
@@ -446,20 +478,21 @@ export default function StoriesPage() {
 
               {/* Plus Badge (only if no story) */}
               {!myStory && (
-                <motion.div 
-                  initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  whileHover={{ scale: 1.1 }}
+                <motion.div
+                  initial={{ scale: 0 }} animate={{ scale: 1 }} whileHover={{ scale: 1.15 }}
                   onClick={(e) => { e.stopPropagation(); startCameraView(); }}
-                  className="absolute bottom-1 right-1 w-7 h-7 bg-blue-500 rounded-full border-[3px] flex items-center justify-center shadow-lg z-20"
-                  style={{ borderColor: isDark ? "#0a0a12" : "#ffffff" }}>
+                  className="absolute bottom-0 right-0 w-7 h-7 rounded-full flex items-center justify-center shadow-lg z-20 border-[3px]"
+                  style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", borderColor: isDark ? "#0a0a12" : "#ffffff" }}>
                   <Plus className="w-4 h-4 text-white stroke-[3px]" />
                 </motion.div>
               )}
 
-              {/* View Count Badge (only if has story) */}
+              {/* View + Like Count Badge */}
               {myStory && (
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1 rounded-full text-[10px] font-bold text-white bg-black/70 backdrop-blur-md shadow-lg z-20 border border-white/10">
-                  <Eye className="w-3 h-3 text-white" /> {myStory.views}
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap">
+                  <Eye className="w-3 h-3" /> {myStory.views ?? 0}
+                  <span className="opacity-30">·</span>
+                  <Heart className="w-3 h-3 text-[#ff006e]" fill="#ff006e" /> {likeCount[myStory.id] ?? myStory.likes ?? 0}
                 </div>
               )}
             </div>
@@ -467,8 +500,8 @@ export default function StoriesPage() {
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
               Your Story
             </h3>
-            <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              {myStory ? <><Clock className="w-2.5 h-2.5" /> {getTimeAgo(myStory.created_at, now)}</> : "Share a moment"}
+            <p className="text-[10px] mt-0.5 flex items-center gap-1 justify-center" style={{ color: "var(--text-muted)" }}>
+              {myStory ? <><Clock className="w-2.5 h-2.5" /> {getTimeAgo(myStory.created_at, now)}</> : "Add to story"}
             </p>
           </motion.div>
 
@@ -554,78 +587,24 @@ export default function StoriesPage() {
               {/* Header */}
               <div className="absolute top-8 md:top-8 left-0 w-full px-5 flex justify-between items-center z-20 safe-top">
                 <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedProfileUser({ username: activeStory.username, name: activeStory.user, color: activeStory.color })}>
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105`}>
-                    {activeStory.user[0]}
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color?.includes('from-') ? activeStory.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105 uppercase`}>
+                    {(activeStory.user?.[0] || '?').toUpperCase()}
                   </div>
                   <div>
                     <p className="font-bold text-sm text-white group-hover:text-white transition-colors">{activeStory.user}</p>
                     <p className="text-[10px] text-white/50 font-black uppercase tracking-widest">{getTimeAgo(activeStory.created_at, now)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 relative">
-                  {/* Viewers Trigger Button (Only for My Story) */}
-                  {activeStory.username === myUsername && (
-                    <button onClick={(e) => { e.stopPropagation(); setShowViewers(!showViewers); setShowLikers(false); }}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-3xl text-[13px] font-black border border-white/30 shadow-2xl transition-all hover:bg-white/20 hover:scale-105 active:scale-95 cursor-pointer group/seen"
-                            style={{ color: "white" }}>
-                       <div className="flex -space-x-2 mr-1">
-                          {viewersList.slice(0, 3).map((v, i) => (
-                             <div key={i} className={`w-5 h-5 rounded-full border-2 border-[#12121c] bg-gradient-to-tr ${v.color || "from-purple-500 to-blue-500"} flex items-center justify-center text-[6px] font-black shadow-lg`}>
-                                {v.name?.[0] || v.username[0]}
-                             </div>
-                          ))}
-                       </div>
-                       <Eye className="w-4 h-4 text-white group-hover/seen:animate-pulse" />
-                       <span className="text-white drop-shadow-md">{activeStory.views || 0} Seen</span>
-                    </button>
-                  )}
-                  
-                  {/* Viewers Dropdown Modal (ONLY for own story) */}
-                  <AnimatePresence>
-                    {activeStory.username === myUsername && showViewers && (
-                      <motion.div key="viewers-modal" initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                        className="absolute right-0 top-12 w-64 rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 border border-white/10 text-white"
-                        style={{ backgroundColor: "rgba(13,13,26,0.98)", backdropFilter: "blur(25px)" }}
-                        onClick={(e) => e.stopPropagation()}>
-                        <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2 bg-white/5">
-                          <Eye className="w-4 h-4" style={{ color: "white" }} />
-                          <span className="text-sm font-bold" style={{ color: "white" }}>Viewer Activity</span>
-                        </div>
-                        <div className="max-h-60 overflow-y-auto p-2 space-y-1 scrollbar-hide">
-                          {viewersList.length === 0 ? (
-                            <div className="py-10 flex flex-col items-center justify-center">
-                               <Users className="w-10 h-10 mb-3" style={{ color: "white" }} />
-                               <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: "white" }}>Awaiting Node Activity</p>
-                            </div>
-                          ) : (
-                            viewersList.map((v) => (
-                              <motion.div key={`viewer-${v.username}`} 
-                                   initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                                   className="flex items-center gap-3 px-3 py-2 rounded-2xl transition-all hover:bg-white/10 cursor-pointer group/v" 
-                                   onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
-                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${v.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-xs font-black shrink-0 border border-white/20 shadow-lg group-hover/v:scale-110 transition-transform text-white`}>
-                                  {(v.name || v.username || "?")[0].toUpperCase()}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <span className="text-[13px] font-black block truncate transition-colors" style={{ color: "white" }}>{v.name || v.username}</span>
-                                  <span className="text-[9px] font-black uppercase tracking-tighter block truncate" style={{ color: "rgba(255,255,255,0.6)" }}>Verified Viewer</span>
-                                </div>
-                              </motion.div>
-                            ))
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <button onClick={() => { setActiveStory(null); setShowViewers(false); }} 
+                <div className="flex items-center gap-2">
+                  {/* Close button */}
+                  <button onClick={() => { setActiveStory(null); setShowViewers(false); setShowLikers(false); }}
                     className="p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 text-white transition-all backdrop-blur-md active:scale-95 border border-white/10 shadow-lg">
                     <X className="w-5 h-5 shadow-sm" />
                   </button>
 
                   {/* OWN STORY DELETE ACTION */}
                   {activeStory.username === myUsername && (
-                    <motion.button 
+                    <motion.button
                       whileHover={{ scale: 1.1, backgroundColor: "rgba(255,0,0,0.2)" }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleDeleteStory(activeStory.id)}
@@ -720,49 +699,92 @@ export default function StoriesPage() {
                   </div>
                 )}
 
-                {/* Like count & Viewers Dropdown */}
-                <div className="relative flex flex-col items-center mt-3">
-                  {activeStory.username === myUsername && (
-                    <>
-                      <p className="text-center text-[11px] text-white/50 font-medium cursor-pointer hover:text-white/70 transition-colors"
-                         onClick={() => setShowLikers(!showLikers)}>
-                        <span className="text-white/90 font-bold">{activeStory.likes}</span> friends liked · Nexora Story Protocol
-                      </p>
+                {/* Instagram-style Stats Bar (only for own story) */}
+                {activeStory.username === myUsername && (
+                  <div className="mt-3">
+                    {/* Stat Pills Row */}
+                    <div className="flex items-center justify-center gap-2">
+                      {/* Views pill */}
+                      <motion.button
+                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                        onClick={(e) => { e.stopPropagation(); setShowViewers(v => !v); setShowLikers(false); }}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
+                        style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>{activeStory.views ?? viewersList.length ?? 0}</span>
+                        <span className="opacity-60 font-medium text-[10px]">views</span>
+                      </motion.button>
 
-                      {/* Likers Dropdown Modal */}
-                      <AnimatePresence>
-                        {showLikers && (
-                          <motion.div key="likers-modal" initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                            className="absolute bottom-8 w-52 rounded-2xl overflow-hidden shadow-2xl z-50"
-                            style={{ background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.15)", backdropFilter: "blur(40px)" }}
-                            onClick={(e) => e.stopPropagation()}>
-                            <div className="px-3 py-2.5 border-b border-white/10 text-[11px] font-bold flex items-center gap-1.5" style={{ color: "#ffffff", background: "rgba(255,255,255,0.05)" }}>
-                              <Heart className="w-3.5 h-3.5" style={{ color: "#ff006e" }} fill="#ff006e" /> Post Likes
-                            </div>
-                            <div className="max-h-44 overflow-y-auto w-full p-2 space-y-1">
-                              {likersList.length === 0 ? (
-                                <p className="text-[10px] text-center py-2" style={{ color: "rgba(255,255,255,0.4)" }}>No likes yet</p>
-                              ) : (
-                                likersList.map((v) => (
-                                  <div key={`liker-${v.username}`} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer group/l" style={{ background: "transparent" }}
-                                       onClick={(e) => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}
-                                       onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-                                       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                                    <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${v.color || "from-[#ff006e] to-[#ffbe0b]"} flex items-center justify-center text-[12px] font-black shrink-0 border border-white/20 shadow-lg group-hover/l:scale-110 transition-transform text-white`}>
-                                      {(v.name || v.username || "?")[0].toUpperCase()}
-                                    </div>
-                                    <span className="text-sm font-semibold truncate flex-1 group-hover/l:text-pink-400 transition-colors" style={{ color: "#ffffff" }}>{v.name || v.username}</span>
-                                    <Heart className="w-3.5 h-3.5 shrink-0" style={{ color: "#ff006e" }} fill="#ff006e" />
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </>
-                  )}
-                </div>
+                      {/* Likes pill */}
+                      <motion.button
+                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                        onClick={(e) => { e.stopPropagation(); setShowLikers(l => !l); setShowViewers(false); }}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
+                        style={{ background: "rgba(255,0,110,0.18)", color: "white", borderColor: "rgba(255,0,110,0.3)" }}>
+                        <Heart className="w-3.5 h-3.5" fill="#ff006e" style={{ color: "#ff006e" }} />
+                        <span>{likeCount[activeStory.id] ?? activeStory.likes ?? 0}</span>
+                        <span className="opacity-60 font-medium text-[10px]">likes</span>
+                      </motion.button>
+                    </div>
+
+                    {/* Viewers dropdown */}
+                    <AnimatePresence>
+                      {showViewers && (
+                        <motion.div key="viewers-bottom" initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          className="mt-2 w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+                          style={{ background: "rgba(13,13,26,0.97)", backdropFilter: "blur(30px)" }}
+                          onClick={e => e.stopPropagation()}>
+                          <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.04)" }}>
+                            <Eye className="w-3.5 h-3.5 text-white/70" />
+                            <span className="text-[11px] font-black text-white/80 uppercase tracking-widest">Viewers</span>
+                          </div>
+                          <div className="max-h-40 overflow-y-auto p-2 space-y-1">
+                            {viewersList.length === 0 ? (
+                              <p className="text-[11px] text-center py-4 text-white/40">No viewers yet</p>
+                            ) : viewersList.map(v => (
+                              <div key={v.username} className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-white/8 cursor-pointer transition-all"
+                                onClick={e => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
+                                <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${v.color?.includes('from-') ? v.color : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-xs font-black text-white shrink-0`}>
+                                  {(v.name?.[0] || v.username?.[0] || '?').toUpperCase()}
+                                </div>
+                                <span className="text-[13px] font-semibold text-white">{v.name || v.username}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Likers dropdown */}
+                    <AnimatePresence>
+                      {showLikers && (
+                        <motion.div key="likers-bottom" initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          className="mt-2 w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+                          style={{ background: "rgba(13,13,26,0.97)", backdropFilter: "blur(30px)" }}
+                          onClick={e => e.stopPropagation()}>
+                          <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2" style={{ background: "rgba(255,0,110,0.08)" }}>
+                            <Heart className="w-3.5 h-3.5" fill="#ff006e" style={{ color: "#ff006e" }} />
+                            <span className="text-[11px] font-black text-white/80 uppercase tracking-widest">Liked by</span>
+                          </div>
+                          <div className="max-h-40 overflow-y-auto p-2 space-y-1">
+                            {likersList.length === 0 ? (
+                              <p className="text-[11px] text-center py-4 text-white/40">No likes yet</p>
+                            ) : likersList.map(v => (
+                              <div key={v.username} className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-white/8 cursor-pointer transition-all"
+                                onClick={e => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
+                                <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${v.color?.includes('from-') ? v.color : 'from-[#ff006e] to-[#ffbe0b]'} flex items-center justify-center text-xs font-black text-white shrink-0`}>
+                                  {(v.name?.[0] || v.username?.[0] || '?').toUpperCase()}
+                                </div>
+                                <span className="text-[13px] font-semibold text-white flex-1">{v.name || v.username}</span>
+                                <Heart className="w-3 h-3 shrink-0" fill="#ff006e" style={{ color: "#ff006e" }} />
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
@@ -851,9 +873,9 @@ export default function StoriesPage() {
 
               <div className="px-10 pb-10 -mt-20 relative z-10">
                 <div className="flex flex-col items-center">
-                  <div className={`h-36 w-36 rounded-[36px] bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
-                    <span className="group-hover/avatar:scale-110 transition-transform duration-500">
-                      {selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?'}
+                  <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color?.includes('from-') ? selectedProfileUser.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
+                    <span className="group-hover/avatar:scale-110 transition-transform duration-500 uppercase">
+                      {(selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?').toUpperCase()}
                     </span>
                   </div>
 
@@ -885,28 +907,11 @@ export default function StoriesPage() {
                         <span className="opacity-30 italic animate-pulse">Decrypting protocol memo...</span>
                       ) : profileData?.bio || "No secure bio established for this node yet."}
                     </p>
-                    <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between opacity-50 font-black text-[10px] tracking-widest uppercase">
-                       <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> EST. {profileData?.created_at ? new Date(profileData.created_at).getFullYear() : '2026'}</div>
-                       <div className="flex items-center gap-2"><Shield className="w-3.5 h-3.5" /> Phase 1.2</div>
+                    <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-center opacity-40 font-black text-[9px] tracking-[0.3em] uppercase">
+                       SECURE NODE ACCESS &bull; ENCRYPTED PROTOCOL
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 w-full mb-4">
-                     {threads.some(t => t.username === selectedProfileUser.username) ? (
-                       <div className="col-span-2 p-5 rounded-[32px] bg-purple-500/10 border border-purple-500/20 flex flex-col items-center text-center">
-                          <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Mutual Node Active</p>
-                          <p className="text-[9px] text-purple-600/60 font-bold mt-1">Open Chat to initiate secure media stream</p>
-                       </div>
-                     ) : (
-                       <div className="col-span-2 p-5 rounded-[32px] bg-amber-500/5 border border-amber-500/10 flex flex-col items-center text-center">
-                          <div className="p-2.5 rounded-2xl bg-amber-500/10 mb-2">
-                             <ShieldOff className="w-5 h-5 text-amber-500" />
-                          </div>
-                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Protocol Restriction</p>
-                          <p className="text-[9px] text-amber-600/60 font-bold mt-1">Direct communication requires mutual connection</p>
-                       </div>
-                     )}
-                  </div>
 
                   <div className="flex gap-3 w-full">
                     <motion.button 
@@ -945,5 +950,7 @@ export default function StoriesPage() {
         )}
       </AnimatePresence>
     </div>
+  </>
   );
 }
+

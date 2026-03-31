@@ -1857,7 +1857,10 @@ app.get('/api/stories', async (req, res) => {
             ORDER BY s.created_at DESC
         `, [username, username, ...friends]);
 
-        res.json({ stories });
+        // Decrypt full_name for each story before sending to client
+        const decrypted = stories.map(s => ({ ...s, name: decryptField(s.name) }));
+
+        res.json({ stories: decrypted });
     } catch (err) {
         console.error("Fetch Stories Error:", err);
         res.status(500).json({ stories: [] });
@@ -2021,7 +2024,11 @@ app.get('/api/stories/stats', async (req, res) => {
             WHERE sl.story_id = ? ORDER BY sl.created_at DESC
         `, [storyId]);
 
-        res.json({ views, likes });
+        // Decrypt names before returning
+        const decryptedViews = views.map(v => ({ ...v, name: decryptField(v.name) }));
+        const decryptedLikes = likes.map(l => ({ ...l, name: decryptField(l.name) }));
+
+        res.json({ views: decryptedViews, likes: decryptedLikes });
     } catch (err) {
         console.error("Story Stats Error:", err);
         res.status(500).json({ views: [], likes: [] });

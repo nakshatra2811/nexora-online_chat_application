@@ -336,9 +336,9 @@ export default function AdminPanel() {
                          className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl shadow-sm"
                          style={{ background: isDark ? "rgba(255,255,255,0.03)" : "#fff", border: `1px solid var(--border-subtle)` }}>
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white shadow-lg"
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-white shadow-lg uppercase"
                                style={{ background: "linear-gradient(135deg, #ffbe0b, #ff006e)" }}>
-                            {req.username.charAt(0)}
+                            {(req.username?.[0] || "?").toUpperCase()}
                           </div>
                           <div>
                             <p className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>@{req.username}</p>

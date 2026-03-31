@@ -58,14 +58,14 @@ export function LoadingAnimation({
           style={{ background: color }}
         />
         {text && (
-          <motion.p
+          <motion.span
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-            className="text-xs font-bold uppercase tracking-widest text-center"
+            className="text-xs font-bold uppercase tracking-widest text-center block"
             style={{ color }}
           >
             {text}
-          </motion.p>
+          </motion.span>
         )}
       </div>
     );
@@ -95,9 +95,9 @@ export function LoadingAnimation({
           ))}
         </div>
         {text && (
-          <p className="text-xs font-bold uppercase tracking-widest text-center opacity-70" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs font-bold uppercase tracking-widest text-center opacity-70 block" style={{ color: "var(--text-muted)" }}>
             {text}
-          </p>
+          </span>
         )}
       </div>
     );
@@ -113,7 +113,7 @@ export function LoadingAnimation({
         style={{ borderColor: `${color}40`, borderTopColor: color }}
       />
       {text && (
-         <p className="text-xs font-semibold text-center" style={{ color: "var(--text-muted)" }}>{text}</p>
+         <span className="text-xs font-semibold text-center block" style={{ color: "var(--text-muted)" }}>{text}</span>
       )}
     </div>
   );

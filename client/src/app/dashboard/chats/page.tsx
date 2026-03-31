@@ -311,7 +311,7 @@ export default function ChatsPage() {
     }
   };
 
-  const handleRespondRequest = async (reqId: number, fromUsr: string, action: "accept" | "decline") => {
+  const handleRespond = async (reqId: number, fromUsr: string, action: "accept" | "decline") => {
     try {
       const res = await nexoraFetch("/api/connections/respond", {
         method: "POST",
@@ -2127,77 +2127,61 @@ export default function ChatsPage() {
                      </span>
                    </div>
                    <div className="text-left">
-                     <h4 className="font-bold text-sm" style={{color: "var(--text-primary)"}}>Follow Requests</h4>
-                     <p className="text-xs" style={{color: "var(--text-muted)"}}>Approve or ignore requests</p>
+                     <p className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-primary)" }}>Connection Requests</p>
+                     <p className="text-[10px] font-bold opacity-50" style={{ color: "var(--text-muted)" }}>{pendingRequests.length} nodes pending</p>
                    </div>
                  </div>
-                 <ChevronRight className={`w-5 h-5 transition-transform ${showRequestsSlider ? "rotate-90" : ""}`} style={{color: "var(--text-secondary)"}} />
+                 <ChevronRight className={`w-4 h-4 transition-transform ${showRequestsSlider ? 'rotate-90' : ''}`} />
                </motion.button>
-
-               {/* Dropping Request List */}
-               {showRequestsSlider && (
-                 <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} className="mt-2 space-y-2 pl-2">
-                   {pendingRequests.map(req => (
-                     <div key={req.id} className="flex flex-col gap-2 p-3 rounded-xl border" style={{borderColor: "var(--border-subtle)", background: "var(--bg-base)"}}>
-                       <div className="flex items-center gap-3">
-                         <div className={`h-10 w-10 shrink-0 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-gray-500 to-gray-700'} flex items-center justify-center text-white font-bold`}>
-                           {req.fromName?.[0] || 'U'}
+               
+               <AnimatePresence>
+                 {showRequestsSlider && (
+                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-2 space-y-2">
+                     {pendingRequests.map((req) => (
+                       <div key={req.id} className="p-3 rounded-xl border flex items-center justify-between gap-3" style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)" }}>
+                         <div className="flex items-center gap-2 min-w-0">
+                           <div className={`h-8 w-8 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-xs uppercase shadow-sm`}>
+                             {(req.fromName?.[0] || "?").toUpperCase()}
+                           </div>
+                           <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
                          </div>
-                         <div className="flex-1 min-w-0">
-                           <h4 className="font-bold text-[13px] truncate" style={{color: "var(--text-primary)"}}>{req.fromName}</h4>
-                           <p className="text-[11px] truncate" style={{color: "var(--text-muted)"}}>@{req.from}</p>
+                         <div className="flex items-center gap-1.5 shrink-0">
+                           <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="p-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20"><X className="w-3.5 h-3.5" /></button>
+                           <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="p-1.5 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20"><Check className="w-3.5 h-3.5" /></button>
                          </div>
                        </div>
-                       <div className="flex items-center gap-2 mt-1">
-                         <button onClick={() => handleRespondRequest(req.id, req.from, 'accept')} className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white shadow-md transition-transform hover:scale-[1.03] active:scale-95" style={{background: "linear-gradient(135deg, #6c5ce7, #00d4ff)"}}>Confirm</button>
-                         <button onClick={() => handleRespondRequest(req.id, req.from, 'decline')} className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-transform hover:scale-[1.03] active:scale-95 bg-black/5 dark:bg-white/5" style={{color: "var(--text-secondary)"}}>Delete</button>
-                       </div>
-                     </div>
-                   ))}
-                 </motion.div>
-               )}
+                     ))}
+                   </motion.div>
+                 )}
+               </AnimatePresence>
             </div>
           )}
 
-          {/* Activity/Notifications UI */}
+          {/* Activity/Notifications Tray */}
           {notifications.length > 0 && (
-             <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                   <motion.button 
-                     whileTap={{scale:0.98}}
-                     onClick={() => setShowNotifications(!showNotifications)}
-                     className="flex-1 flex items-center justify-between p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                   >
-                     <div className="flex items-center gap-3">
-                       <div className="h-10 w-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 relative">
-                         <Bell className="w-5 h-5" />
-                         {notifications.filter(n => !n.is_read).length > 0 && (
-                           <span className="absolute -top-1 -right-1 h-3 w-3 bg-purple-500 rounded-full border border-[var(--bg-surface)]" />
-                         )}
-                       </div>
-                       <div className="text-left">
-                         <h4 className="font-bold text-sm" style={{color: "var(--text-primary)"}}>Activity</h4>
-                         <p className="text-xs" style={{color: "var(--text-muted)"}}>{notifications.length} recent notifications</p>
-                       </div>
-                     </div>
-                     <ChevronRight className={`w-5 h-5 transition-transform ${showNotifications ? "rotate-90" : ""}`} style={{color: "var(--text-secondary)"}} />
-                   </motion.button>
-                   {showNotifications && notifications.length > 0 && (
-                     <button 
-                       onClick={async () => {
-                         const user = localStorage.getItem("nexora_signup_username");
-                         if (user) await nexoraFetch(`/api/notifications/clear?username=${user}`, { method: 'POST' });
-                         setNotifications([]);
-                       }} 
-                       className="ml-2 px-3 py-1.5 rounded-lg text-[10px] font-black text-purple-500 bg-purple-500/5 hover:bg-purple-500/10 transition-all border border-purple-500/10 uppercase tracking-widest shrink-0"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                 </div>
+            <div className="mb-4">
+               <div className="flex items-center justify-between px-2 mb-2">
+                 <button onClick={() => setShowNotifications(!showNotifications)} className="flex items-center gap-2 group">
+                   <Bell className="w-4 h-4 text-purple-500" />
+                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-500">Activity Protocol</span>
+                 </button>
                  {showNotifications && (
-                  <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} className="mt-1 space-y-1.5 pl-1 pr-1 pb-2">
-                    {/* Activity items are smaller and more dense here */}
+                  <button 
+                    onClick={async () => {
+                      const user = localStorage.getItem("nexora_signup_username");
+                      if (user) await nexoraFetch(`/api/notifications/clear?username=${user}`, { method: 'POST' });
+                      setNotifications([]);
+                    }} 
+                    className="px-2 py-1 rounded-lg text-[9px] font-black text-purple-500 bg-purple-500/5 hover:bg-purple-500/10 transition-all uppercase tracking-widest"
+                  >
+                    Clear
+                  </button>
+                 )}
+               </div>
+               
+               <AnimatePresence>
+                 {showNotifications && (
+                  <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} exit={{opacity:0, height:0}} className="space-y-1.5">
                     {notifications.map(notif => (
                       <motion.div 
                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -2205,60 +2189,26 @@ export default function ChatsPage() {
                          className="group flex flex-col gap-1.5 p-2.5 rounded-xl border relative transition-all" 
                          style={{borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)"}}
                       >
-                        <div className="flex items-start gap-2.5">
+                        <div className="flex items-start gap-2.5" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
                            <div className="mt-1">
-                              {notif.type === 'request_accepted' ? (
-                                <UserCheck className="w-3.5 h-3.5 text-blue-400" />
-                              ) : notif.type.includes('story') ? (
-                                <Zap className="w-3.5 h-3.5 text-pink-500" />
-                              ) : (
-                                <Bell className="w-3.5 h-3.5 text-purple-500" />
-                              )}
+                              {notif.type === 'request_accepted' ? <UserCheck className="w-3.5 h-3.5 text-blue-400" /> : <Bell className="w-3.5 h-3.5 text-purple-500" />}
                            </div>
-                           <div className="flex-1 min-w-0 pr-6 cursor-pointer" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
-                              <p className="text-[11px] leading-tight font-medium text-white">
-                                 {notif.message}
-                              </p>
-                              <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase tracking-tight">{notif.time}</p>
+                           <div className="flex-1 min-w-0 pr-6 cursor-pointer">
+                              <p className="text-[11px] leading-tight font-medium" style={{ color: "var(--text-primary)" }}>{notif.message}</p>
+                              <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase">{notif.time}</p>
                            </div>
                         </div>
-                        
-                        {notif.type === 'request_back_prompt' && (
-                          <div className="mt-1.5 flex justify-end">
-                             <motion.button
-                               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}
-                               onClick={async () => {
-                                 const me = localStorage.getItem("nexora_signup_username") || "";
-                                 try {
-                                   await nexoraFetch("/api/connections/request", {
-                                     method: "POST",
-                                     body: JSON.stringify({ from: me, fromName: me, to: notif.from_username }),
-                                   });
-                                   setNotifications(prev => prev.filter(n => n.id !== notif.id));
-                                   alert(`Follow request sent to @${notif.from_username}`);
-                                 } catch (e) { console.error(e); }
-                               }}
-                               className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#00d4ff] border border-[#00d4ff]/20 bg-[#00d4ff]/5 hover:bg-[#00d4ff]/10"
-                             >
-                               Follow Back
-                             </motion.button>
-                          </div>
-                        )}
-                        
-                        <button 
-                          className="absolute top-2.5 right-2.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all text-muted-foreground"
+                        <button className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                           onClick={() => {
                             setNotifications(prev => prev.filter(n => n.id !== notif.id));
                             nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
-                          }}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                          }}><X className="w-3 h-3" /></button>
                       </motion.div>
                     ))}
                   </motion.div>
-                                )}
-             </div>
+                 )}
+               </AnimatePresence>
+            </div>
           )}
 
           {/* Online Users Horizontal Scroll */}
@@ -2267,9 +2217,9 @@ export default function ChatsPage() {
                 onClick={() => { window.location.href = '/dashboard/stories'; }}
                 className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                 <div className="relative">
-                <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-extrabold text-xl shadow-lg ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + myProfile.color : 'ring-2 ring-transparent bg-gradient-to-tr ' + myProfile.color} hover:opacity-80 transition-all`}
+                <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase`}
                      style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                    {myProfile.name?.[0] || 'M'}
+                    {(myProfile.name?.[0] || "M").toUpperCase()}
                 </div>
                 {!myStoryPreview && (
                   <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center"
@@ -2280,17 +2230,16 @@ export default function ChatsPage() {
                 </div>
                 <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>Your Story</span>
             </motion.div>
-
             {threads.filter(t => friendsWithStories.includes(t.username) || t.online || liveOnlineUsers.includes(t.username))
               .filter(t => !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id))
               .sort((a, b) => {
                  const aHas = friendsWithStories.includes(a.username) ? 1 : 0;
                  const bHas = friendsWithStories.includes(b.username) ? 1 : 0;
-                 return bHas - aHas; // Stories first
+                 return bHas - aHas;
               })
               .map((user) => {
               const L = lockedChatsMap[user.id] && !unlockedSessionThreads.includes(user.id);
-              if (L) return null; // Don't show locked users in online tray mapping to real name
+              if (L) return null;
               const isUserOnline = user.online || liveOnlineUsers.includes(user.username);
               const hasStory = friendsWithStories.includes(user.username);
               
@@ -2299,9 +2248,9 @@ export default function ChatsPage() {
                   onClick={() => hasStory ? (window.location.href = '/dashboard/stories') : handleOpenThread(user)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                   <div className="relative">
-                    <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-extrabold text-xl shadow-lg ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color || 'from-gray-700 to-gray-900') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color || 'from-gray-700 to-gray-900')} hover:opacity-80 transition-all`}
+                    <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase`}
                          style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                      {user?.name?.[0]}
+                      {(user?.name?.[0] || user?.username?.[0] || "?").toUpperCase()}
                     </div>
                     {isUserOnline && !hasStory && (
                       <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
@@ -2333,16 +2282,12 @@ export default function ChatsPage() {
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
                   whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenThread(thread)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setThreadContextMenu({ id: thread.id, x: e.clientX, y: e.clientY });
-                  }}
                   className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all relative group/thread"
                   style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
                   <div className="relative shrink-0">
-                    <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color}`} flex items-center justify-center text-white font-bold text-sm shadow-md`}
+                    <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color?.includes('from-') ? thread.color : "from-[#6c5ce7] to-[#00d4ff]"}`} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/5 uppercase`}
                       onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
-                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.name[0]}
+                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : (thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
                       <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
@@ -2352,37 +2297,17 @@ export default function ChatsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <h3 className={`font-bold text-sm truncate ${isLockedDisplay ? 'italic text-white/50' : ''} ${thread.online ? 'border-b-2 border-green-500/50' : ''}`}
+                        <h3 className={`font-bold text-sm truncate ${isLockedDisplay ? 'italic text-white/50' : ''}`}
                           style={{ color: "var(--text-primary)" }}>
                           {isLockedDisplay ? "Locked Conversation" : thread.name}
                         </h3>
-                        {!isLockedDisplay && (
-                          <span className="inline-flex text-[6px] px-1 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center">Verified</span>
-                        )}
-                        {isPinned && (
-                          <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />
-                        )}
-                        {lockedChatsMap[thread.id] && (
-                          <Lock className="h-3 w-3 shrink-0" style={{ color: "#ff006e" }} />
-                        )}
+                        {isPinned && <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {!isLockedDisplay && thread.unread > 0 && (
                           <span className="h-5 min-w-5 px-1 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
                             style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>{thread.unread}</span>
                         )}
-                        <motion.div
-                          whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.85 }}
-                          onClick={(e) => handleTogglePin(thread.id, e)}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center opacity-0 group-hover/thread:opacity-100 transition-opacity cursor-pointer"
-                          style={{
-                            background: isPinned ? (isDark ? "rgba(108,92,231,0.2)" : "rgba(108,92,231,0.1)") : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
-                            color: isPinned ? "#6c5ce7" : "var(--text-muted)",
-                          }}
-                          title={isPinned ? "Unpin chat" : "Pin chat"}
-                        >
-                          <Pin className="h-3.5 w-3.5" style={{ transform: isPinned ? "rotate(-45deg)" : "none" }} />
-                        </motion.div>
                       </div>
                     </div>
                     {!isLockedDisplay && <p className="text-xs truncate mt-0.5" style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)" }}>{thread.preview}</p>}
@@ -2397,8 +2322,8 @@ export default function ChatsPage() {
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                  <div className="relative">
-                    <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${myProfile.color} flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
-                       {myProfile.name?.[0] || "M"}
+                    <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${myProfile.color?.includes('from-') ? myProfile.color : "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/10 uppercase`}>
+                       {(myProfile.name?.[0] || "M").toUpperCase()}
                     </div>
                     <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573] z-10 animate-pulse" 
                          style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
@@ -2443,8 +2368,9 @@ export default function ChatsPage() {
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </motion.button>
                   <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
-                    <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color} flex items-center justify-center text-white font-black shadow-md cursor-pointer shrink-0`}>
-                      {activeThread.name[0]}
+                    <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm md:text-base shadow-xl border border-white/10 cursor-pointer shrink-0 transition-transform active:scale-90 uppercase`}
+                         onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color })}>
+                      {(activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {activeThread.online || liveOnlineUsers.includes(activeThread.username) ? (
                       <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse"
@@ -3131,7 +3057,7 @@ export default function ChatsPage() {
               width: callState.isFullscreen ? "100%" : "280px",
               height: callState.isFullscreen ? "100%" : "180px",
               bottom: callState.isFullscreen ? "0px" : "24px",
-              right: callState.isFullscreen ? "0px" : "24px",
+              right: callState.isFullscreen ? "24px" : "24px",
               top: callState.isFullscreen ? "0px" : "auto",
               left: callState.isFullscreen ? "0px" : "auto",
               borderRadius: callState.isFullscreen ? "0px" : "32px",
@@ -3212,7 +3138,7 @@ export default function ChatsPage() {
                 <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="absolute top-24 right-8 w-32 h-44 bg-black rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl z-20 transition-all duration-300">
                   {callState.isVideoOff ? (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-[#1a1a2e]">
-                      <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${myProfile.color} flex items-center justify-center text-xs font-black`}>You</div>
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${myProfile.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-xs font-black text-white shadow-lg border border-white/10 uppercase`}>{(myProfile.name?.[0] || "M").toUpperCase()}</div>
                       <VideoOff className="w-3 h-3 text-white/50 mt-2" />
                     </div>
                   ) : (
@@ -3288,8 +3214,8 @@ export default function ChatsPage() {
             <div className="relative z-10 flex flex-col items-center w-full">
               <div className="relative mb-12">
                 <div className="absolute inset-0 rounded-full bg-white border-2 border-white opacity-40 animate-[ping_2s_ease-out_infinite]" />
-                <div className={`w-44 h-44 rounded-full bg-gradient-to-tr ${incomingCall.from.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-6xl font-black shadow-[0_0_80px_rgba(108,92,231,0.6)] border-4 border-[#0c0c14] relative z-10`}>
-                  {incomingCall.from.name[0]}
+                <div className={`w-44 h-44 rounded-full bg-gradient-to-tr ${incomingCall.from.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-8xl font-black text-white shadow-[0_0_80px_rgba(108,92,231,0.6)] border-[10px] border-[#0c0c14] relative z-10 uppercase transition-all`}>
+                  {(incomingCall.from.name?.[0] || incomingCall.from.username?.[0] || "?").toUpperCase()}
                 </div>
               </div>
               <h2 className="text-5xl md:text-6xl font-black tracking-tight mb-2 truncate max-w-[90vw]" style={{ textShadow: "0 4px 20px rgba(0,0,0,0.6)" }}>{incomingCall.from.name}</h2>
@@ -3515,9 +3441,9 @@ export default function ChatsPage() {
 
               <div className="px-10 pb-10 -mt-20 relative z-10">
                 <div className="flex flex-col items-center">
-                  <div className={`h-36 w-36 rounded-[36px] bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
-                    <span className="group-hover/avatar:scale-110 transition-transform duration-500">
-                      {selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?'}
+                  <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
+                    <span className="group-hover/avatar:scale-110 transition-transform duration-500 text-white uppercase drop-shadow-2xl">
+                      {(selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || "?").toUpperCase()}
                     </span>
                     {(selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)) && (
                       <motion.div 
@@ -3553,53 +3479,19 @@ export default function ChatsPage() {
                         <Lock className="w-3 h-3" />
                         <h4 className="text-[10px] uppercase font-black tracking-[0.2em]">Identity Memo</h4>
                      </div>
-                     <p className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                     <div className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                       {loadingProfile ? (
                         <div className="py-2">
                            <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Decrypting memo..." />
                         </div>
                       ) : profileData?.bio || "No secure bio established for this node yet."}
-                    </p>
-                    <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between opacity-50 font-black text-[10px] tracking-widest uppercase">
-                       <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> EST. {profileData?.created_at ? new Date(profileData.created_at).getFullYear() : '2026'}</div>
-                       <div className="flex items-center gap-2"><Shield className="w-3.5 h-3.5" /> Phase 1.2</div>
                     </div>
+                     <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-center opacity-40 font-black text-[9px] tracking-[0.3em] uppercase">
+                        SECURE NODE ACCESS &bull; ENCRYPTED PROTOCOL
+                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 w-full mb-4">
-                     {threads.some(t => t.username === selectedProfileUser.username) ? (
-                       <>
-                          <motion.button 
-                            whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.95 }}
-                            onClick={() => { setSelectedProfileUser(null); startCall('voice'); }}
-                            className="flex flex-col items-center justify-center gap-3 p-5 rounded-[32px] bg-[#6c5ce7] text-white shadow-xl shadow-purple-500/30 group transition-all"
-                          >
-                            <div className="p-3 rounded-2xl bg-white/15 group-hover:bg-white/20">
-                               <Phone className="w-6 h-6" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase tracking-widest">Connect Voice</span>
-                          </motion.button>
-                          <motion.button 
-                            whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.95 }}
-                            onClick={() => { setSelectedProfileUser(null); startCall('video'); }}
-                            className="flex flex-col items-center justify-center gap-3 p-5 rounded-[32px] bg-[#00d4ff] text-white shadow-xl shadow-cyan-500/30 group transition-all"
-                          >
-                            <div className="p-3 rounded-2xl bg-white/15 group-hover:bg-white/20">
-                               <Video className="w-6 h-6" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase tracking-widest">Video Stream</span>
-                          </motion.button>
-                       </>
-                     ) : (
-                       <div className="col-span-2 p-5 rounded-[32px] bg-amber-500/5 border border-amber-500/10 flex flex-col items-center text-center">
-                          <div className="p-2.5 rounded-2xl bg-amber-500/10 mb-2">
-                             <ShieldOff className="w-5 h-5 text-amber-500" />
-                          </div>
-                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Protocol Restriction</p>
-                          <p className="text-[9px] text-amber-600/60 font-bold mt-1">Direct communication requires mutual connection</p>
-                       </div>
-                     )}
-                  </div>
+                  {/* Voice/Video calls removed per user request */}
 
                   <div className="flex gap-3 w-full">
                     <motion.button 

@@ -141,7 +141,7 @@ function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose
         <div className="p-4 rounded-2xl flex items-center gap-4"
           style={{ background: isDark ? "rgba(108,92,231,0.08)" : "rgba(108,92,231,0.05)", border: `1px solid rgba(108,92,231,0.15)` }}>
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white font-extrabold text-lg shadow-lg">
-            {profile.name[0]}
+            <span className="uppercase leading-none drop-shadow-md">{profile.name?.charAt(0) || "N"}</span>
           </div>
           <div>
             <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{profile.name}</p>
@@ -168,8 +168,10 @@ function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose
               onClick={() => handleShareApp(app)}
               className="flex flex-col items-center gap-2 p-3 rounded-2xl font-semibold text-xs transition-all"
               style={{ background: app.bg, color: app.color, border: `1px solid ${app.color}25` }}>
-              <span className="text-2xl leading-none">{app.icon}</span>
-              {app.name}
+              <div className="w-12 h-12 rounded-full border-[1.5px] flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20" style={{ borderColor: `${app.color}40` }}>
+                <span className="text-2xl leading-none pt-0.5">{app.icon}</span>
+              </div>
+              <span className="tracking-wide uppercase text-[9px]">{app.name}</span>
             </motion.button>
           ))}
         </div>
@@ -545,7 +547,7 @@ export default function ProfilePage() {
             <div className="relative mb-5">
               <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white text-4xl font-extrabold shadow-xl border-4"
                 style={{ borderColor: "var(--bg-surface-solid)" }}>
-                {profile.name[0]}
+                {(profile.name?.[0] || 'N').toUpperCase()}
               </div>
               <button className="absolute bottom-1 right-1 p-2 rounded-full shadow-lg border hover:scale-110 transition-transform cursor-pointer"
                 style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)", color: "#6c5ce7" }}>
@@ -824,8 +826,8 @@ export default function ProfilePage() {
                     className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl gap-4"
                     style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.03)", border: "1px solid var(--border-subtle)" }}>
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-lg shadow-md border-2 border-white dark:border-[#161622]`}>
-                        {req.fromName?.[0] || req.from?.[0]}
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${req.fromColor?.includes('from-') ? req.fromColor : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-white font-black text-lg shadow-md border-2 border-white dark:border-[#161622]`}>
+                        {(req.fromName?.[0] || req.from?.[0] || "?").toUpperCase()}
                       </div>
                       <div>
                         <h4 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>@{req.from}</h4>
@@ -880,8 +882,8 @@ export default function ProfilePage() {
                     className="flex items-center justify-between p-4 rounded-2xl"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${req.color} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
-                        {req.name[0]}
+                      <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${req.color?.includes('from-') ? req.color : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
+                        {(req.name?.[0] || "?").toUpperCase()}
                       </div>
                       <div>
                         <h4 className="font-bold text-sm truncate max-w-[100px] sm:max-w-none" style={{ color: "var(--text-primary)" }}>{req.name}</h4>
@@ -925,8 +927,8 @@ export default function ProfilePage() {
                       className="flex items-center justify-between p-4 rounded-2xl group transition-all"
                       style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${user.color} flex items-center justify-center text-white font-bold text-sm shadow-sm opacity-50 grayscale`}>
-                          {user.name[0]}
+                        <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${user.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-white font-bold text-sm shadow-sm opacity-50 grayscale`}>
+                          {(user.name?.[0] || "?").toUpperCase()}
                         </div>
                         <div>
                           <h4 className="font-bold text-sm text-[var(--text-primary)] opacity-70">{user.name}</h4>

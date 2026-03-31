@@ -132,27 +132,20 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
           <div className="user-modal-cover absolute inset-0"
             style={{ background: `linear-gradient(135deg, ${friend.color.includes("ff006e") ? "#ff006e" : "#6c5ce7"}, ${friend.color.includes("ffbe0b") ? "#ffbe0b" : "#00d4ff"})`, opacity: 0.9 }} />
           
-          {/* Mobile Back Button */}
+          {/* Close Button (Visible on all sizes now) */}
           <button onClick={onClose}
-            className="absolute top-4 left-4 p-2 px-3 rounded-full backdrop-blur-sm flex items-center gap-1 sm:hidden"
-            style={{ background: "rgba(0,0,0,0.25)", color: "white", zIndex: 10 }}>
-            <ChevronLeft className="w-5 h-5 -ml-1" />
-            <span className="font-bold text-sm tracking-wide mr-1">Back</span>
-          </button>
-
-          <button onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full backdrop-blur-sm hidden sm:block"
-            style={{ background: "rgba(0,0,0,0.25)", color: "white", zIndex: 10 }}>
-            <X className="w-4 h-4" />
+            className="absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center justify-center z-50"
+            style={{ background: "rgba(0,0,0,0.35)", color: "white", border: "1px solid rgba(255,255,255,0.15)" }}>
+            <X className="w-5 h-5 drop-shadow-md" />
           </button>
           {/* Avatar */}
           <div className="absolute -bottom-12 left-6 sm:left-10">
             <motion.div
               animate={{ boxShadow: ["0 0 0px rgba(108,92,231,0)", "0 0 30px rgba(108,92,231,0.5)", "0 0 0px rgba(108,92,231,0)"] }}
               transition={{ duration: 2.5, repeat: Infinity }}
-              className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${friend.color} flex items-center justify-center text-white text-4xl sm:text-5xl font-extrabold ring-[6px] shadow-xl`}
+              className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${friend.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white text-4xl sm:text-5xl font-extrabold ring-[6px] shadow-xl overflow-hidden uppercase`}
               style={{ "--tw-ring-color": isDark ? "rgba(16,16,28,1)" : "#fff", border: `6px solid ${isDark ? "rgba(16,16,28,1)" : "#fff"}` } as any}>
-              {friend.name[0]}
+              <span className="drop-shadow-md">{(friend.name?.[0] || friend.username?.[0] || "N").toUpperCase()}</span>
             </motion.div>
             {friend.online && (
               <motion.div 
@@ -317,10 +310,12 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                     {shareApps.map(app => (
                       <motion.button key={app.name} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.92 }}
                         onClick={() => window.open(app.url, "_blank")}
-                        className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl text-xs font-bold"
-                        style={{ background: `${app.color}18`, color: app.color }}>
-                        <span className="text-xl">{app.emoji}</span>
-                        <span className="text-[9px]">{app.name}</span>
+                        className="flex flex-col items-center gap-2 py-3 rounded-2xl text-[10px] font-bold shadow-sm transition-all"
+                        style={{ background: `${app.color}08`, color: app.color, border: `1px solid ${app.color}20` }}>
+                        <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20" style={{ borderColor: `${app.color}40` }}>
+                          <span className="text-lg leading-none">{app.emoji}</span>
+                        </div>
+                        <span className="tracking-wide uppercase">{app.name}</span>
                       </motion.button>
                     ))}
                   </div>
