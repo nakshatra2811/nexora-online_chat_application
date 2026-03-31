@@ -824,9 +824,9 @@ export default function ChatsPage() {
         return;
       }
 
-      // ✅ FIXED: Resolve caller identity from connections list by username
+      // ✅ FIXED: Resolve caller identity from connections list by username (case-insensitive)
       const connections: Thread[] = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-      const callerThread = connections.find(t => t.username === data.from);
+      const callerThread = connections.find(t => t.username.toLowerCase() === data.from.toLowerCase());
       const caller: Thread = callerThread || {
         id: 0,
         username: data.from,

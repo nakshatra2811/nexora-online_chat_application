@@ -69,6 +69,9 @@ export class WebRTCService {
         try {
           await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           this.events?.onCallAccepted();
+          
+          // CRITICAL: Process ICE candidates that arrived before the remote answer was set!
+          await this.processPendingIceCandidates();
         } catch (e) {
           console.error("[WebRTC] Failed to set remote description (answer):", e);
         }
@@ -109,20 +112,24 @@ export class WebRTCService {
     // Handle incoming remote tracks (Robust stream population)
     this.pc.ontrack = (event) => {
       console.log("[WebRTC] Incoming track:", event.track.kind);
-      // Ensure we have a stream to add to
+      
+      let newStream: MediaStream;
       if (event.streams && event.streams[0]) {
-        // Most common case: tracks arrive grouped in a stream
-        event.streams[0].getTracks().forEach((track) => {
-          this.remoteStream?.addTrack(track);
-        });
+        newStream = event.streams[0];
       } else {
-        // Fallback for browsers that don't group tracks into streams
-        this.remoteStream?.addTrack(event.track);
+        if (!this.remoteStream) {
+            this.remoteStream = new MediaStream();
+        }
+        this.remoteStream.addTrack(event.track);
+        newStream = this.remoteStream;
       }
       
-      if (this.remoteStream) {
-        this.events?.onRemoteStream(this.remoteStream);
-      }
+      // Update our internal reference
+      this.remoteStream = newStream;
+      
+      // Force a new stream Object reference creation so React state triggers a re-render
+      const clonedStream = new MediaStream(newStream.getTracks());
+      this.events?.onRemoteStream(clonedStream);
     };
 
     // ICE candidate relay
