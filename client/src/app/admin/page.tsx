@@ -790,22 +790,22 @@ function ConnectionsTab() {
 }
 
 // ═══════════════════════════════════════
-// CONFIG / SEO TAB
+// DYNAMIC CONFIG & SEO TAB
 // ═══════════════════════════════════════
-function ConfigTab() {
+function DynamicConfigTab({ activeTab }: { activeTab: TabId }) {
   const { isDark } = useTheme();
   const [seo, setSeo] = useState({
     title: "", titleTemplate: "", description: "", keywords: "",
     siteUrl: "", ogImage: "", twitterHandle: "", author: "",
     themeColor: "#6c5ce7", language: "en", category: "Technology",
     canonicalUrl: "", robots: "", indexing: true,
+    googleVerification: "", bingVerification: "",
   });
   const [logoB64, setLogoB64] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Load current config on mount
   useEffect(() => {
     adminFetch("/api/admin/config").then(data => {
       if (data?.seo) setSeo(prev => ({ ...prev, ...data.seo }));
@@ -830,6 +830,7 @@ function ConfigTab() {
     const res = await adminFetch("/api/admin/config", { method: "POST", body: JSON.stringify(payload) });
     setIsSaving(false);
     setSavedMsg(res?.status === "success" ? "✓ Configuration deployed!" : "✗ Deploy failed");
+    setTimeout(() => setSavedMsg(""), 3000);
   };
 
   const inputStyle = {
@@ -839,215 +840,156 @@ function ConfigTab() {
   };
   const labelStyle = "text-[10px] font-bold uppercase tracking-widest mb-1 block";
 
-  if (loading) return <div className="text-center py-20" style={{ color: "var(--text-muted)" }}>Loading configuration...</div>;
+  if (loading) return <div className="text-center py-20 animate-pulse" style={{ color: "var(--text-muted)" }}>Initializing module securely...</div>;
+
+  const tabTitles: Record<string, string> = {
+    config: "System Configuration",
+    seo_manager: "Core SEO & Metadata",
+    keywords: "Keyword Engine",
+    google_bing: "Google & Bing Visibility",
+    indexing: "Crawling & Indexing Rules"
+  };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Site Configuration & SEO</h2>
+      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+        {tabTitles[activeTab] || "Settings"}
+      </h2>
 
-      {/* ── Indexing Toggle ── */}
-      <div className="p-5 rounded-2xl border flex items-center justify-between gap-4"
-        style={{ background: seo.indexing ? "rgba(46,213,115,0.05)" : "rgba(255,0,110,0.05)", borderColor: seo.indexing ? "rgba(46,213,115,0.2)" : "rgba(255,0,110,0.2)" }}>
-        <div>
-          <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
-            {seo.indexing ? "🟢 Search Engine Indexing: ENABLED" : "🔴 Search Engine Indexing: DISABLED"}
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-            {seo.indexing ? "Google, Bing & other crawlers can index this site." : "All crawlers blocked via robots.txt (noindex, nofollow)."}
-          </p>
-        </div>
-        <button onClick={() => setSeo(prev => ({ ...prev, indexing: !prev.indexing }))}
-          className="relative w-14 h-7 rounded-full transition-all flex-shrink-0"
-          style={{ background: seo.indexing ? "#2ed573" : "#ff006e" }}>
-          <span className="absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all"
-            style={{ left: seo.indexing ? "calc(100% - 26px)" : "2px" }} />
-        </button>
-      </div>
-
-      {/* ── Core SEO ── */}
-      <div className="p-6 rounded-2xl border space-y-4"
-        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#6c5ce7" }}>
-          <Globe className="w-4 h-4" /> Core SEO & Metadata
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Site Title</label>
-            <input type="text" value={seo.title} onChange={e => setSeo(p => ({ ...p, title: e.target.value }))}
-              placeholder="Nexora — The Privacy Protocol"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Title Template</label>
-            <input type="text" value={seo.titleTemplate} onChange={e => setSeo(p => ({ ...p, titleTemplate: e.target.value }))}
-              placeholder="%s | Nexora"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-        </div>
-
-        <div>
-          <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Meta Description</label>
-          <textarea value={seo.description} onChange={e => setSeo(p => ({ ...p, description: e.target.value }))}
-            rows={3} placeholder="Short compelling description (150-160 chars ideal)..."
-            className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
-          <span className="text-[10px]" style={{ color: seo.description.length > 160 ? "#ff006e" : "var(--text-muted)" }}>
-            {seo.description.length} / 160 chars
-          </span>
-        </div>
-
-        <div>
-          <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Keywords (comma separated)</label>
-          <textarea value={seo.keywords} onChange={e => setSeo(p => ({ ...p, keywords: e.target.value }))}
-            rows={2} placeholder="nexora, private chat, encrypted messaging, secure messenger..."
-            className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
-          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-            {seo.keywords.split(",").filter(k => k.trim()).length} keywords
-          </span>
-        </div>
-      </div>
-
-      {/* ── URLs & Social ── */}
-      <div className="p-6 rounded-2xl border space-y-4"
-        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#00d4ff" }}>
-          <Globe className="w-4 h-4" /> URLs, Open Graph & Social
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Site URL</label>
-            <input type="url" value={seo.siteUrl} onChange={e => setSeo(p => ({ ...p, siteUrl: e.target.value }))}
-              placeholder="https://nexora31.vercel.app"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Canonical URL</label>
-            <input type="url" value={seo.canonicalUrl} onChange={e => setSeo(p => ({ ...p, canonicalUrl: e.target.value }))}
-              placeholder="https://nexora31.vercel.app"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>OG Image URL</label>
-            <input type="url" value={seo.ogImage} onChange={e => setSeo(p => ({ ...p, ogImage: e.target.value }))}
-              placeholder="https://...og-image.jpg (1200x630)"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Twitter Handle</label>
-            <input type="text" value={seo.twitterHandle} onChange={e => setSeo(p => ({ ...p, twitterHandle: e.target.value }))}
-              placeholder="@nexoraapp"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-        </div>
-
-        {/* OG Image Preview */}
-        {seo.ogImage && (
-          <div className="rounded-xl overflow-hidden border" style={{ borderColor: "var(--border-subtle)" }}>
-            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.03)" }}>
-              OG Image Preview
+      {/* ── INDEXING TAB ── */}
+      {activeTab === "indexing" && (
+        <div className="space-y-4">
+          <div className="p-5 rounded-2xl border flex items-center justify-between gap-4"
+            style={{ background: seo.indexing ? "rgba(46,213,115,0.05)" : "rgba(255,0,110,0.05)", borderColor: seo.indexing ? "rgba(46,213,115,0.2)" : "rgba(255,0,110,0.2)" }}>
+            <div>
+              <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{seo.indexing ? "🟢 Search Engine Indexing: ENABLED" : "🔴 Search Engine Indexing: DISABLED"}</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{seo.indexing ? "Google, Bing & other crawlers can index this site." : "All crawlers blocked via robots.txt (noindex, nofollow)."}</p>
             </div>
-            <img src={seo.ogImage} alt="OG Preview" className="w-full max-h-40 object-cover" onError={() => {}} />
+            <button onClick={() => setSeo(prev => ({ ...prev, indexing: !prev.indexing }))}
+              className="relative w-14 h-7 rounded-full transition-all flex-shrink-0" style={{ background: seo.indexing ? "#2ed573" : "#ff006e" }}>
+              <span className="absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all" style={{ left: seo.indexing ? "calc(100% - 26px)" : "2px" }} />
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* ── Brand & Advanced ── */}
-      <div className="p-6 rounded-2xl border space-y-4"
-        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#ffbe0b" }}>
-          <Settings className="w-4 h-4" /> Brand & Advanced
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Author / Organization</label>
-            <input type="text" value={seo.author} onChange={e => setSeo(p => ({ ...p, author: e.target.value }))}
-              placeholder="Nexora Systems"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Category</label>
-            <input type="text" value={seo.category} onChange={e => setSeo(p => ({ ...p, category: e.target.value }))}
-              placeholder="Technology"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Language Code</label>
-            <input type="text" value={seo.language} onChange={e => setSeo(p => ({ ...p, language: e.target.value }))}
-              placeholder="en"
-              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          </div>
-          <div>
-            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Theme Color</label>
-            <div className="flex gap-3 items-center">
-              <input type="color" value={seo.themeColor} onChange={e => setSeo(p => ({ ...p, themeColor: e.target.value }))}
-                className="w-12 h-12 rounded-xl border cursor-pointer p-1" style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.04)" : "#fff" }} />
-              <input type="text" value={seo.themeColor} onChange={e => setSeo(p => ({ ...p, themeColor: e.target.value }))}
-                className="flex-1 px-4 py-3 rounded-xl outline-none text-sm font-mono" style={inputStyle} />
-            </div>
+          <div className="p-6 rounded-2xl border" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Custom Robots Directive</label>
+            <input type="text" value={seo.robots} onChange={e => setSeo(p => ({ ...p, robots: e.target.value }))} placeholder="index, follow, max-image-preview:large" className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+            <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Leave blank to use defaults. Top-level toggle overrides this if disabled.</p>
           </div>
         </div>
+      )}
 
-        {/* Robots directive */}
-        <div>
-          <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Custom Robots Directive</label>
-          <input type="text" value={seo.robots} onChange={e => setSeo(p => ({ ...p, robots: e.target.value }))}
-            placeholder="index, follow, max-image-preview:large, max-snippet:-1"
-            className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
-          <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Leave blank to use defaults. Overridden by indexing toggle above.</p>
+      {/* ── SEO MANAGER TAB ── */}
+      {activeTab === "seo_manager" && (
+        <div className="p-6 rounded-2xl border space-y-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Site Title</label><input type="text" value={seo.title} onChange={e => setSeo(p => ({ ...p, title: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Title Template</label><input type="text" value={seo.titleTemplate} onChange={e => setSeo(p => ({ ...p, titleTemplate: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+            </div>
+            <div>
+              <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Meta Description</label>
+              <textarea value={seo.description} onChange={e => setSeo(p => ({ ...p, description: e.target.value }))} rows={4} className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
+              <div className="mt-1 flex justify-between text-[10px]">
+                 <span style={{ color: "var(--text-muted)" }}>Used for search snippet</span>
+                 <span style={{ color: seo.description.length > 160 ? "#ff006e" : "var(--text-muted)" }}>{seo.description.length} / 160 chars</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Author</label><input type="text" value={seo.author} onChange={e => setSeo(p => ({ ...p, author: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+               <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Category</label><input type="text" value={seo.category} onChange={e => setSeo(p => ({ ...p, category: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+               <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Language</label><input type="text" value={seo.language} onChange={e => setSeo(p => ({ ...p, language: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+            </div>
         </div>
-      </div>
+      )}
 
-      {/* ── Logo Upload ── */}
-      <div className="p-6 rounded-2xl border space-y-4"
-        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#ff006e" }}>
-          <Upload className="w-4 h-4" /> Logo Upload
-        </h3>
-        <label className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-colors hover:border-[#6c5ce7]/40"
-          style={{ borderColor: "var(--border-subtle)" }} htmlFor="admin-logo-upload">
-          <input id="admin-logo-upload" type="file" accept="image/*,image/svg+xml" className="hidden" onChange={onLogoUpload} />
-          {logoB64 ? (
-            <div className="flex flex-col items-center gap-2">
-              <img src={logoB64} className="w-16 h-16 rounded-xl shadow-xl" alt="Preview" />
-              <span className="text-xs font-bold text-[#00d4ff]">Ready to deploy</span>
+      {/* ── KEYWORDS TAB ── */}
+      {activeTab === "keywords" && (
+        <div className="p-6 rounded-2xl border space-y-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Global SEO Keywords (comma separated)</label>
+            <textarea value={seo.keywords || ""} onChange={e => setSeo(p => ({ ...p, keywords: e.target.value }))} rows={4} className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-none leading-relaxed" style={inputStyle} />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4 p-4 rounded-xl border" style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.02)" }}>
+             {(seo.keywords||"").split(",").map(k => k.trim()).filter(Boolean).map((kw, i) => (
+                <span key={i} className="px-3 py-1.5 bg-[#00d4ff]/10 text-[#00d4ff] rounded-lg text-xs font-mono border border-[#00d4ff]/20 flex items-center gap-1 shadow-sm">
+                  <Hash className="w-3 h-3" /> {kw}
+                </span>
+             ))}
+             {!(seo.keywords||"").trim() && <span className="text-xs text-gray-500">No keywords defined.</span>}
+          </div>
+        </div>
+      )}
+
+      {/* ── GOOGLE & BING SEO TAB ── */}
+      {activeTab === "google_bing" && (
+        <div className="space-y-4">
+          <div className="p-6 rounded-2xl border space-y-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#2ed573" }}>Webmaster Verification</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Google Site Verification</label><input type="text" value={seo.googleVerification || ""} onChange={e => setSeo(p => ({ ...p, googleVerification: e.target.value }))} placeholder="Verification Token..." className="w-full px-4 py-3 rounded-xl outline-none text-sm font-mono" style={inputStyle} /></div>
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Bing Site Verification</label><input type="text" value={seo.bingVerification || ""} onChange={e => setSeo(p => ({ ...p, bingVerification: e.target.value }))} placeholder="Verification Token..." className="w-full px-4 py-3 rounded-xl outline-none text-sm font-mono" style={inputStyle} /></div>
             </div>
-          ) : (
-            <div className="text-center">
-              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="font-bold text-sm" style={{ color: "var(--text-secondary)" }}>Click to select logo</p>
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>SVG, PNG, JPG</p>
+            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>This injects &lt;meta name="google-site-verification"&gt; tags natively into the document head.</p>
+          </div>
+          
+          <div className="p-6 rounded-2xl border space-y-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#00d4ff" }}>URLs & Social Graph</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Site URL</label><input type="url" value={seo.siteUrl} onChange={e => setSeo(p => ({ ...p, siteUrl: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Canonical URL</label><input type="url" value={seo.canonicalUrl} onChange={e => setSeo(p => ({ ...p, canonicalUrl: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>OG Image URL</label><input type="url" value={seo.ogImage} onChange={e => setSeo(p => ({ ...p, ogImage: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
+              <div><label className={labelStyle} style={{ color: "var(--text-muted)" }}>Twitter Handle</label><input type="text" value={seo.twitterHandle} onChange={e => setSeo(p => ({ ...p, twitterHandle: e.target.value }))} className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} /></div>
             </div>
-          )}
-        </label>
-      </div>
+            {seo.ogImage && (
+               <div className="mt-4 rounded-xl overflow-hidden border" style={{ borderColor: "var(--border-subtle)" }}>
+                 <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.03)" }}>OG Image Preview</div>
+                 <img src={seo.ogImage} alt="OG" className="w-full max-h-40 object-cover" onError={() => {}} />
+               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIG TAB ── */}
+      {activeTab === "config" && (
+        <div className="space-y-4">
+          <div className="p-6 rounded-2xl border flex items-center gap-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+             <div className="flex-1">
+               <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Theme Color</label>
+               <div className="flex gap-3 items-center">
+                 <input type="color" value={seo.themeColor} onChange={e => setSeo(p => ({ ...p, themeColor: e.target.value }))} className="w-12 h-12 rounded-xl border cursor-pointer p-1" style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.04)" : "#fff" }} />
+                 <input type="text" value={seo.themeColor} onChange={e => setSeo(p => ({ ...p, themeColor: e.target.value }))} className="flex-1 px-4 py-3 rounded-xl outline-none text-sm font-mono" style={inputStyle} />
+               </div>
+             </div>
+          </div>
+          <div className="p-6 rounded-2xl border space-y-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#ff006e" }}>Logo Upload</h3>
+            <label className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-colors" style={{ borderColor: "var(--border-subtle)" }} htmlFor="logo">
+              <input id="logo" type="file" accept="image/*" className="hidden" onChange={onLogoUpload} />
+              {logoB64 ? <img src={logoB64} className="w-16 h-16 rounded-xl shadow-xl" alt="Preview"/> : <p className="font-bold text-sm" style={{ color: "var(--text-secondary)" }}>Click to select logo</p>}
+            </label>
+          </div>
+          <button onClick={async () => {
+             const res = await adminFetch("/api/admin/test-mail", { method: "POST" });
+             alert(res?.status === "success" ? "✓ SMTP successful!" : "✗ SMTP failed.");
+          }} className="w-full py-4 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all hover:bg-[#ff006e]/10 text-[#ff006e] border-[#ff006e]/30">
+            ⚡ Test SMTP Protocol
+          </button>
+        </div>
+      )}
 
       {/* ── Actions ── */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 pt-6">
         <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={handleSave} disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
+          className="flex items-center gap-2 px-6 py-4 rounded-xl text-white text-[11px] uppercase tracking-widest font-black shadow-[0_0_20px_rgba(108,92,231,0.3)] disabled:opacity-50"
           style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-          <Save className="w-4 h-4" /> {isSaving ? "Deploying..." : "Deploy Configuration"}
+          <Save className="w-4 h-4" /> {isSaving ? "Deploying Node..." : "Apply & Publish Updates"}
         </motion.button>
-
         {savedMsg && (
-          <motion.span initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
-            className="text-sm font-bold" style={{ color: savedMsg.startsWith("✓") ? "#2ed573" : "#ff006e" }}>
-            {savedMsg}
-          </motion.span>
+          <motion.div initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-2 bg-[#2ed573]/10 text-[#2ed573] border border-[#2ed573]/20 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider">
+            <CheckCircle className="w-4 h-4" /> {savedMsg}
+          </motion.div>
         )}
-      </div>
-
-      {/* ── SMTP Test ── */}
-      <div className="pt-2">
-        <button onClick={async () => {
-          const res = await fetch(`${API_BASE_URL}/api/admin/test-mail`, { method: "POST" });
-          alert(res.ok ? "✓ SMTP test successful!" : "✗ SMTP test failed.");
-        }} className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all"
-          style={{ borderColor: "rgba(255,0,110,0.3)", color: "#ff006e", background: "transparent" }}>
-          ⚡ Test SMTP Protocol
-        </button>
       </div>
     </div>
   );
@@ -1346,10 +1288,14 @@ export default function AdminPanel() {
                     {activeTab === "connections" && <ConnectionsTab />}
                     {activeTab === "templates" && <EmailTemplatesTab />}
                     {activeTab === "broadcast" && <BroadcastTab />}
-                    {activeTab === "config" && <ConfigTab />}
-                    { /* All dynamically requested UI tabs map to our placeholder */ }
-                    {!["overview", "users", "connections", "templates", "broadcast", "config"].includes(activeTab) && (
+                    {/* All dynamically requested UI tabs that aren't specific SEO functional forms map to our placeholder */}
+                    {!["overview", "users", "connections", "templates", "broadcast", "config", "seo_manager", "keywords", "google_bing", "indexing"].includes(activeTab) && (
                       <ModulePlaceholderTab tabId={activeTab} />
+                    )}
+
+                    {/* Highly Functional SEO / configuration forms! */}
+                    {["config", "seo_manager", "keywords", "google_bing", "indexing"].includes(activeTab) && (
+                      <DynamicConfigTab activeTab={activeTab} />
                     )}
                   </motion.div>
                 </AnimatePresence>

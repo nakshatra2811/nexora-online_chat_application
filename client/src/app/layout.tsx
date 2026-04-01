@@ -124,9 +124,13 @@ export async function generateMetadata(): Promise<Metadata> {
       apple: "/logo.svg",
     },
 
-    // ── Verification (add if needed) ──
-    // verification: { google: "your-token", yandex: "..." },
-
+    // ── Verification (Dynamically generated from Admin Panel) ──
+    verification: { 
+      google: seo.googleVerification || undefined,
+      other: seo.bingVerification ? {
+        "msvalidate.01": seo.bingVerification
+      } : undefined,
+    },
     // ── Meta extras ──
     other: {
       "msapplication-TileColor": seo.themeColor || "#6c5ce7",
