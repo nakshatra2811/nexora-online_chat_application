@@ -81,8 +81,14 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
     setQrUrl(generateUniqueQR(friend.username));
   }, [friend.username]);
 
-  const APP_URL = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || "https://nexora31.vercel.app");
-  const profileUrl = `${APP_URL}/auth?connect=${friend.username}`;
+  const [profileUrl, setProfileUrl] = useState(`https://nexora31.vercel.app/auth?connect=${friend.username}`);
+  const [displayUrl, setDisplayUrl] = useState(`https://nexora31.vercel.app/auth?connect=********`);
+
+  useEffect(() => {
+    const APP_URL = window.location.origin;
+    setProfileUrl(`${APP_URL}/auth?connect=${friend.username}`);
+    setDisplayUrl(`${APP_URL}/auth?connect=********`);
+  }, [friend.username]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(profileUrl);
@@ -307,7 +313,7 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                   {/* Copy link */}
                   <div className="flex items-center gap-2 p-2.5 rounded-xl border"
                     style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", borderColor: "var(--border-subtle)" }}>
-                    <p className="flex-1 text-xs truncate font-mono" style={{ color: "var(--text-muted)" }}>{profileUrl}</p>
+                    <p className="flex-1 text-xs truncate font-mono" style={{ color: "var(--text-muted)" }}>{displayUrl}</p>
                     <motion.button whileTap={{ scale: 0.9 }} onClick={copyLink}
                       className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1"
                       style={{ background: copied ? "rgba(46,213,115,0.1)" : "rgba(108,92,231,0.1)", color: copied ? "#2ed573" : "#6c5ce7" }}>

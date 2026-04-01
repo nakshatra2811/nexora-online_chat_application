@@ -18,7 +18,13 @@ const MOCK_CONTACTS: any[] = [];
 /* ─── Share Profile Modal ─── */
 export function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose: () => void; isDark: boolean }) {
   const [copied, setCopied] = useState(false);
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/auth?connect=${profile.username}` : `https://nexora.app/auth?connect=${profile.username}`;
+  const [shareUrl, setShareUrl] = useState(`https://nexora.app/auth?connect=${profile?.username}`);
+  const [displayUrl, setDisplayUrl] = useState(`https://nexora.app/auth?connect=********`);
+
+  useEffect(() => {
+    setShareUrl(`${window.location.origin}/auth?connect=${profile?.username}`);
+    setDisplayUrl(`${window.location.origin}/auth?connect=********`);
+  }, [profile?.username]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -66,14 +72,14 @@ export function ShareProfileModal({ profile, onClose, isDark }: { profile: any; 
           <div>
             <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{profile.name}</p>
             <p className="text-xs font-semibold text-[#6c5ce7]">@{profile.username}</p>
-            <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{shareUrl.replace('https://', '')}</p>
+            <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{displayUrl.replace('https://', '')}</p>
           </div>
         </div>
 
         {/* Copy link */}
         <div className="flex items-center gap-2 p-3 rounded-xl border"
           style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderColor: "var(--border-subtle)" }}>
-          <p className="flex-1 text-xs truncate font-mono" style={{ color: "var(--text-muted)" }}>{shareUrl}</p>
+          <p className="flex-1 text-xs truncate font-mono" style={{ color: "var(--text-muted)" }}>{displayUrl}</p>
           <motion.button whileTap={{ scale: 0.9 }} onClick={copyLink}
             className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5"
             style={{ background: copied ? "rgba(46,213,115,0.1)" : "rgba(108,92,231,0.1)", color: copied ? "#2ed573" : "#6c5ce7" }}>
@@ -234,29 +240,28 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
 export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [userRole, setUserRole] = useState("Standard Account");
-  const [profile, setProfile] = useState(() => {
-    if (typeof window !== "undefined") {
-      const signupEmail = localStorage.getItem("nexora_signup_email") || "user@nexora.io";
-      return {
-        name: localStorage.getItem("nexora_signup_name") || signupEmail.split("@")[0],
-        username: localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0],
-        email: signupEmail,
-        phone: localStorage.getItem("nexora_signup_phone") || "+91 00000 00000",
-        bio: "Protocol Enthusiast.",
-        joinedDate: "March 2026",
-        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
-      };
-    }
-    return {
-      name: "Loading...",
-      username: "...",
-      email: "...",
-      phone: "Not Set",
-      bio: "Nexora Privacy Account",
-      joinedDate: "March 2026",
-      avatarUrl: "",
-    };
+  const [profile, setProfile] = useState({
+    name: "Loading...",
+    username: "...",
+    email: "...",
+    phone: "Not Set",
+    bio: "Nexora Privacy Account",
+    joinedDate: "March 2026",
+    avatarUrl: "",
   });
+
+  useEffect(() => {
+    const signupEmail = localStorage.getItem("nexora_signup_email") || "user@nexora.io";
+    setProfile({
+      name: localStorage.getItem("nexora_signup_name") || signupEmail.split("@")[0],
+      username: localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0],
+      email: signupEmail,
+      phone: localStorage.getItem("nexora_signup_phone") || "+91 00000 00000",
+      bio: "Protocol Enthusiast.",
+      joinedDate: "March 2026",
+      avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
+    });
+  }, []);
 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -2285,24 +2285,45 @@ app.get('/api/connections', async (req, res) => {
     if (!username) return res.json({ connections: [] });
     try {
         if (!db) return res.json({ connections: [] });
-        const rows = await db.all(`
-            SELECT u.id, u.username, u.full_name as name, u.color, u.avatar_url as avatarUrl, c.wallpaper
+        const connectionsRows = await db.all(`
+            SELECT 
+                CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END as peer_username,
+                c.wallpaper
             FROM connections c
-            JOIN users u ON
-                (c.user_a = LOWER(u.username) AND c.user_b = ?) OR
-                (c.user_b = LOWER(u.username) AND c.user_a = ?)
-        `, [username, username]);
-        // Attach real-time online status from the live room adapter
-        const enriched = rows.map(r => {
-            const room = io.sockets.adapter.rooms.get(r.username);
-            return {
-                ...r,
-                name: decryptField(r.name),
-                online: room && room.size > 0,
-                preview: 'Secure tunnel established',
-                unread: 0,
-            };
-        });
+            WHERE c.user_a = ? OR c.user_b = ?
+        `, [username, username, username]);
+        
+        const enriched = [];
+        for (const c of connectionsRows) {
+            const peer = c.peer_username;
+            let userData = null;
+            if (peer === 'nexora_31') {
+                userData = {
+                    id: 999999,
+                    username: 'Nexora_31',
+                    name: encryptField('Nexora Official'),
+                    color: 'from-blue-600 to-indigo-600',
+                    avatarUrl: encryptField('https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg')
+                };
+            } else {
+                userData = await db.get(`SELECT id, username, full_name as name, color, avatar_url as avatarUrl FROM users WHERE LOWER(username) = ?`, [peer]);
+            }
+
+            if (userData) {
+                const room = io.sockets.adapter.rooms.get(userData.username.toLowerCase());
+                enriched.push({
+                    id: userData.id,
+                    username: userData.username,
+                    name: decryptField(userData.name),
+                    color: userData.color,
+                    avatarUrl: userData.avatarUrl ? decryptField(userData.avatarUrl) : null,
+                    wallpaper: c.wallpaper,
+                    online: (room && room.size > 0) || peer === 'nexora_31',
+                    preview: peer === 'nexora_31' ? 'Official Announcements' : 'Secure tunnel established',
+                    unread: 0
+                });
+            }
+        }
         res.json({ connections: enriched });
     } catch (err) {
         res.status(500).json({ connections: [] });
@@ -3026,7 +3047,7 @@ app.post('/api/admin/broadcast-chat', async (req, res) => {
 
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        const allUsers = await db.all('SELECT username FROM users WHERE username != ? AND username != ?', ['Nexora_31', 'me']);
+        const allUsers = await db.all('SELECT username FROM users WHERE LOWER(username) != ? AND LOWER(username) != ?', ['nexora_31', 'me']);
         
         broadcastState = {
             isRunning: true,
