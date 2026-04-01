@@ -385,10 +385,48 @@ emailTransporter.verify((error, success) => {
 // ------------------------------------------------------------------
 // NEXORA PREMIUM MAIL PROTOCOL (Universal Templates)
 // ------------------------------------------------------------------
+
+// In-memory customizable email templates (admin can override)
+const emailTemplateOverrides = new Map(); // type -> { subject, html }
+
 async function nexoraMailProtocol(type, to, data) {
     const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
     const GMAIL_USER = process.env.GMAIL_USER;
     const GMAIL_NAME = process.env.GMAIL_NAME || "Nexora Private Chat";
+
+    // Check for admin-customized template override
+    const override = emailTemplateOverrides.get(type);
+    if (override) {
+        let customSubject = override.subject || '';
+        let customHtml = override.html || '';
+        // Replace template variables
+        const replacements = {
+            '{{username}}': data.username || '',
+            '{{otp}}': data.otp || '',
+            '{{APP_LOGO}}': APP_LOGO,
+            '{{CLIENT_URL}}': process.env.CLIENT_URL || 'https://nexora31.vercel.app',
+            '{{YEAR}}': new Date().getFullYear().toString(),
+            '{{TIMESTAMP}}': new Date().toLocaleString(),
+        };
+        for (const [key, val] of Object.entries(replacements)) {
+            customSubject = customSubject.split(key).join(val);
+            customHtml = customHtml.split(key).join(val);
+        }
+        try {
+            await emailTransporter.sendMail({
+                from: `"${GMAIL_NAME}" <${GMAIL_USER}>`,
+                to: to,
+                subject: customSubject,
+                text: `Nexora Notice: Your request was processed.`,
+                html: customHtml
+            });
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
+            return true;
+        } catch (err) {
+            console.error(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
+            return false;
+        }
+    }
 
     let subject = "";
     let html = "";
@@ -1604,16 +1642,29 @@ app.post('/api/profile/verify-email-change', async (req, res) => {
 });
 
 
-// ------------------------------------------------------------------
-// DYNAMIC CMS CONFIGURATION (SEO & Brand)
-// ------------------------------------------------------------------
+// GET /api/admin/config — Read current SEO config
+app.get('/api/admin/config', (req, res) => {
+    try {
+        const seoPath = path.join(__dirname, '../client/src/config/seo.json');
+        const existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8'));
+        res.json({ seo: existing });
+    } catch (err) {
+        res.json({ seo: {} });
+    }
+});
 
+// POST /api/admin/config — Write full SEO config + optional logo
 app.post('/api/admin/config', async (req, res) => {
     try {
         const { seo, logoBase64 } = req.body;
         if (seo) {
             const seoPath = path.join(__dirname, '../client/src/config/seo.json');
-            fs.writeFileSync(seoPath, JSON.stringify(seo, null, 2), 'utf-8');
+            // Read existing config and deep-merge so we never lose fields
+            let existing = {};
+            try { existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8')); } catch {}
+            const merged = { ...existing, ...seo };
+            fs.writeFileSync(seoPath, JSON.stringify(merged, null, 2), 'utf-8');
+            console.log('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
         }
         if (logoBase64) {
             const b64Data = logoBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -1625,9 +1676,11 @@ app.post('/api/admin/config', async (req, res) => {
         }
         res.json({ status: "success", message: "Configuration protocols deployed." });
     } catch (err) {
+        console.error('[ADMIN] Config error:', err);
         res.status(500).json({ error: "Failed to deploy dynamic settings." });
     }
 });
+
 
 // ------------------------------------------------------------------
 // ENCRYPTED MEDIA UPLOAD (Phase 4)
@@ -2339,6 +2392,270 @@ app.delete('/api/stories/:id', async (req, res) => {
         res.json({ status: "success" });
     } catch (err) {
         res.status(500).json({ error: "Server Error" });
+    }
+});
+
+// ------------------------------------------------------------------
+// ADMIN PANEL API (Full CRUD Management)
+// ------------------------------------------------------------------
+
+// GET /api/admin/stats — Dashboard overview stats
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const totalUsers = await db.get('SELECT COUNT(*) as count FROM users');
+        const totalStories = await db.get('SELECT COUNT(*) as count FROM stories');
+        const totalConnections = await db.get('SELECT COUNT(*) as count FROM connections');
+        const totalRequests = await db.get("SELECT COUNT(*) as count FROM connection_requests WHERE status = 'pending'");
+        const onlineCount = io.sockets.adapter.rooms ? socketToUser.size : 0;
+        res.json({
+            totalUsers: totalUsers?.count || 0,
+            totalStories: totalStories?.count || 0,
+            totalConnections: totalConnections?.count || 0,
+            pendingRequests: totalRequests?.count || 0,
+            onlineUsers: onlineCount
+        });
+    } catch (err) {
+        console.error("[ADMIN] Stats error:", err);
+        res.status(500).json({ error: "Failed to fetch stats" });
+    }
+});
+
+// GET /api/admin/users — List all users with decrypted PII
+app.get('/api/admin/users', async (req, res) => {
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const users = await db.all('SELECT id, full_name, email, username, role, status, color, created_at, phone_number, avatar_url, bio FROM users ORDER BY created_at DESC');
+        const decrypted = users.map(u => ({
+            id: u.id,
+            fullName: decryptField(u.full_name),
+            email: u.email,
+            username: u.username,
+            role: u.role || 'Standard',
+            status: u.status || 'Active',
+            color: u.color,
+            createdAt: u.created_at,
+            phoneNumber: decryptField(u.phone_number),
+            avatarUrl: decryptField(u.avatar_url),
+            bio: u.bio,
+            online: !!(io.sockets.adapter.rooms.get(u.username?.toLowerCase()))
+        }));
+        res.json({ users: decrypted });
+    } catch (err) {
+        console.error("[ADMIN] Users list error:", err);
+        res.status(500).json({ error: "Failed to fetch users" });
+    }
+});
+
+// PATCH /api/admin/users/:username/role — Change user role
+app.patch('/api/admin/users/:username/role', async (req, res) => {
+    const { username } = req.params;
+    const { role } = req.body;
+    if (!role) return res.status(400).json({ error: "Role required" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('UPDATE users SET role = ? WHERE LOWER(username) = LOWER(?)', [role, username]);
+        res.json({ status: "success", message: `Role updated to ${role} for @${username}` });
+    } catch (err) {
+        console.error("[ADMIN] Role update error:", err);
+        res.status(500).json({ error: "Failed to update role" });
+    }
+});
+
+// PATCH /api/admin/users/:username/status — Change user status (Active/Suspended)
+app.patch('/api/admin/users/:username/status', async (req, res) => {
+    const { username } = req.params;
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: "Status required" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('UPDATE users SET status = ? WHERE LOWER(username) = LOWER(?)', [status, username]);
+        res.json({ status: "success", message: `Status updated to ${status} for @${username}` });
+    } catch (err) {
+        console.error("[ADMIN] Status update error:", err);
+        res.status(500).json({ error: "Failed to update status" });
+    }
+});
+
+// DELETE /api/admin/users/:username — Delete user and all associated data
+app.delete('/api/admin/users/:username', async (req, res) => {
+    const { username } = req.params;
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const u = username.toLowerCase();
+        // Remove connections
+        await db.run('DELETE FROM connections WHERE user_a = ? OR user_b = ?', [u, u]);
+        // Remove connection requests
+        await db.run('DELETE FROM connection_requests WHERE LOWER(from_username) = ? OR LOWER(to_username) = ?', [u, u]);
+        // Remove notifications
+        await db.run('DELETE FROM notifications WHERE LOWER(owner_username) = ? OR LOWER(from_username) = ?', [u, u]);
+        // Remove stories + views + likes
+        const userStories = await db.all('SELECT id FROM stories WHERE LOWER(username) = ?', [u]);
+        for (const s of userStories) {
+            await db.run('DELETE FROM story_views WHERE story_id = ?', [s.id]);
+            await db.run('DELETE FROM story_likes WHERE story_id = ?', [s.id]);
+        }
+        await db.run('DELETE FROM stories WHERE LOWER(username) = ?', [u]);
+        // Finally delete user
+        await db.run('DELETE FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        res.json({ status: "success", message: `User @${username} and all associated data deleted.` });
+    } catch (err) {
+        console.error("[ADMIN] User delete error:", err);
+        res.status(500).json({ error: "Failed to delete user" });
+    }
+});
+
+// PATCH /api/admin/users/:username/password — Reset user password
+app.patch('/api/admin/users/:username/password', async (req, res) => {
+    const { username } = req.params;
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const hashed = await bcrypt.hash(newPassword, 10);
+        await db.run('UPDATE users SET password = ? WHERE LOWER(username) = LOWER(?)', [hashed, username]);
+        res.json({ status: "success", message: `Password reset for @${username}` });
+    } catch (err) {
+        console.error("[ADMIN] Password reset error:", err);
+        res.status(500).json({ error: "Failed to reset password" });
+    }
+});
+
+// STORY ADMIN ENDPOINTS REMOVED — Stories remain encrypted & private
+
+// ------------------------------------------------------------------
+// EMAIL TEMPLATE MANAGEMENT API
+// ------------------------------------------------------------------
+
+// GET /api/admin/email-templates — Get all customizable templates
+app.get('/api/admin/email-templates', (req, res) => {
+    const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
+    const CLIENT_URL = process.env.CLIENT_URL || 'https://nexora31.vercel.app';
+
+    // Default templates (what the system uses if no override exists)
+    const defaults = {
+        welcome: {
+            subject: "Welcome to Nexora: Protocol Established",
+            html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;background:linear-gradient(135deg,#eef2ff,#e0f2fe,#f8fafc);font-family:'Inter',-apple-system,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.85);border-radius:32px;border:1px solid rgba(255,255,255,0.5);box-shadow:0 30px 60px rgba(108,92,231,0.12);overflow:hidden;"><tr><td align="center" style="padding:30px 20px 10px;"><span style="background:rgba(108,92,231,0.08);color:#6c5ce7;padding:8px 18px;border-radius:100px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px;">🔐 Military-Grade Privacy</span></td></tr><tr><td align="center" style="padding:20px 0;"><div style="width:70px;height:70px;background:#ffffff;border-radius:20px;box-shadow:0 15px 35px rgba(108,92,231,0.15);display:inline-flex;align-items:center;justify-content:center;"><img src="{{APP_LOGO}}" alt="Nexora" style="width:50px;height:50px;" /></div></td></tr><tr><td align="center" style="padding:10px 45px;"><h1 style="margin:0;font-size:36px;font-weight:900;color:#1a1a2e;letter-spacing:-1px;line-height:1.1;">Welcome to Nexora 🎉</h1><p style="margin-top:15px;color:#64748b;font-size:16px;line-height:1.8;font-weight:500;">Subject <span style="color:#6c5ce7;font-weight:800;">@{{username}}</span>, you are now part of a new era of private communication.</p></td></tr><tr><td align="center" style="padding:35px;"><a href="{{CLIENT_URL}}/auth" style="background:linear-gradient(135deg,#6c5ce7 0%,#00d4ff 100%);color:#ffffff;padding:22px 50px;border-radius:100px;text-decoration:none;font-size:16px;font-weight:800;display:inline-block;box-shadow:0 20px 40px rgba(108,92,231,0.25);">🚀 LAUNCH YOUR ACCOUNT</a></td></tr><tr><td align="center" style="padding:45px;background:#fafbfc;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;line-height:1.8;font-weight:600;text-transform:uppercase;letter-spacing:1px;">© {{YEAR}} Nexora • The Private Chat Protocol</td></tr></table></td></tr></table></body></html>`,
+            description: "Sent to new users when they sign up",
+            variables: ["{{username}}", "{{APP_LOGO}}", "{{CLIENT_URL}}", "{{YEAR}}"]
+        },
+        otp: {
+            subject: "Nexora Recovery: Verification Code",
+            html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;background:linear-gradient(135deg,#eef2ff,#e0f2fe,#f8fafc);font-family:'Inter',-apple-system,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.85);border-radius:32px;border:1px solid rgba(255,255,255,0.5);box-shadow:0 30px 60px rgba(108,92,231,0.12);overflow:hidden;"><tr><td align="center" style="padding:30px 20px 10px;"><span style="background:rgba(108,92,231,0.08);color:#6c5ce7;padding:8px 18px;border-radius:100px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px;">🛡️ Recovery Protocol Active</span></td></tr><tr><td align="center" style="padding:20px 0;"><div style="width:70px;height:70px;background:#ffffff;border-radius:20px;box-shadow:0 15px 35px rgba(108,92,231,0.15);display:inline-flex;align-items:center;justify-content:center;"><img src="{{APP_LOGO}}" alt="Nexora" style="width:50px;height:50px;" /></div></td></tr><tr><td align="center" style="padding:10px 45px;"><h1 style="margin:0;font-size:32px;font-weight:900;color:#1a1a2e;letter-spacing:-1px;">Verification Code</h1><p style="margin-top:20px;color:#64748b;font-size:18px;line-height:1.6;font-weight:500;">Use the code below to verify your identity.</p></td></tr><tr><td align="center" style="padding:30px 45px;"><div style="background:#f8fafc;border:2px dashed #6c5ce7;border-radius:24px;padding:35px;"><div style="font-size:52px;font-weight:950;color:#6c5ce7;letter-spacing:14px;font-family:'Courier New',monospace;margin-left:14px;">{{otp}}</div></div><p style="margin-top:20px;color:#94a3b8;font-size:14px;font-weight:600;">Valid for 10 minutes</p></td></tr><tr><td align="center" style="padding:45px;background:#fafbfc;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;line-height:1.8;font-weight:600;text-transform:uppercase;letter-spacing:1px;">© {{YEAR}} Nexora • Systems Security Protocol</td></tr></table></td></tr></table></body></html>`,
+            description: "Sent when user requests password recovery OTP",
+            variables: ["{{otp}}", "{{APP_LOGO}}", "{{YEAR}}"]
+        },
+        login_alert: {
+            subject: "Security Alert: Login Detected",
+            html: `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;background:linear-gradient(135deg,#fff1f2,#f8fafc);font-family:'Inter',-apple-system,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.85);border-radius:32px;border:1px solid rgba(255,255,255,0.5);box-shadow:0 30px 60px rgba(225,29,72,0.12);overflow:hidden;"><tr><td align="center" style="padding:30px 20px 10px;"><span style="background:rgba(225,29,72,0.1);color:#e11d48;padding:8px 18px;border-radius:100px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px;">⚠️ Security Protocol Alert</span></td></tr><tr><td align="center" style="padding:20px 0;"><div style="width:70px;height:70px;background:#ffffff;border-radius:20px;box-shadow:0 15px 35px rgba(225,29,72,0.15);display:inline-flex;align-items:center;justify-content:center;"><img src="{{APP_LOGO}}" alt="Nexora" style="width:50px;height:50px;" /></div></td></tr><tr><td align="center" style="padding:10px 45px;"><h1 style="margin:0;font-size:32px;font-weight:900;color:#1a1a2e;letter-spacing:-1px;">New Login Trace</h1><p style="margin-top:20px;color:#64748b;font-size:18px;line-height:1.6;font-weight:500;">A new login was detected for <span style="color:#e11d48;font-weight:800;">@{{username}}</span> at {{TIMESTAMP}}.</p></td></tr><tr><td align="center" style="padding:20px 45px 45px;"><a href="{{CLIENT_URL}}/auth" style="background:#e11d48;color:#ffffff;padding:18px 40px;border-radius:100px;text-decoration:none;font-size:14px;font-weight:800;display:inline-block;box-shadow:0 15px 30px rgba(225,29,72,0.2);">🔒 LOCK ACCOUNT</a></td></tr><tr><td align="center" style="padding:45px;background:#fafbfc;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;line-height:1.8;font-weight:600;text-transform:uppercase;letter-spacing:1px;">SECURITY VAULT • NEXORA CORE • ALL RIGHTS ENCRYPTED</td></tr></table></td></tr></table></body></html>`,
+            description: "Sent when a user logs in to their account",
+            variables: ["{{username}}", "{{APP_LOGO}}", "{{CLIENT_URL}}", "{{TIMESTAMP}}"]
+        }
+    };
+
+    // Merge overrides into defaults
+    const templates = {};
+    for (const [key, def] of Object.entries(defaults)) {
+        const override = emailTemplateOverrides.get(key);
+        templates[key] = {
+            ...def,
+            subject: override?.subject || def.subject,
+            html: override?.html || def.html,
+            isCustomized: !!override
+        };
+    }
+    res.json({ templates });
+});
+
+// PUT /api/admin/email-templates/:type — Update a specific template
+app.put('/api/admin/email-templates/:type', (req, res) => {
+    const { type } = req.params;
+    const { subject, html } = req.body;
+    const validTypes = ['welcome', 'otp', 'login_alert'];
+    if (!validTypes.includes(type)) return res.status(400).json({ error: `Invalid template type. Valid: ${validTypes.join(', ')}` });
+    if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required" });
+
+    emailTemplateOverrides.set(type, { subject, html });
+    console.log(`[ADMIN] Email template '${type}' customized.`);
+    res.json({ status: "success", message: `Template '${type}' updated successfully.` });
+});
+
+// DELETE /api/admin/email-templates/:type — Reset template to default
+app.delete('/api/admin/email-templates/:type', (req, res) => {
+    const { type } = req.params;
+    emailTemplateOverrides.delete(type);
+    console.log(`[ADMIN] Email template '${type}' reset to default.`);
+    res.json({ status: "success", message: `Template '${type}' reset to default.` });
+});
+
+// GET /api/admin/connections — List all connections
+app.get('/api/admin/connections', async (req, res) => {
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const connections = await db.all(`
+            SELECT c.id, c.user_a, c.user_b, c.created_at,
+                   ua.full_name as name_a, ua.color as color_a,
+                   ub.full_name as name_b, ub.color as color_b
+            FROM connections c
+            LEFT JOIN users ua ON LOWER(ua.username) = c.user_a
+            LEFT JOIN users ub ON LOWER(ub.username) = c.user_b
+            ORDER BY c.created_at DESC
+        `);
+        const decrypted = connections.map(c => ({
+            ...c,
+            name_a: decryptField(c.name_a),
+            name_b: decryptField(c.name_b)
+        }));
+        res.json({ connections: decrypted });
+    } catch (err) {
+        console.error("[ADMIN] Connections list error:", err);
+        res.status(500).json({ error: "Failed to fetch connections" });
+    }
+});
+
+// DELETE /api/admin/connections/:id — Remove a connection
+app.delete('/api/admin/connections/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('DELETE FROM connections WHERE id = ?', [id]);
+        res.json({ status: "success", message: "Connection removed." });
+    } catch (err) {
+        console.error("[ADMIN] Connection delete error:", err);
+        res.status(500).json({ error: "Failed to remove connection" });
+    }
+});
+
+// POST /api/admin/broadcast — Send email to all or selected users
+app.post('/api/admin/broadcast', async (req, res) => {
+    const { subject, html, targetEmails } = req.body;
+    if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        let emails = targetEmails;
+        if (!emails || emails.length === 0) {
+            const allUsers = await db.all('SELECT email FROM users');
+            emails = allUsers.map(u => u.email);
+        }
+        let sent = 0, failed = 0;
+        for (const email of emails) {
+            try {
+                await emailTransporter.sendMail({
+                    from: `"${process.env.GMAIL_NAME || 'Nexora Private Chat'}" <${process.env.GMAIL_USER}>`,
+                    to: email,
+                    subject: subject,
+                    html: html
+                });
+                sent++;
+            } catch (e) {
+                failed++;
+            }
+        }
+        res.json({ status: "success", sent, failed, total: emails.length });
+    } catch (err) {
+        console.error("[ADMIN] Broadcast error:", err);
+        res.status(500).json({ error: "Broadcast failed" });
     }
 });
 

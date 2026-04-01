@@ -1,73 +1,768 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Lock, Unlock, CheckCircle, XCircle, Mail, Key, Settings, Upload, Save, Globe, Zap } from "lucide-react";
+import {
+  Shield, Lock, Mail, Key, Users, BarChart3, Image, Link2, Settings, Send,
+  Trash2, CheckCircle, XCircle, Search, RefreshCw, Eye, EyeOff, UserCog,
+  Activity, Globe, Upload, Save, Zap, ChevronDown, X, AlertTriangle,
+  LogOut, Heart, MessageSquare, Wifi, WifiOff, Crown, Ban, UserCheck,
+  KeyRound
+} from "lucide-react";
 import { useTheme } from "@/lib/theme";
-import { nexoraFetch, API_BASE_URL, APP_NAME, APP_LOGO } from "@/lib/config";
+import { API_BASE_URL, APP_LOGO } from "@/lib/config";
 
-// MOCK PENDING REQUESTS FOR AUTHORIZED NODES
-const INITIAL_REQUESTS = [
-  { id: "req_01", username: "Clearance_Account_99", email: "hiralchudasama2811@gmail.com", status: "pending", date: "2026-03-29", avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" },
-  { id: "req_02", username: "Clearance_Account_Alpha", email: "admin@nexora.io", status: "pending", date: "2026-03-29", avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop" }
+// ─── HARDCODED ADMIN CREDENTIALS ───
+const ADMIN_EMAIL = "Nexoraprivatechat31@gmail.com";
+const ADMIN_PASSWORD = "Ruhi@#$%*09052024";
+
+// ─── TYPES ───
+interface UserRecord {
+  id: number; fullName: string; email: string; username: string;
+  role: string; status: string; color: string; createdAt: string;
+  phoneNumber: string; avatarUrl: string; bio: string; online: boolean;
+}
+interface ConnectionRecord {
+  id: number; user_a: string; user_b: string; created_at: string;
+  name_a: string; name_b: string; color_a: string; color_b: string;
+}
+interface Stats {
+  totalUsers: number; totalStories: number; totalConnections: number;
+  pendingRequests: number; onlineUsers: number;
+}
+interface EmailTemplate {
+  subject: string; html: string; description: string;
+  variables: string[]; isCustomized: boolean;
+}
+
+type TabId = "overview" | "users" | "connections" | "config" | "templates" | "broadcast";
+
+const TABS: { id: TabId; label: string; icon: any; color: string }[] = [
+  { id: "overview", label: "Overview", icon: BarChart3, color: "#6c5ce7" },
+  { id: "users", label: "Users", icon: Users, color: "#00d4ff" },
+  { id: "connections", label: "Connections", icon: Link2, color: "#2ed573" },
+  { id: "templates", label: "Email Templates", icon: Mail, color: "#ff006e" },
+  { id: "broadcast", label: "Broadcast", icon: Send, color: "#a29bfe" },
+  { id: "config", label: "Configuration", icon: Settings, color: "#ffbe0b" },
 ];
 
-export default function AdminPanel() {
+// ─── HELPERS ───
+async function adminFetch(endpoint: string, options: RequestInit = {}) {
+  try {
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...options.headers },
+    });
+    return await res.json();
+  } catch { return null; }
+}
+
+// ─── STAT CARD ───
+function StatCard({ icon: Icon, label, value, color, sub }: {
+  icon: any; label: string; value: number | string; color: string; sub?: string;
+}) {
   const { isDark } = useTheme();
-  
-  const [setupMode, setSetupMode] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  
-  // Forms
-  const [newPassword, setNewPassword] = useState("");
-  const [emailInput, setEmailInput] = useState("");
-  const [passInput, setPassInput] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+  return (
+    <motion.div whileHover={{ y: -2, scale: 1.01 }} transition={{ type: "spring", stiffness: 400 }}
+      className="p-5 rounded-2xl border flex flex-col gap-3"
+      style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }}>
+      <div className="flex items-center justify-between">
+        <div className="p-2.5 rounded-xl shadow-lg" style={{ background: `linear-gradient(135deg, ${color}, ${color}88)` }}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        {sub && <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+          style={{ background: `${color}15`, color }}>{sub}</span>}
+      </div>
+      <div>
+        <p className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>{value}</p>
+        <p className="text-xs font-medium mt-0.5" style={{ color: "var(--text-muted)" }}>{label}</p>
+      </div>
+    </motion.div>
+  );
+}
 
-  const SUPER_ADMIN_EMAIL = "Hiralchudasama2811@gmail.com";
+// ─── CONFIRM MODAL ───
+function ConfirmModal({ title, message, onConfirm, onCancel, danger }: {
+  title: string; message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean;
+}) {
+  const { isDark } = useTheme();
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md" onClick={onCancel}>
+      <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
+        className="w-full max-w-sm rounded-[2rem] p-7 shadow-2xl border" onClick={e => e.stopPropagation()}
+        style={{ background: isDark ? "rgba(16,16,30,0.98)" : "rgba(255,255,255,0.98)", borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }}>
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center"
+            style={{ background: danger ? "rgba(255,0,110,0.1)" : "rgba(108,92,231,0.1)" }}>
+            <AlertTriangle className="w-7 h-7" style={{ color: danger ? "#ff006e" : "#6c5ce7" }} />
+          </div>
+          <h3 className="text-lg font-black" style={{ color: "var(--text-primary)" }}>{title}</h3>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>{message}</p>
+          <div className="flex gap-3 w-full mt-2">
+            <button onClick={onCancel} className="flex-1 py-3 rounded-xl font-bold transition-colors"
+              style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-primary)" }}>Cancel</button>
+            <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-bold text-white shadow-lg"
+              style={{ background: danger ? "#ff006e" : "#6c5ce7" }}>Confirm</button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
-  // Requests state
-  const [requests, setRequests] = useState(INITIAL_REQUESTS);
+// ═══════════════════════════════════════
+// OVERVIEW TAB
+// ═══════════════════════════════════════
+function OverviewTab({ stats, onRefresh }: { stats: Stats; onRefresh: () => void }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>System Overview</h2>
+        <button onClick={onRefresh} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold"
+          style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatCard icon={Users} label="Total Users" value={stats.totalUsers} color="#6c5ce7" sub="LIVE" />
+        <StatCard icon={Wifi} label="Online Now" value={stats.onlineUsers} color="#2ed573" sub="REAL-TIME" />
+        <StatCard icon={Image} label="Total Stories" value={stats.totalStories} color="#ff006e" />
+        <StatCard icon={Link2} label="Connections" value={stats.totalConnections} color="#00d4ff" />
+        <StatCard icon={MessageSquare} label="Pending Requests" value={stats.pendingRequests} color="#ffbe0b" />
+      </div>
+    </div>
+  );
+}
 
-  // Dynamic Site Config State
-  const [seoTitle, setSeoTitle] = useState("");
-  const [seoDesc, setSeoDesc] = useState("");
-  const [seoKey, setSeoKey] = useState("");
-  const [logoB64, setLogoB64] = useState("");
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
-  
-  // Email Customization Modal
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [selectedReq, setSelectedReq] = useState<any>(null);
-  const [emailDraft, setEmailDraft] = useState({ subject: "", html: "" });
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+// ═══════════════════════════════════════
+// USERS TAB
+// ═══════════════════════════════════════
+function UsersTab() {
+  const { isDark } = useTheme();
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [confirm, setConfirm] = useState<{ type: string; user: UserRecord } | null>(null);
+  const [pwModal, setPwModal] = useState<UserRecord | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [roleDropdown, setRoleDropdown] = useState<string | null>(null);
 
-  const applyConfiguration = async () => {
-    setIsSavingConfig(true);
-    try {
-      const payload: any = { seo: {} };
-      if (seoTitle) payload.seo.title = seoTitle;
-      if (seoDesc) payload.seo.description = seoDesc;
-      if (seoKey) payload.seo.keywords = seoKey;
-      if (logoB64) payload.logoBase64 = logoB64;
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    const data = await adminFetch("/api/admin/users");
+    if (data?.users) setUsers(data.users);
+    setLoading(false);
+  }, []);
 
-      const res = await fetch(`${API_BASE_URL}/api/admin/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        alert("Nexora Core: Metadata & Brand overrides successfully deployed.");
-      } else {
-        alert("Failure deploying overrides. Check node console.");
-      }
-    } catch (e) {
-      alert("Network Error saving configuration.");
-    }
-    setIsSavingConfig(false);
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const filtered = users.filter(u =>
+    u.username.toLowerCase().includes(search.toLowerCase()) ||
+    u.fullName.toLowerCase().includes(search.toLowerCase()) ||
+    u.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleRoleChange = async (username: string, role: string) => {
+    await adminFetch(`/api/admin/users/${username}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
+    setRoleDropdown(null);
+    fetchUsers();
   };
+
+  const handleStatusToggle = async (user: UserRecord) => {
+    const newStatus = user.status === "Active" ? "Suspended" : "Active";
+    await adminFetch(`/api/admin/users/${user.username}/status`, { method: "PATCH", body: JSON.stringify({ status: newStatus }) });
+    fetchUsers();
+  };
+
+  const handleDelete = async (username: string) => {
+    await adminFetch(`/api/admin/users/${username}`, { method: "DELETE" });
+    setConfirm(null);
+    fetchUsers();
+  };
+
+  const handleResetPw = async () => {
+    if (!pwModal || newPw.length < 6) return;
+    await adminFetch(`/api/admin/users/${pwModal.username}/password`, { method: "PATCH", body: JSON.stringify({ newPassword: newPw }) });
+    setPwModal(null);
+    setNewPw("");
+  };
+
+  const roles = ["Standard", "Admin", "PendingAuthorized"];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>User Management</h2>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex-1 sm:flex-none relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+            <input type="text" placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full sm:w-64 pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+          </div>
+          <button onClick={fetchUsers} className="p-2.5 rounded-xl" style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* User List */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>Loading users...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 rounded-2xl border border-dashed" style={{ borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}>
+            No users found
+          </div>
+        ) : filtered.map(user => (
+          <motion.div key={user.username} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-2xl border flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
+            style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: user.status === "Suspended" ? "rgba(255,0,110,0.2)" : "var(--border-subtle)" }}>
+
+            {/* User Info */}
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-11 h-11 rounded-full flex items-center justify-center font-black text-white text-sm shrink-0 overflow-hidden shadow-md relative"
+                style={{ background: user.avatarUrl ? undefined : `linear-gradient(135deg, #6c5ce7, #00d4ff)` }}>
+                {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" alt="" /> : user.fullName?.[0]?.toUpperCase() || "?"}
+                {user.online && <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#2ed573] border-2" style={{ borderColor: isDark ? "#10101e" : "#fff" }} />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-sm truncate" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                    style={{
+                      background: user.role === "Admin" ? "rgba(108,92,231,0.12)" : user.role === "PendingAuthorized" ? "rgba(255,190,11,0.12)" : "rgba(0,212,255,0.08)",
+                      color: user.role === "Admin" ? "#6c5ce7" : user.role === "PendingAuthorized" ? "#ffbe0b" : "#00d4ff"
+                    }}>{user.role}</span>
+                  {user.status === "Suspended" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#ff006e]/10 text-[#ff006e]">SUSPENDED</span>}
+                </div>
+                <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>@{user.username} · {user.email}</p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {/* Role dropdown */}
+              <div className="relative">
+                <button onClick={() => setRoleDropdown(roleDropdown === user.username ? null : user.username)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
+                  style={{ background: "rgba(108,92,231,0.08)", color: "#6c5ce7" }}>
+                  <Crown className="w-3 h-3" /> Role <ChevronDown className="w-3 h-3" />
+                </button>
+                {roleDropdown === user.username && (
+                  <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
+                    className="absolute right-0 top-full mt-1 z-50 w-48 rounded-xl shadow-xl border overflow-hidden"
+                    style={{ background: isDark ? "#1a1a2e" : "#fff", borderColor: "var(--border-subtle)" }}>
+                    {roles.map(r => (
+                      <button key={r} onClick={() => handleRoleChange(user.username, r)}
+                        className="w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-white/5 transition-colors flex items-center justify-between"
+                        style={{ color: user.role === r ? "#6c5ce7" : "var(--text-primary)" }}>
+                        {r} {user.role === r && <CheckCircle className="w-3 h-3" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Status toggle */}
+              <button onClick={() => handleStatusToggle(user)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
+                style={{
+                  background: user.status === "Active" ? "rgba(255,0,110,0.08)" : "rgba(46,213,115,0.08)",
+                  color: user.status === "Active" ? "#ff006e" : "#2ed573"
+                }}>
+                {user.status === "Active" ? <><Ban className="w-3 h-3" /> Suspend</> : <><UserCheck className="w-3 h-3" /> Activate</>}
+              </button>
+
+              {/* Reset password */}
+              <button onClick={() => { setPwModal(user); setNewPw(""); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
+                style={{ background: "rgba(255,190,11,0.08)", color: "#ffbe0b" }}>
+                <KeyRound className="w-3 h-3" /> Reset PW
+              </button>
+
+              {/* Delete */}
+              <button onClick={() => setConfirm({ type: "delete", user })}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold"
+                style={{ background: "rgba(255,0,110,0.08)", color: "#ff006e" }}>
+                <Trash2 className="w-3 h-3" /> Delete
+              </button>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Delete confirm */}
+      <AnimatePresence>
+        {confirm?.type === "delete" && (
+          <ConfirmModal key="del" danger title="Delete User" message={`Are you sure you want to permanently delete @${confirm.user.username}? This will remove all their data.`}
+            onConfirm={() => handleDelete(confirm.user.username)} onCancel={() => setConfirm(null)} />
+        )}
+      </AnimatePresence>
+
+      {/* Password reset modal */}
+      <AnimatePresence>
+        {pwModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md" onClick={() => setPwModal(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="w-full max-w-sm rounded-[2rem] p-7 shadow-2xl border" onClick={e => e.stopPropagation()}
+              style={{ background: isDark ? "rgba(16,16,30,0.98)" : "rgba(255,255,255,0.98)", borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }}>
+              <h3 className="text-lg font-black mb-4" style={{ color: "var(--text-primary)" }}>Reset Password for @{pwModal.username}</h3>
+              <div className="relative mb-4">
+                <input type={showPw ? "text" : "password"} value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New password (min 6 chars)"
+                  className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none"
+                  style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                <button onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100" style={{ color: "var(--text-muted)" }}>
+                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setPwModal(null)} className="flex-1 py-3 rounded-xl font-bold"
+                  style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-primary)" }}>Cancel</button>
+                <button onClick={handleResetPw} disabled={newPw.length < 6}
+                  className="flex-1 py-3 rounded-xl font-bold text-white shadow-lg disabled:opacity-40"
+                  style={{ background: "#6c5ce7" }}>Reset Password</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+// STORIES TAB
+// ═══════════════════════════════════════
+// EMAIL TEMPLATES TAB
+// ═══════════════════════════════════════
+const TEMPLATE_TYPES = [
+  { id: "welcome", label: "Welcome Email", color: "#6c5ce7", desc: "Sent on new signup" },
+  { id: "otp", label: "OTP / Recovery", color: "#00d4ff", desc: "Recovery code email" },
+  { id: "login_alert", label: "Login Alert", color: "#e11d48", desc: "Sent on every login" },
+];
+
+function EmailTemplatesTab() {
+  const { isDark } = useTheme();
+  const [templates, setTemplates] = useState<Record<string, EmailTemplate>>({});
+  const [selected, setSelected] = useState("welcome");
+  const [subject, setSubject] = useState("");
+  const [html, setHtml] = useState("");
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
+  const [tab, setTab] = useState<"edit" | "preview">("edit");
+
+  const fetchTemplates = useCallback(async () => {
+    const data = await adminFetch("/api/admin/email-templates");
+    if (data?.templates) {
+      setTemplates(data.templates);
+      const t = data.templates[selected];
+      if (t) { setSubject(t.subject); setHtml(t.html); }
+    }
+  }, [selected]);
+
+  useEffect(() => { fetchTemplates(); }, []);
+
+  // When switching templates, load that template's content
+  const handleSelectTemplate = (id: string) => {
+    setSelected(id);
+    const t = templates[id];
+    if (t) { setSubject(t.subject); setHtml(t.html); }
+    setSavedMsg("");
+  };
+
+  // Build preview with dummy variable substitution
+  const buildPreview = () => {
+    const sampleVars: Record<string, string> = {
+      "{{username}}": "sample_user",
+      "{{otp}}": "847291",
+      "{{APP_LOGO}}": "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg",
+      "{{CLIENT_URL}}": "https://nexora31.vercel.app",
+      "{{YEAR}}": new Date().getFullYear().toString(),
+      "{{TIMESTAMP}}": new Date().toLocaleString(),
+    };
+    let out = html;
+    for (const [k, v] of Object.entries(sampleVars)) out = out.split(k).join(v);
+    setPreviewHtml(out);
+    setTab("preview");
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const res = await adminFetch(`/api/admin/email-templates/${selected}`, {
+      method: "PUT",
+      body: JSON.stringify({ subject, html }),
+    });
+    setSaving(false);
+    setSavedMsg(res?.status === "success" ? "✓ Template saved!" : "✗ Save failed");
+    // refresh
+    const data = await adminFetch("/api/admin/email-templates");
+    if (data?.templates) setTemplates(data.templates);
+  };
+
+  const handleReset = async () => {
+    await adminFetch(`/api/admin/email-templates/${selected}`, { method: "DELETE" });
+    const data = await adminFetch("/api/admin/email-templates");
+    if (data?.templates) {
+      setTemplates(data.templates);
+      const t = data.templates[selected];
+      if (t) { setSubject(t.subject); setHtml(t.html); }
+    }
+    setSavedMsg("↺ Reset to default");
+  };
+
+  const inputStyle = { background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" };
+  const currentMeta = TEMPLATE_TYPES.find(t => t.id === selected);
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Email Templates</h2>
+
+      {/* Template selector */}
+      <div className="flex flex-wrap gap-3">
+        {TEMPLATE_TYPES.map(t => {
+          const tmpl = templates[t.id];
+          const active = selected === t.id;
+          return (
+            <button key={t.id} onClick={() => handleSelectTemplate(t.id)}
+              className="flex flex-col items-start px-5 py-3 rounded-2xl border text-left transition-all"
+              style={{
+                background: active ? `${t.color}10` : (isDark ? "rgba(255,255,255,0.02)" : "#fff"),
+                borderColor: active ? t.color : "var(--border-subtle)",
+                boxShadow: active ? `0 0 0 1px ${t.color}40` : "none"
+              }}>
+              <span className="text-sm font-bold" style={{ color: active ? t.color : "var(--text-primary)" }}>{t.label}</span>
+              <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{t.desc}</span>
+              {tmpl?.isCustomized && (
+                <span className="text-[9px] font-bold mt-1 px-1.5 py-0.5 rounded-md" style={{ background: `${t.color}15`, color: t.color }}>CUSTOM</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Variables reference */}
+      {templates[selected]?.variables && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Variables:</span>
+          {templates[selected].variables.map(v => (
+            <code key={v} className="text-[11px] px-2 py-0.5 rounded-lg font-mono cursor-pointer select-all"
+              style={{ background: isDark ? "rgba(108,92,231,0.1)" : "rgba(108,92,231,0.07)", color: "#6c5ce7" }}
+              title="Click to copy" onClick={() => navigator.clipboard.writeText(v)}>{v}</code>
+          ))}
+          <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>click to copy</span>
+        </div>
+      )}
+
+      {/* Edit / Preview tabs */}
+      <div className="flex gap-2">
+        {(["edit", "preview"] as const).map(t => (
+          <button key={t} onClick={() => { if (t === "preview") buildPreview(); else setTab("edit"); }}
+            className="px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all"
+            style={{
+              background: tab === t ? (currentMeta?.color || "#6c5ce7") + "15" : "transparent",
+              color: tab === t ? (currentMeta?.color || "#6c5ce7") : "var(--text-muted)",
+              border: `1px solid ${tab === t ? (currentMeta?.color || "#6c5ce7") + "40" : "var(--border-subtle)"}`
+            }}>
+            {t === "edit" ? "✏️ Editor" : "👁 Live Preview"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "edit" ? (
+        <div className="space-y-4">
+          {/* Subject */}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: currentMeta?.color || "#6c5ce7" }}>Subject Line</label>
+            <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          {/* HTML Editor */}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: currentMeta?.color || "#6c5ce7" }}>HTML Body</label>
+            <textarea value={html} onChange={e => setHtml(e.target.value)} rows={20}
+              className="w-full p-4 rounded-xl outline-none font-mono text-xs resize-y"
+              style={{ ...inputStyle, lineHeight: 1.6, minHeight: "400px" }}
+              spellCheck={false} />
+          </div>
+        </div>
+      ) : (
+        /* Live Preview */
+        <div className="rounded-2xl border overflow-hidden bg-white" style={{ borderColor: "var(--border-subtle)", minHeight: "500px" }}>
+          <div className="px-4 py-2 border-b flex items-center gap-2" style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
+            <div className="flex gap-1.5">
+              {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}
+            </div>
+            <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Email Preview — {subject}</span>
+          </div>
+          <iframe
+            srcDoc={previewHtml}
+            className="w-full"
+            style={{ height: "600px", border: "none" }}
+            title="Email Preview"
+            sandbox="allow-same-origin"
+          />
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
+          style={{ background: `linear-gradient(135deg, ${currentMeta?.color || "#6c5ce7"}, #6c5ce7)` }}>
+          <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Template"}
+        </motion.button>
+        <button onClick={handleReset}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl font-bold border transition-colors"
+          style={{ borderColor: "var(--border-subtle)", color: "var(--text-secondary)", background: "transparent" }}>
+          <RefreshCw className="w-4 h-4" /> Reset to Default
+        </button>
+        {savedMsg && (
+          <motion.span initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
+            className="text-sm font-bold" style={{ color: savedMsg.startsWith("✓") ? "#2ed573" : savedMsg.startsWith("↺") ? "#00d4ff" : "#ff006e" }}>
+            {savedMsg}
+          </motion.span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+// BROADCAST TAB (was EmailTab)
+// ═══════════════════════════════════════
+function BroadcastTab() {
+  const { isDark } = useTheme();
+  const [subject, setSubject] = useState("");
+  const [htmlBody, setHtmlBody] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const [previewMode, setPreviewMode] = useState(false);
+
+  const handleBroadcast = async () => {
+    if (!subject || !htmlBody) { alert("Subject and HTML body are required."); return; }
+    setIsSending(true);
+    setResult(null);
+    const data = await adminFetch("/api/admin/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ subject, html: htmlBody })
+    });
+    if (data) setResult({ sent: data.sent, failed: data.failed, total: data.total });
+    setIsSending(false);
+  };
+
+  const inputStyle = {
+    background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+    border: "1px solid var(--border-subtle)",
+    color: "var(--text-primary)"
+  };
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Broadcast Email</h2>
+      <p className="text-sm" style={{ color: "var(--text-muted)" }}>Send a custom HTML email to all registered users.</p>
+
+      {/* Subject */}
+      <div>
+        <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "#a29bfe" }}>Subject Line</label>
+        <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject..."
+          className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+      </div>
+
+      {/* Edit / Preview toggle */}
+      <div className="flex gap-2">
+        {(["edit", "preview"] as const).map(t => (
+          <button key={t} onClick={() => setPreviewMode(t === "preview")}
+            className="px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all"
+            style={{
+              background: (previewMode ? t === "preview" : t === "edit") ? "rgba(162,155,254,0.15)" : "transparent",
+              color: (previewMode ? t === "preview" : t === "edit") ? "#a29bfe" : "var(--text-muted)",
+              border: `1px solid ${(previewMode ? t === "preview" : t === "edit") ? "rgba(162,155,254,0.4)" : "var(--border-subtle)"}`
+            }}>
+            {t === "edit" ? "✏️ Editor" : "👁 Preview"}
+          </button>
+        ))}
+      </div>
+
+      {!previewMode ? (
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "#a29bfe" }}>HTML Body</label>
+          <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={16} placeholder="<html>...</html>"
+            className="w-full p-4 rounded-xl outline-none font-mono text-xs resize-y"
+            style={{ ...inputStyle, lineHeight: 1.6, minHeight: "380px" }} spellCheck={false} />
+        </div>
+      ) : (
+        <div className="rounded-2xl border overflow-hidden bg-white" style={{ borderColor: "var(--border-subtle)" }}>
+          <div className="px-4 py-2 border-b flex items-center gap-2"
+            style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
+            <div className="flex gap-1.5">
+              {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}
+            </div>
+            <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Broadcast Preview — {subject || "No subject"}</span>
+          </div>
+          <iframe srcDoc={htmlBody} className="w-full" style={{ height: "550px", border: "none" }}
+            title="Broadcast Preview" sandbox="allow-same-origin" />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={handleBroadcast} disabled={isSending}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
+          style={{ background: "linear-gradient(135deg, #a29bfe, #6c5ce7)" }}>
+          <Send className="w-4 h-4" /> {isSending ? "Broadcasting..." : "Send to All Users"}
+        </motion.button>
+
+        {result && (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+            style={{ background: "rgba(46,213,115,0.08)", color: "#2ed573", border: "1px solid rgba(46,213,115,0.15)" }}>
+            <CheckCircle className="w-4 h-4" /> Sent: {result.sent} · Failed: {result.failed} · Total: {result.total}
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════
+// CONNECTIONS TAB
+// ═══════════════════════════════════════
+function ConnectionsTab() {
+  const { isDark } = useTheme();
+  const [connections, setConnections] = useState<ConnectionRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [confirm, setConfirm] = useState<ConnectionRecord | null>(null);
+  const [search, setSearch] = useState("");
+
+  const fetchConnections = useCallback(async () => {
+    setLoading(true);
+    const data = await adminFetch("/api/admin/connections");
+    if (data?.connections) setConnections(data.connections);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchConnections(); }, [fetchConnections]);
+
+  const filtered = connections.filter(c =>
+    c.user_a.includes(search.toLowerCase()) || c.user_b.includes(search.toLowerCase()) ||
+    (c.name_a || "").toLowerCase().includes(search.toLowerCase()) || (c.name_b || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleDelete = async (id: number) => {
+    await adminFetch(`/api/admin/connections/${id}`, { method: "DELETE" });
+    setConfirm(null);
+    fetchConnections();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Connections</h2>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex-1 sm:flex-none relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+            <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full sm:w-56 pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+          </div>
+          <button onClick={fetchConnections} className="p-2.5 rounded-xl" style={{ background: "rgba(46,213,115,0.1)", color: "#2ed573" }}>
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>Loading connections...</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 rounded-2xl border border-dashed" style={{ borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}>
+          No connections found
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(conn => (
+            <motion.div key={conn.id} layout className="p-4 rounded-2xl border flex items-center justify-between gap-4"
+              style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                    style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+                    {(conn.name_a || conn.user_a)?.[0]?.toUpperCase() || "?"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{conn.name_a || conn.user_a}</p>
+                    <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>@{conn.user_a}</p>
+                  </div>
+                </div>
+
+                <div className="px-3 shrink-0">
+                  <Link2 className="w-5 h-5" style={{ color: "#2ed573" }} />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                    style={{ background: "linear-gradient(135deg, #ff006e, #ffbe0b)" }}>
+                    {(conn.name_b || conn.user_b)?.[0]?.toUpperCase() || "?"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{conn.name_b || conn.user_b}</p>
+                    <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>@{conn.user_b}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-[10px] font-mono hidden sm:block" style={{ color: "var(--text-muted)" }}>
+                  {new Date(conn.created_at).toLocaleDateString()}
+                </span>
+                <button onClick={() => setConfirm(conn)}
+                  className="p-2 rounded-xl hover:bg-[#ff006e]/10 transition-colors" style={{ color: "#ff006e" }}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {confirm && (
+          <ConfirmModal key="del-conn" danger title="Remove Connection"
+            message={`Remove connection between @${confirm.user_a} and @${confirm.user_b}?`}
+            onConfirm={() => handleDelete(confirm.id)} onCancel={() => setConfirm(null)} />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+// CONFIG / SEO TAB
+// ═══════════════════════════════════════
+function ConfigTab() {
+  const { isDark } = useTheme();
+  const [seo, setSeo] = useState({
+    title: "", titleTemplate: "", description: "", keywords: "",
+    siteUrl: "", ogImage: "", twitterHandle: "", author: "",
+    themeColor: "#6c5ce7", language: "en", category: "Technology",
+    canonicalUrl: "", robots: "", indexing: true,
+  });
+  const [logoB64, setLogoB64] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  // Load current config on mount
+  useEffect(() => {
+    adminFetch("/api/admin/config").then(data => {
+      if (data?.seo) setSeo(prev => ({ ...prev, ...data.seo }));
+      setLoading(false);
+    });
+  }, []);
 
   const onLogoUpload = (e: any) => {
     const file = e.target.files[0];
@@ -78,41 +773,275 @@ export default function AdminPanel() {
     }
   };
 
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSavedMsg("");
+    const payload: any = { seo };
+    if (logoB64) payload.logoBase64 = logoB64;
+    const res = await adminFetch("/api/admin/config", { method: "POST", body: JSON.stringify(payload) });
+    setIsSaving(false);
+    setSavedMsg(res?.status === "success" ? "✓ Configuration deployed!" : "✗ Deploy failed");
+  };
+
+  const inputStyle = {
+    background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+    border: "1px solid var(--border-subtle)",
+    color: "var(--text-primary)"
+  };
+  const labelStyle = "text-[10px] font-bold uppercase tracking-widest mb-1 block";
+
+  if (loading) return <div className="text-center py-20" style={{ color: "var(--text-muted)" }}>Loading configuration...</div>;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Site Configuration & SEO</h2>
+
+      {/* ── Indexing Toggle ── */}
+      <div className="p-5 rounded-2xl border flex items-center justify-between gap-4"
+        style={{ background: seo.indexing ? "rgba(46,213,115,0.05)" : "rgba(255,0,110,0.05)", borderColor: seo.indexing ? "rgba(46,213,115,0.2)" : "rgba(255,0,110,0.2)" }}>
+        <div>
+          <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
+            {seo.indexing ? "🟢 Search Engine Indexing: ENABLED" : "🔴 Search Engine Indexing: DISABLED"}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            {seo.indexing ? "Google, Bing & other crawlers can index this site." : "All crawlers blocked via robots.txt (noindex, nofollow)."}
+          </p>
+        </div>
+        <button onClick={() => setSeo(prev => ({ ...prev, indexing: !prev.indexing }))}
+          className="relative w-14 h-7 rounded-full transition-all flex-shrink-0"
+          style={{ background: seo.indexing ? "#2ed573" : "#ff006e" }}>
+          <span className="absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all"
+            style={{ left: seo.indexing ? "calc(100% - 26px)" : "2px" }} />
+        </button>
+      </div>
+
+      {/* ── Core SEO ── */}
+      <div className="p-6 rounded-2xl border space-y-4"
+        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#6c5ce7" }}>
+          <Globe className="w-4 h-4" /> Core SEO & Metadata
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Site Title</label>
+            <input type="text" value={seo.title} onChange={e => setSeo(p => ({ ...p, title: e.target.value }))}
+              placeholder="Nexora — The Privacy Protocol"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Title Template</label>
+            <input type="text" value={seo.titleTemplate} onChange={e => setSeo(p => ({ ...p, titleTemplate: e.target.value }))}
+              placeholder="%s | Nexora"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+        </div>
+
+        <div>
+          <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Meta Description</label>
+          <textarea value={seo.description} onChange={e => setSeo(p => ({ ...p, description: e.target.value }))}
+            rows={3} placeholder="Short compelling description (150-160 chars ideal)..."
+            className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
+          <span className="text-[10px]" style={{ color: seo.description.length > 160 ? "#ff006e" : "var(--text-muted)" }}>
+            {seo.description.length} / 160 chars
+          </span>
+        </div>
+
+        <div>
+          <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Keywords (comma separated)</label>
+          <textarea value={seo.keywords} onChange={e => setSeo(p => ({ ...p, keywords: e.target.value }))}
+            rows={2} placeholder="nexora, private chat, encrypted messaging, secure messenger..."
+            className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
+          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+            {seo.keywords.split(",").filter(k => k.trim()).length} keywords
+          </span>
+        </div>
+      </div>
+
+      {/* ── URLs & Social ── */}
+      <div className="p-6 rounded-2xl border space-y-4"
+        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#00d4ff" }}>
+          <Globe className="w-4 h-4" /> URLs, Open Graph & Social
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Site URL</label>
+            <input type="url" value={seo.siteUrl} onChange={e => setSeo(p => ({ ...p, siteUrl: e.target.value }))}
+              placeholder="https://nexora31.vercel.app"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Canonical URL</label>
+            <input type="url" value={seo.canonicalUrl} onChange={e => setSeo(p => ({ ...p, canonicalUrl: e.target.value }))}
+              placeholder="https://nexora31.vercel.app"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>OG Image URL</label>
+            <input type="url" value={seo.ogImage} onChange={e => setSeo(p => ({ ...p, ogImage: e.target.value }))}
+              placeholder="https://...og-image.jpg (1200x630)"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Twitter Handle</label>
+            <input type="text" value={seo.twitterHandle} onChange={e => setSeo(p => ({ ...p, twitterHandle: e.target.value }))}
+              placeholder="@nexoraapp"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+        </div>
+
+        {/* OG Image Preview */}
+        {seo.ogImage && (
+          <div className="rounded-xl overflow-hidden border" style={{ borderColor: "var(--border-subtle)" }}>
+            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.03)" }}>
+              OG Image Preview
+            </div>
+            <img src={seo.ogImage} alt="OG Preview" className="w-full max-h-40 object-cover" onError={() => {}} />
+          </div>
+        )}
+      </div>
+
+      {/* ── Brand & Advanced ── */}
+      <div className="p-6 rounded-2xl border space-y-4"
+        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#ffbe0b" }}>
+          <Settings className="w-4 h-4" /> Brand & Advanced
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Author / Organization</label>
+            <input type="text" value={seo.author} onChange={e => setSeo(p => ({ ...p, author: e.target.value }))}
+              placeholder="Nexora Systems"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Category</label>
+            <input type="text" value={seo.category} onChange={e => setSeo(p => ({ ...p, category: e.target.value }))}
+              placeholder="Technology"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Language Code</label>
+            <input type="text" value={seo.language} onChange={e => setSeo(p => ({ ...p, language: e.target.value }))}
+              placeholder="en"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Theme Color</label>
+            <div className="flex gap-3 items-center">
+              <input type="color" value={seo.themeColor} onChange={e => setSeo(p => ({ ...p, themeColor: e.target.value }))}
+                className="w-12 h-12 rounded-xl border cursor-pointer p-1" style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.04)" : "#fff" }} />
+              <input type="text" value={seo.themeColor} onChange={e => setSeo(p => ({ ...p, themeColor: e.target.value }))}
+                className="flex-1 px-4 py-3 rounded-xl outline-none text-sm font-mono" style={inputStyle} />
+            </div>
+          </div>
+        </div>
+
+        {/* Robots directive */}
+        <div>
+          <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Custom Robots Directive</label>
+          <input type="text" value={seo.robots} onChange={e => setSeo(p => ({ ...p, robots: e.target.value }))}
+            placeholder="index, follow, max-image-preview:large, max-snippet:-1"
+            className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+          <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Leave blank to use defaults. Overridden by indexing toggle above.</p>
+        </div>
+      </div>
+
+      {/* ── Logo Upload ── */}
+      <div className="p-6 rounded-2xl border space-y-4"
+        style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+        <h3 className="text-base font-black flex items-center gap-2" style={{ color: "#ff006e" }}>
+          <Upload className="w-4 h-4" /> Logo Upload
+        </h3>
+        <label className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-colors hover:border-[#6c5ce7]/40"
+          style={{ borderColor: "var(--border-subtle)" }} htmlFor="admin-logo-upload">
+          <input id="admin-logo-upload" type="file" accept="image/*,image/svg+xml" className="hidden" onChange={onLogoUpload} />
+          {logoB64 ? (
+            <div className="flex flex-col items-center gap-2">
+              <img src={logoB64} className="w-16 h-16 rounded-xl shadow-xl" alt="Preview" />
+              <span className="text-xs font-bold text-[#00d4ff]">Ready to deploy</span>
+            </div>
+          ) : (
+            <div className="text-center">
+              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="font-bold text-sm" style={{ color: "var(--text-secondary)" }}>Click to select logo</p>
+              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>SVG, PNG, JPG</p>
+            </div>
+          )}
+        </label>
+      </div>
+
+      {/* ── Actions ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={handleSave} disabled={isSaving}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
+          style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+          <Save className="w-4 h-4" /> {isSaving ? "Deploying..." : "Deploy Configuration"}
+        </motion.button>
+
+        {savedMsg && (
+          <motion.span initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
+            className="text-sm font-bold" style={{ color: savedMsg.startsWith("✓") ? "#2ed573" : "#ff006e" }}>
+            {savedMsg}
+          </motion.span>
+        )}
+      </div>
+
+      {/* ── SMTP Test ── */}
+      <div className="pt-2">
+        <button onClick={async () => {
+          const res = await fetch(`${API_BASE_URL}/api/admin/test-mail`, { method: "POST" });
+          alert(res.ok ? "✓ SMTP test successful!" : "✗ SMTP test failed.");
+        }} className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest border transition-all"
+          style={{ borderColor: "rgba(255,0,110,0.3)", color: "#ff006e", background: "transparent" }}>
+          ⚡ Test SMTP Protocol
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+
+// MAIN ADMIN PANEL
+// ═══════════════════════════════════════════════════════════
+export default function AdminPanel() {
+  const { isDark } = useTheme();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [passInput, setPassInput] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalStories: 0, totalConnections: 0, pendingRequests: 0, onlineUsers: 0 });
+  const [isReady, setIsReady] = useState(false);
+
   useEffect(() => {
-    const existingHash = localStorage.getItem("nexora_admin_hash");
-    if (!existingHash) {
-      setSetupMode(true);
-    }
     const session = sessionStorage.getItem("nexora_admin_session");
-    if (session === "active") {
-      setIsAuthenticated(true);
-      // Fetched announcement removed
-    }
+    if (session === "active") setIsAuthenticated(true);
     setIsReady(true);
   }, []);
 
-  const handleSetup = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword.length < 6) {
-      setErrorMsg("Password must be at least 6 characters.");
-      return;
-    }
-    // Basic local hash simulation (btoa for demo, real implementations should use bcrypt)
-    const encoded = btoa(newPassword);
-    localStorage.setItem("nexora_admin_hash", encoded);
-    setSetupMode(false);
-    setErrorMsg("");
-  };
+  const fetchStats = useCallback(async () => {
+    const data = await adminFetch("/api/admin/stats");
+    if (data) setStats(data);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) fetchStats();
+  }, [isAuthenticated, fetchStats]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (emailInput !== SUPER_ADMIN_EMAIL) {
+    if (emailInput.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
       setErrorMsg("Unrecognized Administrative Identity.");
       return;
     }
-    const saved = localStorage.getItem("nexora_admin_hash");
-    if (btoa(passInput) !== saved) {
-      setErrorMsg("Invalid Credentials.");
+    if (passInput !== ADMIN_PASSWORD) {
+      setErrorMsg("Invalid Access Credentials.");
       return;
     }
     sessionStorage.setItem("nexora_admin_session", "active");
@@ -120,398 +1049,174 @@ export default function AdminPanel() {
     setErrorMsg("");
   };
 
-  const handleAction = async (id: string, action: "approve" | "reject") => {
-    const req = requests.find(r => r.id === id);
-    if (!req) return;
-
-    if (action === "approve") {
-      const defaultHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <style>
-                    body { font-family: 'Inter', -apple-system, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
-                    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 32px; overflow: hidden; box-shadow: 0 40px 100px rgba(0,0,0,0.06); border: 1px solid #eef2f7; }
-                    .header { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); padding: 60px 40px; text-align: center; position: relative; }
-                    .logo-box { width: 90px; height: 90px; background: #fff; border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
-                    .brand-name { color: #ffffff; font-size: 32px; font-weight: 900; letter-spacing: -1.5px; margin: 0; }
-                    .content { padding: 40px; text-align: center; }
-                    .title { font-size: 32px; font-weight: 900; color: #1a1a2e; margin-bottom: 12px; }
-                    .greeting { font-size: 18px; font-weight: 700; color: #6c5ce7; margin-bottom: 20px; }
-                    .message { color: #64748b; font-size: 15px; line-height: 1.8; margin-bottom: 40px; margin-left: auto; margin-right: auto; }
-                    .button { background: linear-gradient(135deg, #6c5ce7 0%, #00d4ff 100%); color: #ffffff !important; padding: 20px 45px; border-radius: 100px; text-decoration: none; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 20px 40px rgba(108,92,231,0.3); transition: all 0.3s ease; }
-                    .footer { background: #f8fafc; padding: 40px; text-align: center; color: #94a3b8; border-top: 1px solid #f1f5f9; }
-                    .copyright { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <div class="logo-box">
-                            <img src="${APP_LOGO}" alt="Nexora" style="width: 70px; height: 70px; object-fit: contain; border-radius: 16px;" />
-                        </div>
-                        <h1 class="brand-name">Nexora</h1>
-                    </div>
-                    <div class="content">
-                        <h2 class="title">Authorization Granted.</h2>
-                        <div class="greeting">Clearing: @${req.username} &bull; SECURE</div>
-                        <p class="message">
-                            Your administrative clearance has been verified. You now have full access to the Nexora Private Chat ecosystem. You may now log in using your registered credentials.
-                        </p>
-                        <a href="${window.location.origin}/auth" class="button">ACCESS SECURE TERMINAL</a>
-                    </div>
-                    <div class="footer">
-                        <div class="copyright">&copy; 2026 NEXORA SYSTEMS &bull; PRIVACY PROTOCOL</div>
-                        <p style="font-size: 10px; color: #94a3b8; line-height: 1.6; margin: 0; text-align: left;">
-                            This is an automated encrypted transmission. If you did not request this authorization, please secure your account immediately.
-                        </p>
-                    </div>
-                </div>
-            </body>
-            </html>
-      `;
-      setSelectedReq(req);
-      setEmailDraft({
-        subject: "Nexora Authorization: Access Granted",
-        html: defaultHtml
-      });
-      setShowEmailModal(true);
-      return;
-    }
-    
-    setRequests(reqs => reqs.filter(r => r.id !== id));
-  };
-
-  const handleConfirmApprove = async () => {
-    if (!selectedReq) return;
-    setIsSendingEmail(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          username: selectedReq.username, 
-          email: selectedReq.email,
-          customSubject: emailDraft.subject,
-          customHtml: emailDraft.html
-        })
-      });
-      if (res.ok) {
-        alert(`Success: Account @${selectedReq.username} authorized. Welcome protocol transmitted.`);
-        setRequests(reqs => reqs.filter(r => r.id !== selectedReq.id));
-        setShowEmailModal(false);
-      } else {
-        alert(`Error: Relay failure during authorization.`);
-      }
-    } catch (e) {
-      alert("Network failure accessing relay console.");
-    }
-    setIsSendingEmail(false);
+  const handleLogout = () => {
+    sessionStorage.removeItem("nexora_admin_session");
+    setIsAuthenticated(false);
+    setActiveTab("overview");
   };
 
   if (!isReady) return null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6"
-         style={{ background: "var(--bg-main)" }}>
+    <div className="min-h-screen" style={{ background: "var(--bg-main)" }}>
       <AnimatePresence mode="wait">
-        
-        {/* =======================
-            SETUP MODE 
-        ========================*/}
-        {setupMode && !isAuthenticated && (
-          <motion.div key="setup" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            className="w-full max-w-md p-8 rounded-3xl shadow-2xl glass-panel relative overflow-hidden"
-            style={{ border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "var(--border-subtle)"}` }}>
-            <div className="absolute top-0 right-0 p-8 w-64 h-64 bg-red-500 rounded-full blur-[80px] opacity-10 pointer-events-none" />
-            
-            <div className="flex flex-col items-center justify-center relative z-10 text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-4"
-                   style={{ background: "linear-gradient(135deg, #ff006e, #6c5ce7)" }}>
-                <Shield className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-2xl font-black tracking-tighter" style={{ color: "var(--text-primary)" }}>Admin Initialization</h1>
-              <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>Register root credentials for <br/><strong className="text-[#ff006e]">{SUPER_ADMIN_EMAIL}</strong></p>
+        {/* ═════════════ LOGIN ═════════════ */}
+        {!isAuthenticated && (
+          <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -20 }}
+            className="flex items-center justify-center min-h-screen p-6">
+
+            {/* Background glows */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+              <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-[120px]" style={{ background: "rgba(108,92,231,0.12)" }} />
+              <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-[120px]" style={{ background: "rgba(0,212,255,0.08)" }} />
             </div>
 
-            <form onSubmit={handleSetup} className="flex flex-col gap-4 relative z-10">
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="password" placeholder="Create Master Password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 rounded-xl outline-none transition-all"
-                  style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="w-full max-w-md p-9 rounded-[2rem] shadow-[0_0_80px_rgba(108,92,231,0.08)] border relative overflow-hidden"
+              style={{ background: isDark ? "rgba(16,16,30,0.85)" : "rgba(255,255,255,0.85)", borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", backdropFilter: "blur(40px)" }}>
+
+              {/* Decorative glow */}
+              <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full blur-[80px] pointer-events-none"
+                style={{ background: "rgba(108,92,231,0.12)" }} />
+
+              <div className="flex flex-col items-center text-center relative z-10 mb-8">
+                <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl mb-5"
+                  style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+                  <Shield className="w-8 h-8 text-white" />
+                </motion.div>
+                <h1 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Admin Portal</h1>
+                <p className="text-xs font-medium mt-2" style={{ color: "var(--text-muted)" }}>Nexora Central Command System</p>
               </div>
-              {errorMsg && <p className="text-xs font-bold text-[#ff006e] text-center">{errorMsg}</p>}
-              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                className="w-full py-4 mt-2 rounded-xl text-white font-bold tracking-wide shadow-lg"
-                style={{ background: "linear-gradient(135deg, #ff006e, #6c5ce7)" }}>
-                Initialize Root Access
-              </motion.button>
-            </form>
+
+              <form onSubmit={handleLogin} className="flex flex-col gap-4 relative z-10">
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+                  <input type="email" placeholder="Admin Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} required
+                    className="w-full pl-11 pr-4 py-3.5 rounded-xl outline-none text-sm transition-all"
+                    style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                </div>
+                <div className="relative">
+                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+                  <input type={showPass ? "text" : "password"} placeholder="Access Code" value={passInput} onChange={e => setPassInput(e.target.value)} required
+                    className="w-full pl-11 pr-12 py-3.5 rounded-xl outline-none text-sm transition-all"
+                    style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100" style={{ color: "var(--text-muted)" }}>
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {errorMsg && (
+                  <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
+                    className="text-xs font-bold text-[#ff006e] text-center bg-[#ff006e]/8 py-2 rounded-xl">{errorMsg}</motion.p>
+                )}
+
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} type="submit"
+                  className="w-full py-4 mt-2 rounded-xl text-white font-bold tracking-wide shadow-xl"
+                  style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+                  Authenticate
+                </motion.button>
+              </form>
+            </motion.div>
           </motion.div>
         )}
 
-        {/* =======================
-            LOGIN MODE 
-        ========================*/}
-        {!setupMode && !isAuthenticated && (
-          <motion.div key="login" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            className="w-full max-w-md p-8 rounded-3xl shadow-2xl glass-panel relative overflow-hidden"
-            style={{ border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "var(--border-subtle)"}` }}>
-            <div className="absolute top-0 right-0 p-8 w-64 h-64 bg-[#6c5ce7] rounded-full blur-[80px] opacity-10 pointer-events-none" />
-            
-            <div className="flex flex-col items-center justify-center relative z-10 text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-4"
-                   style={{ background: "linear-gradient(135deg, #00d4ff, #6c5ce7)" }}>
-                <Lock className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-2xl font-black tracking-tighter" style={{ color: "var(--text-primary)" }}>Admin Portal</h1>
-            </div>
-
-            <form onSubmit={handleLogin} className="flex flex-col gap-4 relative z-10">
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="email" placeholder="Admin Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} required
-                  className="w-full pl-11 pr-4 py-3 rounded-xl outline-none transition-all"
-                  style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-              </div>
-              <div className="relative">
-                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="password" placeholder="Access Code" value={passInput} onChange={e => setPassInput(e.target.value)} required
-                  className="w-full pl-11 pr-4 py-3 rounded-xl outline-none transition-all"
-                  style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-              </div>
-              {errorMsg && <p className="text-xs font-bold text-[#ff006e] text-center">{errorMsg}</p>}
-              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                className="w-full py-4 mt-2 rounded-xl text-white font-bold tracking-wide shadow-lg"
-                style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                Authenticate
-              </motion.button>
-            </form>
-          </motion.div>
-        )}
-
-        {/* =======================
-            DASHBOARD 
-        ========================*/}
+        {/* ═════════════ DASHBOARD ═════════════ */}
         {isAuthenticated && (
-          <motion.div key="dashboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-4xl min-h-[80vh] rounded-[2.5rem] shadow-2xl glass-panel overflow-hidden flex flex-col"
-            style={{ border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "var(--border-subtle)"}` }}>
-            
-            {/* Header */}
-            <header className="px-8 py-6 flex items-center justify-between"
-                    style={{ borderBottom: `1px solid var(--border-subtle)`, background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 flex items-center justify-center rounded-xl shadow-md"
-                     style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                  <Shield className="text-white w-5 h-5"/>
+          <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="flex min-h-screen">
+
+            {/* ── Sidebar ── */}
+            <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r p-5 sticky top-0 h-screen"
+              style={{ background: isDark ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.01)", borderColor: "var(--border-subtle)" }}>
+
+              {/* Logo */}
+              <div className="flex items-center gap-3 mb-8 px-2">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+                  style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+                  <Shield className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Central Command</h1>
-                  <p className="text-xs font-bold text-[#ff006e]">Root Level: Hiralchudasama2811@gmail.com</p>
+                  <h1 className="text-base font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Nexora</h1>
+                  <p className="text-[10px] font-bold text-[#6c5ce7]">ADMIN CONSOLE</p>
                 </div>
               </div>
-              <button onClick={() => { sessionStorage.removeItem("nexora_admin_session"); setIsAuthenticated(false); }}
-                className="px-4 py-2 rounded-lg text-sm font-bold bg-[#ff006e] text-white">
-                Lock Terminal
+
+              {/* Nav */}
+              <nav className="flex flex-col gap-1.5 flex-1">
+                {TABS.map(tab => {
+                  const active = activeTab === tab.id;
+                  return (
+                    <motion.button key={tab.id} whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => setActiveTab(tab.id)}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all text-left"
+                      style={{
+                        background: active ? `${tab.color}12` : "transparent",
+                        color: active ? tab.color : "var(--text-secondary)"
+                      }}>
+                      <tab.icon className="w-4.5 h-4.5" />
+                      {tab.label}
+                    </motion.button>
+                  );
+                })}
+              </nav>
+
+              {/* Logout */}
+              <button onClick={handleLogout}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold mt-auto transition-colors"
+                style={{ color: "#ff006e" }}>
+                <LogOut className="w-4.5 h-4.5" /> Lock Terminal
               </button>
-            </header>
+            </aside>
 
-            {/* Main Area */}
-            <main className="flex-1 p-8 overflow-y-auto">
-              <div>
-                <h2 className="text-2xl font-bold mb-6" style={{ color: "var(--text-primary)" }}>Clearance Queue</h2>
-                
-                {requests.length === 0 ? (
-                  <div className="p-8 text-center rounded-2xl border border-dashed"
-                       style={{ borderColor: "var(--border-subtle)", color: "var(--text-secondary)" }}>
-                    No pending requests. Protocol is quiet.
+            {/* ── Main Content ── */}
+            <main className="flex-1 flex flex-col min-w-0">
+              {/* Top bar (mobile nav + header) */}
+              <header className="sticky top-0 z-50 px-6 py-4 flex items-center justify-between border-b"
+                style={{ background: isDark ? "rgba(10,10,18,0.9)" : "rgba(255,255,255,0.9)", borderColor: "var(--border-subtle)", backdropFilter: "blur(20px)" }}>
+
+                {/* Mobile tab selector */}
+                <div className="lg:hidden flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+                    <Shield className="w-4 h-4 text-white" />
                   </div>
-                ) : (
-                  <div className="grid gap-4">
-                    {requests.map(req => (
-                      <motion.div key={req.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-                         className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl shadow-sm"
-                         style={{ background: isDark ? "rgba(255,255,255,0.03)" : "#fff", border: `1px solid var(--border-subtle)` }}>
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-white shadow-lg uppercase overflow-hidden ${!req.avatarUrl ? 'bg-gradient-to-br from-[#ffbe0b] to-[#ff006e]' : ""}`}>
-                             {req.avatarUrl ? (
-                               <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" />
-                             ) : (
-                               (req.username?.[0] || "?").toUpperCase()
-                             )}
-                          </div>
-                          <div>
-                            <p className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>@{req.username}</p>
-                            <p className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Requested: {req.date}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 w-full sm:w-auto">
-                          <button onClick={() => handleAction(req.id, "reject")}
-                            className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold"
-                            style={{ background: "rgba(255,0,110,0.1)", color: "#ff006e" }}>
-                            <XCircle className="w-4 h-4" /> Reject
-                          </button>
-                          <button onClick={() => handleAction(req.id, "approve")}
-                            className="flex-1 sm:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg text-white"
-                            style={{ background: "linear-gradient(135deg, #2ed573, #15c35a)" }}>
-                            <CheckCircle className="w-4 h-4" /> Authorize Account
-                          </button>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Protocol Configuration Dashboard */}
-              <div className="mt-12">
-                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                  <Settings className="w-6 h-6 text-[#00d4ff]" /> Protocol Configuration
-                </h2>
-                
-                <div className="p-6 rounded-3xl shadow-sm space-y-6"
-                     style={{ background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px solid var(--border-subtle)` }}>
-                  
-                  {/* SEO Config */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                      <Globe className="w-5 h-5 text-[#6c5ce7]" /> Search Engine Optimization (SEO)
-                    </h3>
-                    <input type="text" placeholder="Global Protocol Title" value={seoTitle} onChange={e => setSeoTitle(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl outline-none"
-                      style={{ background: isDark ? "rgba(255,255,255,0.03)" : "#fff", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-                    <textarea placeholder="Global Protocol Description" value={seoDesc} onChange={e => setSeoDesc(e.target.value)} rows={3}
-                      className="w-full px-4 py-3 rounded-xl outline-none resize-none"
-                      style={{ background: isDark ? "rgba(255,255,255,0.03)" : "#fff", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-                    <input type="text" placeholder="Keywords (comma separated)" value={seoKey} onChange={e => setSeoKey(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl outline-none"
-                      style={{ background: isDark ? "rgba(255,255,255,0.03)" : "#fff", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-                  </div>
-
-                  {/* Brand Config */}
-                  <div className="space-y-4 pt-6" style={{ borderTop: `1px solid var(--border-subtle)` }}>
-                    <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
-                      <Upload className="w-5 h-5 text-[#ff006e]" /> Master Logo Sync (Favicons & Navbar)
-                    </h3>
-                    <label className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-colors"
-                           style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.02)" : "#fff" }}
-                           htmlFor="logo-upload">
-                      <input id="logo-upload" type="file" accept="image/svg+xml,image/png,image/jpeg" className="hidden" onChange={onLogoUpload} />
-                      {logoB64 ? (
-                        <div className="flex flex-col items-center gap-2">
-                           <img src={logoB64} className="w-16 h-16 drop-shadow-xl rounded-[10px]" alt="Preview" />
-                           <span className="text-xs font-bold text-[#00d4ff]">Vector loaded into memory.</span>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="font-bold text-sm" style={{ color: "var(--text-secondary)" }}>Click to select SVG/PNG Asset</p>
-                          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>This action deploys to `public/logo.svg` and `app/icon.svg` universally.</p>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-
-                  {/* Broadcast Alert Protocol Removed */}
-
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={applyConfiguration}
-                    disabled={isSavingConfig}
-                    className="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-white font-bold tracking-wide shadow-lg mt-4"
-                    style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)", opacity: isSavingConfig ? 0.7 : 1 }}>
-                    <Save className="w-5 h-5" /> {isSavingConfig ? "Deploying Configuration..." : "Force Synapse Configuration"}
-                  </motion.button>
-                  
-                  <div className="pt-6 mt-6 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-                    <button 
-                      onClick={async () => {
-                        const res = await fetch(`${API_BASE_URL}/api/admin/test-mail`, { method: "POST" });
-                        if (res.ok) alert("Protocol Test: Transmission successful.");
-                        else alert("Protocol Test: Transmission failure.");
-                      }}
-                      className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest border border-[#ff006e]/30 text-[#ff006e] hover:bg-[#ff006e]/5 transition-all"
-                    >
-                      Trigger SMTP Protocol Test
-                    </button>
-                  </div>
+                  <select value={activeTab} onChange={e => setActiveTab(e.target.value as TabId)}
+                    className="bg-transparent font-bold text-sm outline-none" style={{ color: "var(--text-primary)" }}>
+                    {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                  </select>
                 </div>
-              </div>
 
-            </main>
-          </motion.div>
-        )}
-        {/* =======================
-            EMAIL PREVIEW MODAL 
-        ========================*/}
-        {showEmailModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm">
-            
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className="w-full max-w-4xl max-h-[90vh] rounded-[2rem] shadow-2xl glass-panel overflow-hidden flex flex-col"
-              style={{ border: `1px solid var(--border-subtle)` }}>
-              
-              <div className="px-8 py-5 flex items-center justify-between" style={{ borderBottom: `1px solid var(--border-subtle)` }}>
+                <div className="hidden lg:block">
+                  <h2 className="text-lg font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+                    {TABS.find(t => t.id === activeTab)?.label}
+                  </h2>
+                </div>
+
                 <div className="flex items-center gap-3">
-                   <Mail className="w-5 h-5 text-[#6c5ce7]" />
-                   <h2 className="text-xl font-bold">Preview Authorization Protocol</h2>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full hidden sm:block"
+                    style={{ background: "rgba(46,213,115,0.1)", color: "#2ed573" }}>
+                    <Activity className="w-3 h-3 inline mr-1" /> {stats.onlineUsers} ONLINE
+                  </span>
+                  <button onClick={handleLogout} className="lg:hidden p-2 rounded-xl" style={{ color: "#ff006e" }}>
+                    <LogOut className="w-5 h-5" />
+                  </button>
                 </div>
-                <button onClick={() => setShowEmailModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <XCircle className="w-6 h-6" />
-                </button>
+              </header>
+
+              {/* Content */}
+              <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
+                <AnimatePresence mode="wait">
+                  <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+                    {activeTab === "overview" && <OverviewTab stats={stats} onRefresh={fetchStats} />}
+                    {activeTab === "users" && <UsersTab />}
+                    {activeTab === "connections" && <ConnectionsTab />}
+                    {activeTab === "templates" && <EmailTemplatesTab />}
+                    {activeTab === "broadcast" && <BroadcastTab />}
+                    {activeTab === "config" && <ConfigTab />}
+                  </motion.div>
+                </AnimatePresence>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-6 sm:p-8 flex flex-col lg:flex-row gap-8">
-                {/* Editor Column */}
-                <div className="flex-1 space-y-4">
-                  <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#6c5ce7] mb-1.5 block">Recipient</label>
-                    <input type="text" value={selectedReq?.email} disabled
-                      className="w-full px-4 py-3 rounded-xl opacity-60 cursor-not-allowed"
-                      style={{ background: "rgba(0,0,0,0.1)", border: `1px solid var(--border-subtle)` }} />
-                  </div>
-                  
-                  <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#6c5ce7] mb-1.5 block">Subject Line</label>
-                    <input type="text" value={emailDraft.subject} onChange={e => setEmailDraft({...emailDraft, subject: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl outline-none"
-                      style={{ background: "rgba(0,0,0,0.1)", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-                  </div>
-
-                  <div className="flex-1 flex flex-col min-h-[300px]">
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#6c5ce7] mb-1.5 block">HTML Body</label>
-                    <textarea value={emailDraft.html} onChange={e => setEmailDraft({...emailDraft, html: e.target.value})}
-                      className="flex-1 w-full p-4 rounded-xl outline-none font-mono text-sm resize-none"
-                      style={{ background: "rgba(0,0,0,0.1)", border: `1px solid var(--border-subtle)`, color: "var(--text-primary)" }} />
-                  </div>
-                </div>
-
-                {/* Preview Column */}
-                <div className="flex-1 flex flex-col">
-                   <label className="text-xs font-bold uppercase tracking-widest text-[#00d4ff] mb-1.5 block">Live Relay Preview</label>
-                   <div className="flex-1 rounded-2xl overflow-hidden border border-white/5 bg-white shadow-inner">
-                      <div className="w-full h-full overflow-y-auto custom-scrollbar bg-[#0a0a12] p-4"
-                           dangerouslySetInnerHTML={{ __html: emailDraft.html }} />
-                   </div>
-                   <p className="text-[10px] mt-2 opacity-50 text-center italic">Final transmission may vary slightly across mail clients.</p>
-                </div>
-              </div>
-
-              <div className="px-8 py-5 flex items-center justify-end gap-3" style={{ borderTop: `1px solid var(--border-subtle)` }}>
-                 <button onClick={() => setShowEmailModal(false)} className="px-6 py-3 rounded-xl font-bold bg-white/5 hover:bg-white/10 transition-colors">
-                    Discard Draft
-                 </button>
-                 <button onClick={handleConfirmApprove} disabled={isSendingEmail}
-                    className="px-8 py-3 rounded-xl font-bold text-white shadow-lg disabled:opacity-50"
-                    style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                    {isSendingEmail ? "Authorizing..." : "Transmit Authorization"}
-                 </button>
-              </div>
-
-            </motion.div>
+            </main>
           </motion.div>
         )}
       </AnimatePresence>

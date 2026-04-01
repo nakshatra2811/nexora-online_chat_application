@@ -1,5 +1,16 @@
 {
   "title": "Nexora — The Privacy Protocol",
-  "description": "End-to-end encrypted real-time communication platform. Military-grade encryption, glassmorphic design, secure vault storage.",
-  "keywords": "nexora, privacy, messenger, p2p, encrypted chat, secure messaging software"
+  "titleTemplate": "%s | Nexora",
+  "description": "Nexora is a military-grade encrypted private chat platform. Send messages, media, and connect with people you trust — with zero-knowledge end-to-end encryption, real-time secure tunnels, and a beautiful glassmorphic interface.",
+  "keywords": "nexora, private chat, encrypted messaging, secure chat app, end-to-end encryption, private messaging, e2e encryption, secure communication, encrypted messenger, privacy chat, zero knowledge, private messenger, real-time chat, secure messenger app, nexoraprivatechat",
+  "siteUrl": "https://nexora31.vercel.app",
+  "ogImage": "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg",
+  "twitterHandle": "@nexoraapp",
+  "themeColor": "#6c5ce7",
+  "indexing": true,
+  "author": "Nexora Systems",
+  "category": "Technology",
+  "language": "en",
+  "robots": "index, follow",
+  "canonicalUrl": "https://nexora31.vercel.app"
 }
