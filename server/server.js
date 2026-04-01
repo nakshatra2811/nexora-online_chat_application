@@ -2691,4 +2691,19 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
     console.log(`[SERVER] Nexora Core operational on port ${PORT}`);
     console.log(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
+    
+    // --- Render Anti-Sleep Mechanism ---
+    // Pings its own public URL every 10 minutes (600,000 ms) to prevent sleeping
+    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    if (selfUrl.includes('onrender')) {
+        console.log(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
+        setInterval(() => {
+            const lib = selfUrl.startsWith('https') ? require('https') : require('http');
+            lib.get(selfUrl, (res) => {
+                console.log(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
+            }).on("error", (err) => {
+                console.error(`[ANTI-SLEEP] Ping Failed:`, err.message);
+            });
+        }, 10 * 60 * 1000); // 10 minutes
+    }
 });
