@@ -4,11 +4,13 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone, Eye, EyeOff, XCircle } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
 import { nexoraFetch, APP_NAME, APP_LOGO } from "@/lib/config";
 
 function AuthContent() {
   const router = useRouter();
+  const { isDark } = useTheme();
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode");
   const [isLogin, setIsLogin] = useState(mode !== "signup");
@@ -36,6 +38,8 @@ function AuthContent() {
   const [isSendingRecovery, setIsSendingRecovery] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [connectedUser, setConnectedUser] = useState<any | null>(null);
+  const [fetchingTarget, setFetchingTarget] = useState(false);
 
   // Real-time Username Availability Check (Database)
   useEffect(() => {
@@ -66,6 +70,27 @@ function AuthContent() {
   useEffect(() => {
     // Announcement fetching removed
   }, []);
+
+  // Fetch target user metadata if 'connect' param is present
+  useEffect(() => {
+    const target = searchParams.get("connect");
+    if (target) {
+      setFetchingTarget(true);
+      const fetchTarget = async () => {
+        try {
+          const data = await nexoraFetch(`/api/users/public/${encodeURIComponent(target)}`);
+          if (data && !data.error) {
+            setConnectedUser(data);
+          }
+        } catch (e) {
+          console.error("Connect Protocol Error");
+        } finally {
+          setFetchingTarget(false);
+        }
+      };
+      fetchTarget();
+    }
+  }, [searchParams]);
 
   // Removed handleToggleAtithi
 
@@ -458,6 +483,45 @@ function AuthContent() {
               <button onClick={() => setIsLogin(false)} className="rounded-full px-6 py-2 text-sm font-bold transition-all duration-300"
                 style={{ background: !isLogin ? "var(--bg-surface-solid)" : "transparent", color: !isLogin ? "#6c5ce7" : "var(--text-muted)" }}>Sign Up</button>
             </div>
+
+            {/* ── PROFILE CONNECTION CARD ── */}
+            <AnimatePresence>
+              {connectedUser && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className="mb-8 p-6 rounded-[2rem] border overflow-hidden relative group"
+                  style={{ 
+                    background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.05)",
+                    borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(108,92,231,0.2)"
+                  }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#6c5ce710] to-[#00d4ff10] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="relative flex flex-col items-center text-center gap-4">
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-xl ring-[5px] ring-white/10 bg-gradient-to-br ${connectedUser.color || "from-[#6c5ce7] to-[#00d4ff]"} overflow-hidden uppercase`}>
+                      {connectedUser.avatar_url ? (
+                        <img src={connectedUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        connectedUser.fullName?.[0] || connectedUser.username?.[0]
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black" style={{ color: "var(--text-primary)" }}>Connect with {connectedUser.fullName}</h3>
+                      <p className="text-sm font-bold text-[#6c5ce7] mt-0.5">@{connectedUser.username}</p>
+                      {connectedUser.bio && (
+                        <p className="text-xs mt-2 px-4 leading-relaxed line-clamp-2" style={{ color: "var(--text-secondary)" }}>
+                          {connectedUser.bio}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
+                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Ready to Secure Connection</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>{isLogin ? "Welcome Back" : "Create Account"}</h2>
             {signupSuccess && isLogin && (

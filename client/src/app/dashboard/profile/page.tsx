@@ -10,6 +10,7 @@ import {
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
+import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, SnapchatIcon, TwitterIcon } from "@/components/SocialIcons";
 
 /* ─── Mock contacts ─── */
 const MOCK_CONTACTS: any[] = [];
@@ -17,7 +18,7 @@ const MOCK_CONTACTS: any[] = [];
 /* ─── Share Profile Modal ─── */
 function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose: () => void; isDark: boolean }) {
   const [copied, setCopied] = useState(false);
-  const shareUrl = `https://nexora.app/u/${profile.username}`;
+  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/auth?connect=${profile.username}` : `https://nexora.app/auth?connect=${profile.username}`;
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -26,12 +27,12 @@ function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose
   };
 
   const shareApps = [
-    { name: "WhatsApp", icon: "💬", color: "#25D366", bg: "rgba(37,211,102,0.12)", url: `https://wa.me/?text=Connect with me on Nexora! ${shareUrl}` },
-    { name: "Telegram", icon: "✈️", color: "#2CA5E0", bg: "rgba(44,165,224,0.12)", url: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent("Connect with me on Nexora!")}` },
-    { name: "Instagram", icon: "📸", color: "#E1306C", bg: "rgba(225,48,108,0.12)", url: `https://instagram.com` },
-    { name: "Snapchat", icon: "👻", color: "#FFFC00", bg: "rgba(255,252,0,0.15)", url: `https://snapchat.com` },
-    { name: "Twitter/X", icon: "𝕏", color: "#1DA1F2", bg: "rgba(29,161,242,0.12)", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent("Connect with me on Nexora! " + shareUrl)}` },
-    { name: "Email", icon: "✉️", color: "#6c5ce7", bg: "rgba(108,92,231,0.12)", url: `mailto:?subject=Join me on Nexora&body=Connect with me on Nexora! ${shareUrl}` },
+    { name: "WhatsApp", icon: <WhatsAppIcon size={24} color="#25D366" />, color: "#25D366", bg: "rgba(37,211,102,0.12)", url: `https://wa.me/?text=Connect with me on Nexora! ${shareUrl}` },
+    { name: "Telegram", icon: <TelegramIcon size={24} color="#2CA5E0" />, color: "#2CA5E0", bg: "rgba(44,165,224,0.12)", url: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent("Connect with me on Nexora!")}` },
+    { name: "Instagram", icon: <InstagramGradientIcon size={24} />, color: "#E1306C", bg: "rgba(225,48,108,0.12)", url: `https://instagram.com` },
+    { name: "Snapchat", icon: <SnapchatIcon size={24} color="#FFFC00" />, color: "#FFFC00", bg: "rgba(255,252,0,0.15)", url: `https://snapchat.com` },
+    { name: "Twitter/X", icon: <TwitterIcon size={24} color="#1DA1F2" />, color: "#1DA1F2", bg: "rgba(29,161,242,0.12)", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent("Connect with me on Nexora! " + shareUrl)}` },
+    { name: "Email", icon: <Mail className="w-6 h-6" />, color: "#6c5ce7", bg: "rgba(108,92,231,0.12)", url: `mailto:?subject=Join me on Nexora&body=Connect with me on Nexora! ${shareUrl}` },
   ];
 
   const handleShareApp = (app: typeof shareApps[0]) => {
@@ -65,7 +66,7 @@ function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose
           <div>
             <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{profile.name}</p>
             <p className="text-xs font-semibold text-[#6c5ce7]">@{profile.username}</p>
-            <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>nexora.app/u/{profile.username}</p>
+            <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{shareUrl.replace('https://', '')}</p>
           </div>
         </div>
 
@@ -87,8 +88,8 @@ function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose
               onClick={() => handleShareApp(app)}
               className="flex flex-col items-center gap-2 p-3 rounded-2xl font-semibold text-xs transition-all"
               style={{ background: app.bg, color: app.color, border: `1px solid ${app.color}25` }}>
-              <div className="w-12 h-12 rounded-full border-[1.5px] flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20" style={{ borderColor: `${app.color}40` }}>
-                <span className="text-2xl leading-none pt-0.5">{app.icon}</span>
+              <div className="w-12 h-12 rounded-full border-[1.5px] flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20 overflow-hidden" style={{ borderColor: `${app.color}40` }}>
+                {app.icon}
               </div>
               <span className="tracking-wide uppercase text-[9px]">{app.name}</span>
             </motion.button>
@@ -105,11 +106,11 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
   const [search, setSearch] = useState("");
 
   const inviteApps = [
-    { name: "WhatsApp", icon: "💬", color: "#25D366" },
-    { name: "Telegram", icon: "✈️", color: "#2CA5E0" },
-    { name: "Snapchat", icon: "👻", color: "#FFFC00" },
-    { name: "Instagram", icon: "📸", color: "#E1306C" },
-    { name: "SMS", icon: "📱", color: "#6c5ce7" },
+    { name: "WhatsApp", icon: <WhatsAppIcon size={16} color="#25D366" />, color: "#25D366" },
+    { name: "Telegram", icon: <TelegramIcon size={16} color="#2CA5E0" />, color: "#2CA5E0" },
+    { name: "Snapchat", icon: <SnapchatIcon size={16} color="#FFFC00" />, color: "#FFFC00" },
+    { name: "Instagram", icon: <InstagramGradientIcon size={16} />, color: "#E1306C" },
+    { name: "SMS", icon: <Phone className="w-4 h-4" />, color: "#6c5ce7" },
   ];
 
   const handleInvite = (id: number) => {
@@ -151,16 +152,17 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
             {inviteApps.map(app => (
               <motion.button key={app.name} whileTap={{ scale: 0.92 }}
                 onClick={() => {
+                  const base = typeof window !== "undefined" ? window.location.origin : "https://nexora.app";
                   const url = app.name === "WhatsApp"
-                    ? `https://wa.me/?text=${encodeURIComponent("Join me on Nexora — the privacy-first secure chat app! Download at https://nexora.app")}`
+                    ? `https://wa.me/?text=${encodeURIComponent(`Join me on Nexora — the privacy-first secure chat app! Download at ${base}`)}`
                     : app.name === "Telegram"
-                    ? `https://t.me/share/url?url=https://nexora.app&text=${encodeURIComponent("Join me on Nexora!")}`
-                    : "https://nexora.app";
+                    ? `https://t.me/share/url?url=${encodeURIComponent(base)}&text=${encodeURIComponent("Join me on Nexora!")}`
+                    : base;
                   window.open(url, "_blank");
                 }}
                 className="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-full text-xs font-bold whitespace-nowrap"
                 style={{ background: `${app.color}18`, color: app.color, border: `1px solid ${app.color}30` }}>
-                <span>{app.icon}</span> {app.name}
+                <div className="overflow-hidden rounded-full flex items-center justify-center">{app.icon}</div> {app.name}
               </motion.button>
             ))}
           </div>
@@ -206,7 +208,8 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
                   onClick={() => {
                     // Trigger SMS intent with body
-                    window.location.href = `sms:${contact.phone.replace(/\s+/g, '')}?body=${encodeURIComponent("Join me on Nexora — the privacy-first secure chat app! Download at https://nexora.app")}`;
+                    const base = typeof window !== "undefined" ? window.location.origin : "https://nexora.app";
+                    window.location.href = `sms:${contact.phone.replace(/\s+/g, '')}?body=${encodeURIComponent(`Join me on Nexora — the privacy-first secure chat app! Download at ${base}`)}`;
                     handleInvite(contact.id);
                   }}
                   disabled={contact.invited}

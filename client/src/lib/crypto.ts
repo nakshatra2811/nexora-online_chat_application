@@ -24,6 +24,13 @@ export const base64ToBuffer = (base64: string): ArrayBuffer => {
   return bytes.buffer;
 };
 
+export const hashString = async (text: string): Promise<string> => {
+  const enc = new TextEncoder();
+  const data = enc.encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return bufferToBase64(hashBuffer);
+};
+
 // ═══════════════════════════════════════════════════════
 // 2. SYMMETRIC ENCRYPTION (AES-256-GCM)
 // ═══════════════════════════════════════════════════════
@@ -158,7 +165,7 @@ export const decryptFile = async (key: CryptoKey, encrypted: ArrayBuffer, ivBase
 // ═══════════════════════════════════════════════════════
 
 const KEYSTORE_DB = "NexoraKeyStore";
-const KEYSTORE_VERSION = 1;
+const KEYSTORE_VERSION = 2;
 
 const openKeyStore = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {

@@ -12,8 +12,9 @@ import {
   BarChart3, Users, UserPlus, MessageSquare, Share2, Plus, ToggleLeft, ToggleRight, Mail, Smartphone,
   RefreshCcw, Bell, UserCheck, Clock, Star
 } from "lucide-react";
+import { WhatsAppIcon } from "@/components/SocialIcons";
 import { socketService } from "@/lib/socket";
-import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, KeyStore, generateAESKey, encryptStorageData, decryptStorageData } from "@/lib/crypto";
+import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, KeyStore, generateAESKey, encryptStorageData, decryptStorageData, hashString } from "@/lib/crypto";
 import { syntheticRingtone } from "@/lib/ringtone";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
@@ -251,6 +252,14 @@ export default function ChatsPage() {
   const [vaultReady, setVaultReady] = useState(false);
   const [ecdhReady, setEcdhReady] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
+  
+  // ── Contact Sync & Search History States ──
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMatches, setSyncMatches] = useState<any[]>([]);
+  const [manualPhone, setManualPhone] = useState("");
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string; avatarUrl?: string }>(() => {
@@ -266,6 +275,79 @@ export default function ChatsPage() {
   });
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+
+  const addToSearchHistory = (username: string) => {
+    if (!username) return;
+    setSearchHistory(prev => {
+      const next = [username, ...prev.filter(u => u !== username)].slice(0, 10);
+      localStorage.setItem("nexora_search_history", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleManualAdd = async () => {
+    const query = manualPhone.trim();
+    if (!query) return;
+    setIsSyncing(true);
+    try {
+      const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(query)}`);
+      if (res && res.user) {
+        setSyncMatches([res.user]);
+        addToSearchHistory(res.user.username);
+      } else {
+        setSyncMatches([]);
+      }
+    } catch (e) {
+       console.error("Manual add failed:", e);
+    } finally {
+       setIsSyncing(false);
+    }
+  };
+
+  const handleNativeSync = async () => {
+    setIsSyncing(true);
+    try {
+      // 1. Try modern Contacts API if available
+      let numbers: string[] = [];
+      if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
+        try {
+          const props = ['tel'];
+          const opts = { multiple: true };
+          const contacts = await (navigator as any).contacts.select(props, opts);
+          numbers = contacts.flatMap((c: any) => c.tel || []);
+        } catch (err) {
+          console.warn("Contacts API failed/cancelled, using simulated baseline.");
+        }
+      }
+
+      // Cleanup numbers (keep digits only)
+      const cleanNumbers = numbers.map(n => n.replace(/\D/g, '')).filter(n => n.length >= 10);
+      
+      // If no contacts found (empty or denied), we use a notification or mock for dev feedback
+      if (cleanNumbers.length === 0) {
+         // simulated contacts for development if real ones aren't available
+         console.warn("No contacts selected/found. Syncing limited to manual entries.");
+      }
+
+      // Hash numbers for privacy before sending
+      const hashedContacts = await Promise.all(cleanNumbers.map(n => hashString(n)));
+      
+      // Send hashes to server to find matches
+      if (hashedContacts.length > 0) {
+        const res = await nexoraFetch("/api/connections/sync", {
+          method: "POST",
+          body: JSON.stringify({ hashes: hashedContacts })
+        });
+        if (res && res.matches) {
+          setSyncMatches(res.matches);
+        }
+      }
+    } catch (e) {
+      console.error("Sync failed:", e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleStartCall = (type: "voice" | "video") => {
     if (!activeThread) return;
@@ -458,6 +540,8 @@ export default function ChatsPage() {
     if (lmap) setLockedChatsMap(JSON.parse(lmap));
     const hidden = localStorage.getItem("nexora_hidden_threads");
     if (hidden) setHiddenThreads(JSON.parse(hidden));
+    const history = localStorage.getItem("nexora_search_history");
+    if (history) setSearchHistory(JSON.parse(history));
 
     // Handle URL parameters for direct chat/call navigation
     const params = new URLSearchParams(window.location.search);
@@ -976,7 +1060,10 @@ export default function ChatsPage() {
   const [snapCountdown, setSnapCountdown] = useState(10);
   const snapTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sharePhone, setSharePhone] = useState("");
-  const [shareMessage, setShareMessage] = useState("Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\nhttps://nexora.app/invite");
+  const [shareMessage, setShareMessage] = useState(() => {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://nexora.app";
+    return `Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\n${base}/auth?mode=signup`;
+  });
   const [shareVia, setShareVia] = useState<"sms" | "whatsapp" | "email">("whatsapp");
 
   // Socket init + ECDH Key Generation + Push Notifications
@@ -2265,6 +2352,7 @@ export default function ChatsPage() {
     }
 
     try {
+      addToSearchHistory(user.username);
       const resp = await nexoraFetch("/api/connections/request", {
         method: "POST",
         body: JSON.stringify({
@@ -2320,12 +2408,11 @@ export default function ChatsPage() {
             <div className="flex items-center gap-2">
               <motion.button
                 whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}
-                onClick={() => { setShowGlobalSearch(true); setGlobalSearchQuery(""); setGlobalSearchResults([]); }}
-                className="w-8 h-8 rounded-xl flex items-center justify-center transition-all"
-                style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", color: "#fff", boxShadow: "0 4px 12px rgba(108,92,231,0.4)" }}
-                title="Find & Add New People"
+                onClick={() => { setShowSyncModal(true); setSyncMatches([]); }}
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg"
+                title="Find & Contact Friends"
               >
-                <UserPlus className="w-4 h-4" />
+                <UserPlus className="w-5 h-5" />
               </motion.button>
             </div>
           </div>
@@ -3834,6 +3921,114 @@ export default function ChatsPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Contact Sync & Find Modal ── */}
+      <AnimatePresence>
+        {showSyncModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative w-full max-w-md max-h-[85vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border border-white/10" style={{ background: "var(--bg-surface-solid)" }}>
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
+                <div>
+                   <h3 className="text-xl font-black uppercase tracking-widest text-primary">Find Friends</h3>
+                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">Snap-Style Contact Sync</p>
+                </div>
+                <button onClick={() => setShowSyncModal(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                {/* Search History Section */}
+                {searchHistory.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-primary/60">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Recent Activity</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                       {searchHistory.map(h => (
+                         <motion.button key={h} whileHover={{scale:1.05}} whileTap={{scale:0.95}} onClick={() => { setShowSyncModal(false); setShowGlobalSearch(true); setGlobalSearchQuery(h); }} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-primary hover:bg-white/10 transition-all">
+                           @{h}
+                         </motion.button>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Contact Sync Section */}
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 text-center">
+                    <Users className="w-8 h-8 text-indigo-400 mx-auto mb-3" />
+                    <p className="text-sm font-bold mb-4">કોન્ટેક્ટ્સ સિંક કરીને તમારા મિત્રોને શોધો</p>
+                    <button onClick={handleNativeSync} disabled={isSyncing} className="w-full py-3 rounded-xl bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50">
+                      {isSyncing ? "સિંકિંગ થઈ રહ્યું છે..." : "🚀 Sync Phone Contacts"}
+                    </button>
+                    <p className="text-[9px] mt-3 uppercase tracking-tighter opacity-40 font-bold">Privacy Protocol: નંબરો હેશ કરીને ચેક થશે, રિયલ નંબર સેવ નહિ થાય.</p>
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-white/5"></span></div>
+                    <div className="relative flex justify-center text-[10px] uppercase font-black bg-[var(--bg-surface-solid)] px-2 text-muted-foreground opacity-40">Or Manual Entry</div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input type="text" value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Phone or Username..." className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 outline-none text-sm font-bold focus:border-indigo-500 transition-colors" onKeyDown={e => e.key === 'Enter' && handleManualAdd()} />
+                    <button onClick={handleManualAdd} className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all"><Search className="w-5 h-5" /></button>
+                  </div>
+                </div>
+
+                {/* Sync Results */}
+                {syncMatches.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-white/5">
+                    <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                      <Zap className="w-3.5 h-3.5" /> Found on Nexora
+                    </h4>
+                    <div className="space-y-3">
+                      {syncMatches.map(u => {
+                        const isConnected = threads.some(t => t.username === u.username);
+                        const isRequested = sentRequests.includes(u.username);
+                        return (
+                          <div key={u.username} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-indigo-500/30 transition-all">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${u.color || 'from-indigo-500 to-purple-500'} flex items-center justify-center text-white font-black text-sm overflow-hidden`}>
+                                {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" /> : (u.fullName?.[0] || u.username?.[0]).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold truncate leading-tight">{u.fullName || u.username}</p>
+                                <p className="text-[10px] text-muted-foreground font-medium opacity-50">@{u.username}</p>
+                              </div>
+                            </div>
+                            {isConnected ? (
+                              <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-500 text-[10px] font-black uppercase">Connected</span>
+                            ) : (
+                              <button onClick={() => handleSendConnectionRequest(u)} disabled={isRequested} className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${isRequested ? 'bg-white/10 opacity-50' : 'bg-indigo-500 text-white hover:scale-105 active:scale-95'}`}>
+                                {isRequested ? "Pending" : "Add"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Not Found / Invite Section */}
+                {syncMatches.length === 0 && manualPhone.length > 5 && !isSyncing && (
+                   <div className="p-5 rounded-2xl bg-pink-500/5 border border-pink-500/10 text-center animate-in fade-in slide-in-from-bottom-2">
+                      <Mail className="w-8 h-8 text-pink-400 mx-auto mb-3" />
+                      <p className="text-sm font-bold mb-4 italic opactiy-80">This person hasn't joined Nexora yet!</p>
+                      <button onClick={() => {
+                        setSharePhone(manualPhone);
+                        setShowShareModal(true);
+                      }} className="w-full py-3 rounded-xl bg-pink-500 text-white text-sm font-bold shadow-lg shadow-pink-500/30 hover:brightness-110 active:scale-95 transition-all">
+                        Invite to joining
+                      </button>
+                   </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

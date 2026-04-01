@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Phone, Video, MessageSquare, Shield, ShieldOff, MapPin, Share2, Copy, Check, QrCode, UserMinus, ChevronLeft } from "lucide-react";
+import { X, Phone, Video, MessageSquare, Shield, ShieldOff, MapPin, Share2, Copy, Check, QrCode, UserMinus, ChevronLeft, Mail } from "lucide-react";
+import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, DiscordIcon } from "./SocialIcons";
 
 // ─── Unique QR per username (same canvas logic but seeded on username) ───
 function generateUniqueQR(username: string, size = 160): string {
@@ -80,7 +81,7 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
     setQrUrl(generateUniqueQR(friend.username));
   }, [friend.username]);
 
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nexora31.vercel.app";
+  const APP_URL = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL || "https://nexora31.vercel.app");
   const profileUrl = `${APP_URL}/auth?connect=${friend.username}`;
 
   const copyLink = () => {
@@ -90,10 +91,10 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
   };
 
   const shareApps = [
-    { name: "WhatsApp", emoji: "💬", color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
-    { name: "Telegram", emoji: "✈️", color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — encrypted private chat.`)}` },
-    { name: "Instagram", emoji: "📸", color: "#E1306C", url: "https://instagram.com/nexora_e2ee_31" },
-    { name: "Discord", emoji: "🎮", color: "#5865F2", url: `https://discord.com` },
+    { name: "WhatsApp", icon: <WhatsAppIcon size={20} color="#25D366" />, color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
+    { name: "Telegram", icon: <TelegramIcon size={20} color="#2CA5E0" />, color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — encrypted private chat.`)}` },
+    { name: "Instagram", icon: <InstagramGradientIcon size={20} />, color: "#E1306C", url: "https://instagram.com/nexora_e2ee_31" },
+    { name: "Discord", icon: <DiscordIcon size={20} color="#5865F2" />, color: "#5865F2", url: `https://discord.com` },
   ];
 
 
@@ -319,8 +320,8 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                         onClick={() => window.open(app.url, "_blank")}
                         className="flex flex-col items-center gap-2 py-3 rounded-2xl text-[10px] font-bold shadow-sm transition-all"
                         style={{ background: `${app.color}08`, color: app.color, border: `1px solid ${app.color}20` }}>
-                        <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20" style={{ borderColor: `${app.color}40` }}>
-                          <span className="text-lg leading-none">{app.emoji}</span>
+                        <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20 overflow-hidden" style={{ borderColor: `${app.color}40` }}>
+                          {app.icon}
                         </div>
                         <span className="tracking-wide uppercase">{app.name}</span>
                       </motion.button>

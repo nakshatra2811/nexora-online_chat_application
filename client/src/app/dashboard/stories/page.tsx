@@ -8,8 +8,8 @@ import { nexoraFetch } from "@/lib/config";
 
 const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
 
-// Zero-pads a number to always be at least 4 digits wide (e.g. 3 → "0003", 1024 → "1024")
-const padCount = (n: number) => String(n).padStart(4, "0");
+// Formats count for display (removes leading zeros)
+const formatCount = (n: number) => String(n);
 
 const getTimeAgo = (dateStr: string, currentTime: number) => {
   const date = new Date(dateStr);
@@ -39,6 +39,8 @@ export default function StoriesPage() {
   const [myUsername, setMyUsername] = useState("");
 
   const [reply, setReply] = useState("");
+  const [showReactions, setShowReactions] = useState<{ [id: number]: boolean }>({});
+  const [storyToDelete, setStoryToDelete] = useState<number | null>(null);
   const [showSnapReactions, setShowSnapReactions] = useState(false);
   const [sentReaction, setSentReaction] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -171,7 +173,7 @@ export default function StoriesPage() {
           isLiked: s.is_liked
         }));
         
-        const mine = mapped.filter((s: any) => s.username === username);
+        const mine = mapped.filter((s: any) => s.username === username).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         const othersFlattened = mapped.filter((s: any) => s.username !== username);
         
         // Group others by username
@@ -193,9 +195,20 @@ export default function StoriesPage() {
           if (!s.isViewed) groupedMap[s.username].isViewed = false;
         });
 
-        const othersGrouped = Object.values(groupedMap).sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        // Ensure individual story lists are strictly ASC (oldest first)
+        Object.values(groupedMap).forEach((group: any) => {
+          group.stories.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        });
+
+        // Sort groups such that the one with the NEWEST story update comes first (Snapchat style)
+        // or OLDEST if user explicitly asked for chronological feed?
+        // User said: "ensure story playback follows a strict chronological order" (usually means oldest-first playback)
+        // and "sort from Oldest to Newest" in implementation plan.
+        const othersGrouped = Object.values(groupedMap).sort((a: any, b: any) => {
+          const aFirst = a.stories[0].created_at;
+          const bFirst = b.stories[0].created_at;
+          return new Date(aFirst).getTime() - new Date(bFirst).getTime();
+        });
         
         setMyStories(mine);
         setMyStory(mine.length > 0 ? mine[0] : null);
@@ -214,7 +227,7 @@ export default function StoriesPage() {
         const initialLikeCount: Record<number, number> = {};
         mapped.forEach((s: any) => {
           initialLiked[s.id] = s.isLiked;
-          initialLikeCount[s.id] = s.likes;
+          initialLikeCount[s.id] = Number(s.likes || 0);
         });
         setLiked(initialLiked);
         setLikeCount(initialLikeCount);
@@ -292,7 +305,30 @@ export default function StoriesPage() {
           nexoraFetch('/api/stories/view', {
              method: "POST",
              body: JSON.stringify({ storyId: activeStory.id, username })
-          }).then(() => fetchStories());
+          }).then(() => {
+             // Optimistically mark as viewed in local state
+             const updateGroup = (prev: any[]) => prev.map(group => {
+                if (group.username === activeStory.username) {
+                   return {
+                      ...group,
+                      isViewed: group.stories.every((s: any) => s.id === activeStory.id || s.isViewed),
+                      stories: group.stories.map((s: any) => s.id === activeStory.id ? { ...s, isViewed: true, views: (s.views || 0) + 1 } : s)
+                   };
+                }
+                return group;
+             });
+             
+             setOtherStories(updateGroup);
+             setActiveStory((prev: any) => prev?.id === activeStory.id ? { ...prev, isViewed: true, views: (prev.views || 0) + 1 } : prev);
+             
+             // Refresh stats immediately
+             nexoraFetch(`/api/stories/stats?storyId=${activeStory.id}`).then((data) => {
+               if (data) {
+                 setViewersList(data.views || []);
+                 setLikersList(data.likes || []);
+               }
+             });
+          });
         }
       }
     }
@@ -379,14 +415,14 @@ export default function StoriesPage() {
     // If already liked, just toggle state locally (unliking)
     if (liked[storyId]) {
       setLiked(prev => ({ ...prev, [storyId]: false }));
-      setLikeCount(prev => ({ ...prev, [storyId]: Math.max(0, prev[storyId] - 1) }));
+      setLikeCount(prev => ({ ...prev, [storyId]: Math.max(0, Number(prev[storyId] || 0) - 1) }));
     } else {
       // New Like: Show burst animation
       setShowHeartBurst(true);
       setTimeout(() => setShowHeartBurst(false), 800);
 
       setLiked(prev => ({ ...prev, [storyId]: true }));
-      setLikeCount(prev => ({ ...prev, [storyId]: prev[storyId] + 1 }));
+      setLikeCount(prev => ({ ...prev, [storyId]: Number(prev[storyId] || 0) + 1 }));
     }
     
     try {
@@ -627,19 +663,77 @@ export default function StoriesPage() {
   };
 
   const handleDeleteStory = async (storyId: number) => {
-    if (!window.confirm("Are you sure you want to delete this story?")) return;
     const username = localStorage.getItem("nexora_signup_username");
+    if (!username) return;
     try {
-      await nexoraFetch(`/api/stories/${storyId}?username=${username}`, { method: "DELETE" });
+      await nexoraFetch(`/api/stories/${storyId}?username=${encodeURIComponent(username)}`, { method: "DELETE" });
+      setStoryToDelete(null);
       setActiveStory(null);
+      setToast({ message: "Story deleted successfully", type: "success" });
+      setTimeout(() => setToast(null), 3000);
       await fetchStories();
     } catch (e) {
-      alert("Failed to delete story");
+      setToast({ message: "Failed to delete story", type: "error" });
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
   return (
     <>
+    {/* Custom Story Delete Confirmation Modal */}
+    <AnimatePresence>
+      {storyToDelete && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setStoryToDelete(null)}
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="relative w-full max-w-[340px] rounded-[32px] overflow-hidden border border-white/10 shadow-2xl"
+            style={{ 
+              background: "linear-gradient(135deg, rgba(30,30,45,0.95), rgba(15,15,25,0.95))",
+              backdropFilter: "blur(40px)"
+            }}
+          >
+            <div className="pt-8 pb-4 px-8 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                <Trash2 className="w-7 h-7 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black mb-2 tracking-tight" style={{ color: "#ffffff" }}>Delete Story?</h3>
+              <p className="text-[13px] font-bold leading-relaxed px-2" style={{ color: "rgba(255, 255, 255, 0.7)" }}>
+                This story will be permanently removed from Nexora and the database.
+              </p>
+            </div>
+            
+            <div className="p-4 flex flex-col gap-2">
+              <motion.button
+                whileHover={{ scale: 1.02, backgroundColor: "rgba(239,68,68,1)" }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleDeleteStory(storyToDelete)}
+                className="w-full py-4 rounded-2xl bg-red-600 font-black text-sm tracking-widest uppercase transition-colors shadow-lg"
+                style={{ color: "#ffffff" }}
+              >
+                Delete
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02, backgroundColor: "rgba(255,255,255,0.1)" }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setStoryToDelete(null)}
+                className="w-full py-4 rounded-2xl bg-white/5 font-black text-sm tracking-widest uppercase transition-colors"
+                style={{ color: "rgba(255,255,255,0.7)" }}
+              >
+                Cancel
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
     {/* Toast Notification */}
     <AnimatePresence>
       {toast && (
@@ -736,12 +830,22 @@ export default function StoriesPage() {
                 <Plus className="w-4 h-4 text-white stroke-[3px]" />
               </motion.div>
 
-              {/* View + Like Count Badge — with zero-padded 4-digit format */}
-              {myStories.length > 0 && (
+              {/* View + Like Count Badge — Dynamic show/hide and clean format */}
+              {myStories.length > 0 && (myStories.reduce((acc, s) => acc + (s.views || 0), 0) > 0 || myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0) > 0) && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap font-mono tracking-widest">
-                  <Eye className="w-3 h-3 shrink-0" /> {padCount(myStories.reduce((acc, s) => acc + (s.views || 0), 0))}
-                  <span className="opacity-30">·</span>
-                  <Heart className="w-3 h-3 text-[#ff006e] shrink-0" fill="#ff006e" /> {padCount(myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0))}
+                  {myStories.reduce((acc, s) => acc + (s.views || 0), 0) > 0 && (
+                    <>
+                      <Eye className="w-3 h-3 shrink-0" /> {formatCount(myStories.reduce((acc, s) => acc + (s.views || 0), 0))}
+                    </>
+                  )}
+                  {myStories.reduce((acc, s) => acc + (s.views || 0), 0) > 0 && myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0) > 0 && (
+                    <span className="opacity-30">·</span>
+                  )}
+                  {myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0) > 0 && (
+                    <>
+                      <Heart className="w-3 h-3 text-[#ff006e] shrink-0" fill="#ff006e" /> {formatCount(myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0))}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -826,9 +930,26 @@ export default function StoriesPage() {
                 <div className={`absolute inset-0 bg-gradient-to-br ${activeStory.color} opacity-90`} />
               )}
 
-              <div className="absolute top-3 md:top-3 left-4 right-4 h-1 rounded-full z-20 overflow-hidden safe-top"
-                   style={{ background: "rgba(255,255,255,0.25)" }}>
-                <motion.div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} />
+              {/* Segmented Loading Bar: One part per story */}
+              <div className="absolute top-3 md:top-3 left-4 right-4 h-[3px] z-20 flex gap-1.5 safe-top">
+                {(activeStory.username === myUsername 
+                  ? myStories 
+                  : otherStories.find(g => g.username === activeStory.username)?.stories || []
+                ).map((s: any, idx: number, arr: any[]) => {
+                  const activeIdx = arr.findIndex(st => st.id === activeStory.id);
+                  return (
+                    <div key={s.id} className="h-full flex-1 rounded-full bg-white/20 overflow-hidden">
+                      <motion.div 
+                        className="h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]" 
+                        initial={false}
+                        animate={{ 
+                          width: idx < activeIdx ? "100%" : (idx === activeIdx ? `${progress}%` : "0%") 
+                        }}
+                        transition={{ duration: idx === activeIdx ? 0 : 0.15 }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Header */}
@@ -837,9 +958,13 @@ export default function StoriesPage() {
                   <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color?.includes('from-') ? activeStory.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105 uppercase overflow-hidden`}>
                     {activeStory.avatar_url ? <img src={activeStory.avatar_url} alt="" className="w-full h-full object-cover" /> : (nicknames[activeStory.username]?.[0] || activeStory.user?.[0] || '?').toUpperCase()}
                   </div>
-                  <div>
-                    <p className="font-bold text-sm text-white group-hover:text-white transition-colors">{nicknames[activeStory.username] || activeStory.user}</p>
-                    <p className="text-[10px] text-white/50 font-black uppercase tracking-widest">{getTimeAgo(activeStory.created_at, now)}</p>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-black text-[15px] truncate drop-shadow-md tracking-tight leading-none">
+                      {activeStory.name || activeStory.username}
+                    </h3>
+                    <p className="text-white/60 text-[11px] font-bold tracking-wide mt-0.5">
+                      {getTimeAgo(activeStory.created_at, now)}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -854,7 +979,10 @@ export default function StoriesPage() {
                     <motion.button
                       whileHover={{ scale: 1.1, backgroundColor: "rgba(255,0,0,0.2)" }}
                       whileTap={{ scale: 0.9 }}
-                      onClick={() => handleDeleteStory(activeStory.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStoryToDelete(activeStory.id);
+                      }}
                       className="p-2 rounded-full bg-black/40 text-red-500 border border-red-500/20 backdrop-blur-md shadow-xl transition-all">
                       <Trash2 className="w-4 h-4" />
                     </motion.button>
@@ -871,14 +999,16 @@ export default function StoriesPage() {
                     "{activeStory.content}"
                   </p>
                 )}
-                {/* Touch Zones for Navigation */}
+                {/* Navigation Zones: Improved for mobile/one-handed use */}
                 <div 
-                  className="absolute left-0 top-0 bottom-0 w-[30%] z-20"
+                  className="absolute left-0 top-0 bottom-0 w-[25%] z-20 cursor-pointer active:bg-white/5 transition-colors"
                   onClick={(e) => { e.stopPropagation(); advanceStory("prev"); }}
+                  onMouseDown={(e) => e.stopPropagation()}
                 />
                 <div 
-                  className="absolute right-0 top-0 bottom-0 w-[70%] z-20"
+                  className="absolute right-0 top-0 bottom-0 w-[75%] z-20 cursor-pointer active:bg-white/5 transition-colors"
                   onClick={(e) => { e.stopPropagation(); advanceStory("next"); }}
+                  onMouseDown={(e) => e.stopPropagation()}
                 />
               </div>
 
@@ -910,55 +1040,76 @@ export default function StoriesPage() {
                 </AnimatePresence>
 
                 {activeStory.username !== myUsername && (
-                  <div className="flex items-center gap-2 md:gap-3 w-full">
-                    {/* Reply input */}
-                    <div className="flex-1 flex items-center rounded-[24px] px-4 py-[11px] gap-2 min-w-0 shadow-xl transition-all"
-                         style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)", backdropFilter: "blur(16px)" }}>
+                  <div className="flex items-center gap-2.5 md:gap-4 w-full">
+                    {/* Reply input with premium glassmorphism */}
+                    <div className="flex-1 flex items-center rounded-full px-5 py-3.5 gap-3 shadow-2xl transition-all group overflow-hidden"
+                         style={{ 
+                           background: "rgba(255,255,255,0.08)", 
+                           border: "1px solid rgba(255,255,255,0.12)", 
+                           backdropFilter: "blur(24px)",
+                           boxShadow: "0 8px 32px rgba(0,0,0,0.4)"
+                         }}>
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#00d4ff] animate-pulse" />
                       <input
                         type="text"
                         value={reply}
                         onChange={(e) => setReply(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleReply()}
                         placeholder="Reply to story..."
-                        className="flex-1 bg-transparent shrink min-w-0 outline-none text-[14px] text-white placeholder:text-white/70 font-semibold"
+                        className="flex-1 bg-transparent min-w-0 outline-none text-[15px] text-white placeholder:text-white/40 font-bold tracking-tight"
                       />
-                      <motion.button whileTap={{ scale: 0.85 }} onClick={() => handleReply()}
-                        className="text-white hover:text-[#00d4ff] transition-colors shrink-0">
-                        <Send className="w-[18px] h-[18px]" />
+                      <motion.button 
+                        whileHover={{ scale: 1.1, color: "#00d4ff" }}
+                        whileTap={{ scale: 0.9 }} 
+                        onClick={() => handleReply()}
+                        className="text-white opacity-60 hover:opacity-100 transition-all shrink-0">
+                        <Send className="w-5 h-5" />
                       </motion.button>
                     </div>
 
-                    {/* Like button with badge count */}
+                    {/* Like button with neon-glow state */}
                     <motion.button
-                      whileTap={{ scale: 0.85 }}
+                      whileHover={{ scale: 1.08 }}
+                      whileTap={{ scale: 0.8 }}
                       onClick={(e) => handleLike(activeStory.id, e)}
-                      className="h-[44px] w-[44px] rounded-full flex items-center justify-center transition-all shrink-0 shadow-xl relative border"
+                      className="h-[54px] w-[54px] rounded-full flex items-center justify-center transition-all shrink-0 shadow-2xl relative border"
                       style={{ 
-                        background: liked[activeStory.id] ? "rgba(255,0,110,0.3)" : "rgba(255,255,255,0.15)", 
-                        borderColor: liked[activeStory.id] ? "rgba(255,0,110,0.5)" : "rgba(255,255,255,0.25)",
-                        backdropFilter: "blur(16px)" 
+                        background: liked[activeStory.id] ? "rgba(255,0,110,0.3)" : "rgba(255,255,255,0.08)", 
+                        borderColor: liked[activeStory.id] ? "rgba(255,0,110,0.6)" : "rgba(255,255,255,0.12)",
+                        backdropFilter: "blur(24px)",
+                        boxShadow: liked[activeStory.id] ? "0 0 25px rgba(255,0,110,0.4)" : "0 8px 32px rgba(0,0,0,0.4)"
                       }}>
-                      <motion.span animate={{ scale: liked[activeStory.id] ? [1, 1.6, 1] : 1 }} transition={{ type: "spring", stiffness: 400, damping: 10 }}>
-                        <Heart className="w-[22px] h-[22px] transition-all" fill={liked[activeStory.id] ? "#ff006e" : "none"}
+                      <motion.span 
+                         animate={{ scale: liked[activeStory.id] ? [1, 1.4, 1] : 1 }} 
+                         transition={{ duration: 0.45, times: [0, 0.5, 1], ease: "easeInOut" }}>
+                        <Heart className="w-[28px] h-[28px] transition-all" 
+                               fill={liked[activeStory.id] ? "#ff006e" : "none"}
                                color={liked[activeStory.id] ? "#ff006e" : "white"} />
                       </motion.span>
                       
-                      {/* Minimalist Like Counter Badge */}
+                      {/* Like Badge */}
                       {(likeCount[activeStory.id] > 0 || liked[activeStory.id]) && (
                         <motion.span 
                           initial={{ scale: 0 }} 
                           animate={{ scale: 1 }}
-                          className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 rounded-full bg-[#ff006e] text-white flex items-center justify-center text-[10px] font-black shadow-lg border-2 border-[#1a1a30]">
+                          className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#ff006e] text-white flex items-center justify-center text-[11px] font-black shadow-lg border-2 border-black/20">
                           {likeCount[activeStory.id] || 0}
                         </motion.span>
                       )}
                     </motion.button>
 
-                    {/* Emoji reaction quick-toggle */}
-                    <motion.button whileTap={{ scale: 0.85 }}
+                    {/* Reaction button - Hot Fire Style */}
+                    <motion.button 
+                      whileHover={{ scale: 1.08, rotate: [0, -10, 10, 0], transition: { repeat: Infinity, duration: 0.5 } }}
+                      whileTap={{ scale: 0.8 }}
                       onClick={() => setShowSnapReactions(!showSnapReactions)}
-                      className="h-[44px] w-[44px] rounded-full flex items-center justify-center text-[22px] shrink-0 shadow-xl border border-white/20"
-                      style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(16px)" }}>
+                      className="h-[54px] w-[54px] rounded-full flex items-center justify-center text-[26px] shrink-0 shadow-2xl border"
+                      style={{ 
+                        background: showSnapReactions ? "rgba(255,165,0,0.2)" : "rgba(255,255,255,0.08)", 
+                        backdropFilter: "blur(24px)",
+                        borderColor: showSnapReactions ? "rgba(255,165,0,0.4)" : "rgba(255,255,255,0.12)",
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.4)"
+                      }}>
                       🔥
                     </motion.button>
                   </div>
@@ -975,8 +1126,8 @@ export default function StoriesPage() {
                         onClick={(e) => { e.stopPropagation(); setShowViewers(v => !v); setShowLikers(false); }}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
                         style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
-                      <Eye className="w-3.5 h-3.5" />
-                        <span className="font-mono tracking-widest">{padCount(activeStory.views ?? viewersList.length ?? 0)}</span>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span className="font-mono tracking-widest">{formatCount(activeStory.views ?? viewersList.length ?? 0)}</span>
                         <span className="opacity-60 font-medium text-[10px]">views</span>
                       </motion.button>
 
@@ -987,7 +1138,7 @@ export default function StoriesPage() {
                         className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
                         style={{ background: "rgba(255,0,110,0.18)", color: "white", borderColor: "rgba(255,0,110,0.3)" }}>
                         <Heart className="w-3.5 h-3.5" fill="#ff006e" style={{ color: "#ff006e" }} />
-                        <span className="font-mono tracking-widest">{padCount(likeCount[activeStory.id] ?? activeStory.likes ?? 0)}</span>
+                        <span className="font-mono tracking-widest">{formatCount(likeCount[activeStory.id] ?? activeStory.likes ?? 0)}</span>
                         <span className="opacity-60 font-medium text-[10px]">likes</span>
                       </motion.button>
                     </div>

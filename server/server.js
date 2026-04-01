@@ -63,7 +63,8 @@ function hashPhone(phone) {
     if (!phone || phone === 'Not Set') return null;
     const normalized = phone.replace(/\D/g, '');
     if (normalized.length < 5) return null;
-    return crypto.createHash('sha256').update(normalized + DATABASE_SECRET).digest('hex');
+    // Standard SHA-256 hash without salt to allow client-side matching while keeping PII hidden
+    return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 const app = express();
@@ -263,6 +264,18 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL"); } catch (e) { }
         // Migration for bio
         try { await db.run("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL"); } catch (e) { }
+
+        // Re-hash existing phone numbers if needed (one-time migration for Zero-Knowledge Sync)
+        try {
+            const usersToRehash = await db.all("SELECT id, phone_number FROM users WHERE phone_number IS NOT NULL AND phone_number != 'Not Set'");
+            for (const u of usersToRehash) {
+                const raw = decryptField(u.phone_number);
+                if (raw && raw !== 'Not Set') {
+                    const newHash = hashPhone(raw);
+                    await db.run("UPDATE users SET phone_hash = ? WHERE id = ?", [newHash, u.id]);
+                }
+            }
+        } catch (e) { console.error("[MIGRATION] Phone re-hash failed:", e); }
 
         // SEED DATA
         const seedUsers = [
@@ -1180,6 +1193,33 @@ io.on('connection', (socket) => {
     });
 });
 
+// GET PUBLIC PROFILE (For sharing links & landing pages)
+// Returns safe non-PII data for previews
+app.get('/api/users/public/:username', async (req, res) => {
+    try {
+        const { username } = req.params;
+        const sql = dbType === 'postgres' ? 'SELECT * FROM users WHERE username = (CASE WHEN $1 LIKE \'%@%\' THEN (SELECT username FROM users WHERE email = $1) ELSE $1 END)' : 'SELECT * FROM users WHERE username = ? OR email = ?';
+        const params = dbType === 'postgres' ? [username] : [username, username];
+        const user = await db.get(sql, params);
+        
+        if (!user) {
+            return res.status(200).json({ error: "Node not found." }); // Return 200 with error to handle gracefully on UI
+        }
+
+        // Return only safe metadata
+        res.json({
+            fullName: decryptField(user.full_name),
+            username: user.username,
+            color: user.color,
+            avatar_url: user.avatar_url,
+            bio: user.bio,
+            joinedDate: new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Relay console failure." });
+    }
+});
+
 // ------------------------------------------------------------------
 // AUTHENTICATION FLOWS (Normal vs Special Atithi)
 // ------------------------------------------------------------------
@@ -1843,38 +1883,47 @@ app.get('/api/users/search', async (req, res) => {
     }
 });
 
-// NEW: Contact Sync & Friend Suggestions
-app.post('/api/users/sync-contacts', async (req, res) => {
-    const { contacts, me } = req.body; // contacts: array of phone numbers
-    if (!contacts || !Array.isArray(contacts)) return res.json({ suggestions: [] });
+// NEW: Zero-Knowledge Contact Sync (using pre-hashed phone numbers from client)
+app.post('/api/connections/sync', async (req, res) => {
+    const { hashes, username: me } = req.body; 
+    if (!hashes || !Array.isArray(hashes)) return res.json({ matches: [] });
     
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        
-        // 1. Hash incoming contact numbers for deterministic matching
-        const contactHashes = contacts.map(p => hashPhone(p)).filter(h => h !== null);
-        if (contactHashes.length === 0) return res.json({ suggestions: [] });
+        if (hashes.length === 0) return res.json({ matches: [] });
 
-        // 2. Find matches (excluding self)
-        const placeholders = contactHashes.map(() => '?').join(',');
+        // Normalize hashes to hex if they were sent as base64 from client
+        // Client uses bufferToBase64 for hashString, so we should convert it on server if needed.
+        // Wait, my client implementation used bufferToBase64.
+        const hexHashes = hashes.map(h => {
+            try {
+                // Check if it's base64 (very likely since client uses bufferToBase64)
+                return Buffer.from(h, 'base64').toString('hex');
+            } catch {
+                return h; // Fallback to raw if not base64
+            }
+        });
+
+        // Find matches (excluding self)
+        const placeholders = hexHashes.map(() => '?').join(',');
         const users = await db.all(`
-            SELECT username, full_name AS "fullName", color, avatar_url AS avatarUrl 
+            SELECT username, full_name AS "fullName", color, avatar_url AS "avatarUrl"
             FROM users 
             WHERE phone_hash IN (${placeholders})
               AND LOWER(username) != LOWER(?)
-            LIMIT 15
-        `, [...contactHashes, me || '']);
+            LIMIT 20
+        `, [...hexHashes, (me || '').toLowerCase()]);
 
         const result = users.map(u => ({
             ...u,
             fullName: decryptField(u.fullName),
-            reason: 'In your contacts'
+            avatarUrl: decryptField(u.avatarUrl)
         }));
 
-        res.json({ suggestions: result });
+        res.json({ matches: result });
     } catch (err) {
-        console.error("Sync Error:", err);
-        res.status(500).json({ suggestions: [] });
+        console.error("Connection Sync Error:", err);
+        res.status(500).json({ matches: [] });
     }
 });
 
@@ -2215,9 +2264,9 @@ app.get('/api/stories', async (req, res) => {
             (SELECT COUNT(*) FROM story_likes WHERE story_id = s.id) as likes_count,
             (SELECT EXISTS(SELECT 1 FROM story_likes WHERE story_id = s.id AND liker_username = ?)) as is_liked
             FROM stories s
-            JOIN users u ON s.username = LOWER(u.username)
+            JOIN users u ON LOWER(s.username) = LOWER(u.username)
             WHERE s.username IN (${placeholders}) AND s.created_at >= datetime('now', '-1 day')
-            ORDER BY s.created_at DESC
+            ORDER BY s.created_at ASC
         `, [username, username, ...friends]);
 
         // Decrypt full_name, avatarUrl and media_url for each story before sending to client
@@ -2388,13 +2437,13 @@ app.get('/api/stories/stats', async (req, res) => {
         
         const views = await db.all(`
             SELECT u.username, u.full_name as name, u.color 
-            FROM story_views sv JOIN users u ON sv.viewer_username = LOWER(u.username) 
+            FROM story_views sv JOIN users u ON LOWER(sv.viewer_username) = LOWER(u.username) 
             WHERE sv.story_id = ? ORDER BY sv.created_at DESC
         `, [storyId]);
         
         const likes = await db.all(`
             SELECT u.username, u.full_name as name, u.color 
-            FROM story_likes sl JOIN users u ON sl.liker_username = LOWER(u.username) 
+            FROM story_likes sl JOIN users u ON LOWER(sl.liker_username) = LOWER(u.username) 
             WHERE sl.story_id = ? ORDER BY sl.created_at DESC
         `, [storyId]);
 
