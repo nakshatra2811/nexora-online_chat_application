@@ -190,6 +190,8 @@ function AuthContent() {
           localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
           localStorage.setItem("nexora_signup_color", data.color);
           localStorage.removeItem("nexora_user_profile");
+          localStorage.removeItem("nexora_active_thread_id"); // Clear last chat session
+
           setSuccessOverlay({ show: true, isLogin: true, name: data.fullName || username });
           setTimeout(() => router.push("/dashboard/chats"), 2200);
         } else {
@@ -236,6 +238,8 @@ function AuthContent() {
             localStorage.setItem("nexora_signup_phone", u.phoneNumber || "Not Set");
             localStorage.setItem("nexora_signup_color", u.color);
             localStorage.removeItem("nexora_user_profile");
+            localStorage.removeItem("nexora_active_thread_id");
+
             setSuccessOverlay({ show: true, isLogin: false, name: u.fullName || u.username });
             setTimeout(() => router.push("/dashboard/chats"), 2200);
           }

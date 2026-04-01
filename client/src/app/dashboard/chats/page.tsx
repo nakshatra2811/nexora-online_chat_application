@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Phone, Video, Send, Mic, MicOff, Paperclip, Lock,
@@ -420,28 +421,42 @@ export default function ChatsPage() {
     }
   }, []);
 
-  // ═══ Mobile View Helper: Sync active state to layout ═══
+  const searchParams = useSearchParams();
+  const currentChatUser = searchParams.get("u") || searchParams.get("username");
+  const callType = searchParams.get("call");
+
+  // Sync activeThread with URL search parameter 'u'
   useEffect(() => {
-    activeThreadRef.current = activeThread;
-    if (activeThread) {
-      document.body.classList.add("chat-active");
-      // Push a new state so back button closes chat instead of leaving page
-      window.history.pushState({ chatActive: true }, "");
-    } else {
+    if (threads.length > 0) {
+      if (currentChatUser) {
+        const found = threads.find(t => t.username === currentChatUser);
+        if (found) {
+          setActiveThread(found);
+          document.body.classList.add("chat-active");
+          
+          // If call requested, check if we need to initiate it
+          if (callType === "voice" || callType === "video") {
+             // We'll handle call initiation in a separate reactive step to avoid lifecycle conflicts
+          }
+          return;
+        }
+      }
+      setActiveThread(null);
       document.body.classList.remove("chat-active");
     }
-    
-    const handlePopState = (e: PopStateEvent) => {
-      if (activeThreadRef.current) {
-        setActiveThread(null);
-        // Prevent default browser back navigation
-        e.preventDefault();
-      }
-    };
+  }, [currentChatUser, threads]);
 
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [activeThread]);
+  // Handle call initiation from URL params
+  useEffect(() => {
+    if (activeThread && (callType === "voice" || callType === "video")) {
+      initiateCall(activeThread.username, callType as any, { name: activeThread.name, color: activeThread.color });
+      // Clear call param after initiation to prevent re-calling on re-render/back navigation
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.delete("call");
+      router.replace(`?${newParams.toString()}`, { scroll: false });
+    }
+  }, [activeThread, callType]);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wallpaperUploadRef = useRef<HTMLInputElement>(null);
@@ -549,39 +564,15 @@ export default function ChatsPage() {
     if (savedNicknames) setNicknames(JSON.parse(savedNicknames));
     const blocked = localStorage.getItem("nexora_blocked_threads");
     if (blocked) setBlockedThreads(JSON.parse(blocked));
-    const sent = localStorage.getItem("nexora_sent_requests");
-    if (sent) setSentRequests(JSON.parse(sent));
+    // Load activity
+    const savedRequests = localStorage.getItem("nexora_sent_requests");
+    if (savedRequests) setSentRequests(JSON.parse(savedRequests));
     const lmap = localStorage.getItem("nexora_locked_chats_map");
     if (lmap) setLockedChatsMap(JSON.parse(lmap));
     const hidden = localStorage.getItem("nexora_hidden_threads");
     if (hidden) setHiddenThreads(JSON.parse(hidden));
     const history = localStorage.getItem("nexora_search_history");
     if (history) setSearchHistory(JSON.parse(history));
-
-    // Handle URL parameters for direct chat/call navigation
-    const params = new URLSearchParams(window.location.search);
-    const targetUsername = params.get("u") || params.get("username");
-    const callType = params.get("call");
-
-    if (targetUsername) {
-      // Find thread in connections
-      const currentThreads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-      const found = currentThreads.find((t: any) => t.username === targetUsername);
-      if (found) {
-        setActiveThread(found);
-        // If call requested, trigger it after a short delay to ensure components are ready
-        if (callType === "voice" || callType === "video") {
-           setTimeout(() => initiateCall(targetUsername, callType as any, { name: found.name, color: found.color }), 1000);
-        }
-      }
-    } else {
-      const activeId = localStorage.getItem("nexora_active_thread_id");
-      if (activeId) {
-        const savedThreads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-        const found = savedThreads.find((t: any) => t.id === parseInt(activeId));
-        if (found) setActiveThread(found);
-      }
-    }
 
     // Load unread counts
     const savedUnreads = localStorage.getItem("nexora_unread_counts");
@@ -621,7 +612,6 @@ export default function ChatsPage() {
     const loadMessages = async () => {
       if (!activeThread || !vaultReady) return;
       
-      localStorage.setItem("nexora_active_thread_id", activeThread.id.toString());
       const savedMsgs = localStorage.getItem(`nexora_msgs_${activeThread.id}`);
       
       if (savedMsgs) {
@@ -739,7 +729,7 @@ export default function ChatsPage() {
     if (lockedChatsMap[thread.id] && !unlockedSessionThreads.includes(thread.id)) {
       setChatLockEntry({ threadId: thread.id, error: "", pin: "", showPin: false, forgotMode: false, forgotError: "" });
     } else {
-      setActiveThread(thread);
+      router.push(`?u=${thread.username}`, { scroll: false });
     }
   };
 
@@ -748,7 +738,8 @@ export default function ChatsPage() {
     const correctPin = lockedChatsMap[chatLockEntry.threadId];
     if (chatLockEntry.pin === correctPin) {
       setUnlockedSessionThreads(prev => [...prev, chatLockEntry.threadId]);
-      setActiveThread(threads.find(t => t.id === chatLockEntry.threadId) || null);
+      const found = threads.find(t => t.id === chatLockEntry.threadId);
+      if (found) router.push(`?u=${found.username}`, { scroll: false });
       setChatLockEntry(null);
     } else {
       setChatLockEntry(prev => prev ? { ...prev, error: "Incorrect PIN", pin: "" } : null);
@@ -2696,7 +2687,7 @@ export default function ChatsPage() {
               {activeThread ? (
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
-                    onClick={() => setActiveThread(null)}
+                    onClick={() => router.push("/dashboard/chats", { scroll: false })}
                     className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
