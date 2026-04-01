@@ -42,6 +42,8 @@ interface CallInterfaceProps {
   onEndCall: () => void;
   onMinimize: () => void;
   onMaximize: () => void;
+  remoteMuted: boolean;
+  remoteVideoOff: boolean;
 }
 
 export const CallInterface: React.FC<CallInterfaceProps> = ({
@@ -62,6 +64,8 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   onEndCall,
   onMinimize,
   onMaximize,
+  remoteMuted,
+  remoteVideoOff,
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -80,11 +84,11 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
 
   // ── Attach local stream to local video PIP ──
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
+    if (localVideoRef.current && localStream && !isVideoOff) {
       localVideoRef.current.srcObject = localStream;
       localVideoRef.current.play().catch(() => {});
     }
-  }, [localStream]);
+  }, [localStream, isVideoOff]);
 
   // ── Attach remote stream to remote video element ──
   useEffect(() => {
@@ -176,12 +180,12 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
               autoPlay
               playsInline
               className={`w-full h-full object-cover transition-opacity duration-700 ${
-                remoteStream && status === "accepted" ? "opacity-100" : "opacity-0"
+                remoteStream && status === "accepted" && !remoteVideoOff ? "opacity-100" : "opacity-0"
               }`}
             />
 
-            {/* Connecting overlay when no remote stream yet */}
-            {(!remoteStream || status === "ringing") && (
+            {/* Connecting overlay when no remote stream yet OR remote video is off */}
+            {(!remoteStream || status === "ringing" || remoteVideoOff) && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0c0c14]">
                 {/* Animated blobs */}
                 <div
@@ -226,6 +230,20 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
                     {remoteName?.[0] || "?"}
                   </span>
                 </div>
+
+                {/* Remote Muted Indicator (Google Meet style) */}
+                {remoteMuted && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute bottom-10 flex items-center gap-2 bg-red-500/20 backdrop-blur-xl border border-red-500/20 px-4 py-2 rounded-full z-20"
+                  >
+                    <MicOff className="w-4 h-4 text-red-400" />
+                    <span className="text-[10px] font-black uppercase text-red-400 tracking-widest">
+                      Remote Muted
+                    </span>
+                  </motion.div>
+                )}
               </div>
             )}
           </>
@@ -302,6 +320,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
                       ? "scale-x-100 opacity-100" 
                       : "scale-x-[-1] opacity-100"
                 }`}
+                key={`local-v-${facingMode}-${isVideoOff}`}
               />
             )}
 

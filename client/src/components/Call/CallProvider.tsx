@@ -45,6 +45,8 @@ export interface CallState {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   facingMode: "user" | "environment";
+  remoteMuted: boolean;
+  remoteVideoOff: boolean;
 }
 
 interface CallContextType {
@@ -89,6 +91,8 @@ const IDLE_STATE: CallState = {
   localStream: null,
   remoteStream: null,
   facingMode: "user",
+  remoteMuted: false,
+  remoteVideoOff: false,
 };
 
 // ─── Pending Incoming Call (stored outside React to avoid stale closures) ───
@@ -168,6 +172,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       onCallRejected: () => {
         resetState();
       },
+      onRemoteStateUpdate: (state: { isMuted?: boolean; isVideoOff?: boolean }) => {
+        setCallState((prev) => ({
+          ...prev,
+          remoteMuted: state.isMuted ?? prev.remoteMuted,
+          remoteVideoOff: state.isVideoOff ?? prev.remoteVideoOff,
+        }));
+      },
     }),
     [startTimer, resetState]
   );
@@ -175,11 +186,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   // ── Initialize socket listeners once ─────────────────────────────────────
 
   useEffect(() => {
-    // Wait for socket to be connected before attaching
-    const attachWhenReady = () => {
-      const socket = socketService.getSocket();
-      if (!socket) return;
+    let retryInterval: ReturnType<typeof setInterval> | null = null;
+    let attached = false;
 
+    const attachWhenReady = () => {
+      if (attached) return;
+      // Use connect() instead of getSocket() to ensure the singleton socket
+      // instance is created even if ChatsPage hasn't mounted yet.
+      const socket = socketService.connect();
+      if (!socket?.connected) return; // socket exists but not yet connected
+
+      attached = true;
+      if (retryInterval) {
+        clearInterval(retryInterval);
+        retryInterval = null;
+      }
+
+      console.log("[CallProvider] Socket ready — attaching WebRTC listeners");
       webRTCService.attachListeners();
 
       webRTCService.onIncomingCall((data) => {
@@ -189,9 +212,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         _pendingCallType = data.callType;
 
         // Look up caller display info from local saved connections
-        const connections = JSON.parse(
-          localStorage.getItem("nexora_secure_connections") || "[]"
-        );
+        let connections: any[] = [];
+        try {
+          connections = JSON.parse(
+            localStorage.getItem("nexora_secure_connections") || "[]"
+          );
+        } catch {}
         const caller = connections.find(
           (c: any) =>
             c.username?.toLowerCase() === data.from?.toLowerCase()
@@ -221,14 +247,25 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       });
     };
 
-    // Socket may already be connected
+    // Try immediately
     attachWhenReady();
 
-    // Also try again in case socket connects later
-    const socket = socketService.getSocket();
+    // If socket wasn't ready yet, listen for "connect" event AND poll
+    const socket = socketService.connect();
     socket?.on("connect", attachWhenReady);
 
+    // Safety-net polling: re-check every 2s in case the connect event fires
+    // before our listener was added (race condition)
+    retryInterval = setInterval(() => {
+      if (!attached) attachWhenReady();
+      else if (retryInterval) {
+        clearInterval(retryInterval);
+        retryInterval = null;
+      }
+    }, 2000);
+
     return () => {
+      if (retryInterval) clearInterval(retryInterval);
       webRTCService.detachListeners();
     };
   }, []);
@@ -408,6 +445,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
             onEndCall={endCall}
             onMinimize={minimize}
             onMaximize={maximize}
+            remoteMuted={callState.remoteMuted}
+            remoteVideoOff={callState.remoteVideoOff}
           />
         )}
       </AnimatePresence>

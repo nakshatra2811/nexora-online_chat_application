@@ -22,6 +22,7 @@ export interface CallEvents {
   onCallEnded: (reason: string) => void;
   onCallRejected: () => void;
   onIceConnectionChange?: (state: RTCIceConnectionState) => void;
+  onRemoteStateUpdate?: (state: { isMuted?: boolean; isVideoOff?: boolean }) => void;
 }
 
 export class WebRTCService {
@@ -115,6 +116,14 @@ export class WebRTCService {
       this._cleanup("Call was rejected");
       cb?.();
     });
+
+    socket.on(
+      "call:state-update",
+      (data: { from: string; state: { isMuted?: boolean; isVideoOff?: boolean } }) => {
+        console.log("[WebRTC] call:state-update received from:", data.from, data.state);
+        this.events?.onRemoteStateUpdate?.(data.state);
+      }
+    );
   }
 
   public detachListeners() {
@@ -409,7 +418,18 @@ export class WebRTCService {
       const newVideoTrack = newStream.getVideoTracks()[0];
 
       // 3. Replace track in peer connection
-      const sender = this.pc.getSenders().find((s) => s.track?.kind === "video");
+      // The old track may be stopped/null, so also match by checking if the sender
+      // previously had a video track (i.e. it's not the audio sender)
+      const sender = this.pc.getSenders().find(
+        (s) => s.track?.kind === "video" || (!s.track && this.pc!.getSenders().indexOf(s) > 0)
+      ) || this.pc.getSenders().find(
+        (s) => !s.track || s.track.kind === "video"
+      );
+
+      // Inherit the toggle status (if video was toggled off, keep it off)
+      const wasEnabled = oldVideoTrack ? oldVideoTrack.enabled : true;
+      newVideoTrack.enabled = wasEnabled;
+
       if (sender) {
         await sender.replaceTrack(newVideoTrack);
       }
