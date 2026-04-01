@@ -1,11 +1,17 @@
 // Nexora Configuration System
 // Centralizes all API and environment-specific settings.
 
+// Backend API URL — uses env for prod, falls back to localhost for local dev
 export const API_BASE_URL = typeof window !== 'undefined' 
   ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000')
   : 'http://localhost:5000';
 
 export const SOCKET_URL = API_BASE_URL;
+
+// Production app domain — ALWAYS the real URL (used in share links, OG tags, emails)
+// Never localhost — share links must open on the real site, not the dev server
+export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nexora31.vercel.app';
+export const APP_DOMAIN = 'nexora31.vercel.app';
 
 export const APP_NAME = "Nexora";
 export const BRAND_TAGLINE = "The Privacy Protocol";

@@ -80,7 +80,8 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
     setQrUrl(generateUniqueQR(friend.username));
   }, [friend.username]);
 
-  const profileUrl = `https://nexora.app/u/${friend.username}`;
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nexora31.vercel.app";
+  const profileUrl = `${APP_URL}/auth?connect=${friend.username}`;
 
   const copyLink = () => {
     navigator.clipboard.writeText(profileUrl);
@@ -89,11 +90,12 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
   };
 
   const shareApps = [
-    { name: "WhatsApp", emoji: "💬", color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent("Check out " + friend.name + " on Nexora: " + profileUrl)}` },
-    { name: "Telegram", emoji: "✈️", color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent("Connect on Nexora!")}` },
-    { name: "Instagram", emoji: "📸", color: "#E1306C", url: "https://instagram.com" },
-    { name: "Snapchat", emoji: "👻", color: "#FFFC00", url: "https://snapchat.com" },
+    { name: "WhatsApp", emoji: "💬", color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
+    { name: "Telegram", emoji: "✈️", color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — encrypted private chat.`)}` },
+    { name: "Instagram", emoji: "📸", color: "#E1306C", url: "https://instagram.com/nexora_e2ee_31" },
+    { name: "Discord", emoji: "🎮", color: "#5865F2", url: `https://discord.com` },
   ];
+
 
   const downloadQR = () => {
     const a = document.createElement("a");
