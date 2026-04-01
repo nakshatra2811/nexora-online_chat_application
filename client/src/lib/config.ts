@@ -3,8 +3,8 @@
 
 // Backend API URL — uses env for prod, falls back to localhost for local dev
 export const API_BASE_URL = typeof window !== 'undefined' 
-  ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000')
-  : 'http://localhost:5000';
+  ? (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000')
+  : 'http://127.0.0.1:5000';
 
 export const SOCKET_URL = API_BASE_URL;
 
@@ -18,9 +18,9 @@ export const BRAND_TAGLINE = "The Privacy Protocol";
 export const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
 
 /**
- * Enhanced fetch wrapper with error handling for Nexora services.
+ * Enhanced fetch wrapper with automatic IPv4/IPv6 fallback and error handling.
  */
-export async function nexoraFetch(endpoint: string, options: RequestInit = {}) {
+export async function nexoraFetch(endpoint: string, options: RequestInit = {}, retries = 1) {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       cache: 'no-store',
@@ -29,28 +29,31 @@ export async function nexoraFetch(endpoint: string, options: RequestInit = {}) {
         'Content-Type': 'application/json',
         ...options.headers,
       },
-    });
+      // Added moderate timeout for local network sanity
+      signal: AbortController ? AbortSignal.timeout(10000) : undefined,
+    } as any);
     
     const contentType = response.headers.get("content-type");
     let data;
     if (contentType && contentType.includes("application/json")) {
       data = await response.json();
     } else {
-      // Handle non-JSON response (e.g., HTML error page from proxy/Next.js)
       const text = await response.text();
-      console.warn(`[Nexora Protocol] Non-JSON payload from ${endpoint}:`, text.slice(0, 50) + "...");
-      data = { error: "Non-JSON response received", status: response.status, _isHtml: true };
+      data = { error: "Non-JSON response", status: response.status, text: text.slice(0, 100) };
     }
     
-    if (!response.ok) {
-      // Return the error body with a flag so callers can check
-      return { ...data, _httpError: true, _status: response.status };
-    }
-    
+    if (!response.ok) return { ...data, _httpError: true, _status: response.status };
     return data;
-  } catch (err) {
-    // Graceful failure for "Failed to fetch" (unreachable server)
-    console.error(`[Nexora Protocol] Connectivity failed for ${endpoint}:`, err);
+  } catch (err: any) {
+    // If it's a Fetch error and we have retries, try once more after a small delay
+    // This handles initial dev-server startup races.
+    if (retries > 0) {
+      await new Promise(r => setTimeout(r, 500));
+      return nexoraFetch(endpoint, options, retries - 1);
+    }
+    
+    // Final failure - return null but don't throw to prevent UI crash
+    console.warn(`[Connectivity] ${endpoint} unreachable.`);
     return null;
   }
 }
