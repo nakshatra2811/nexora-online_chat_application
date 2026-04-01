@@ -282,7 +282,7 @@ let pgPool;
 
         // SEED DATA
         const seedUsers = [
-            ['Nexora Root', 'root@nexora.app', 'Nexora_31', 'Nexora@31', 'from-[#6c5ce7] to-[#00d4ff]', 'Admin', '0000000031'],
+            ['Nexora', 'root@nexora.app', 'Nexora_31', 'Nexora@31', 'from-[#6c5ce7] to-[#00d4ff]', 'Admin', '0000000031'],
             ['Aarav Shah', 'aarav@nexora.app', 'aarav_vibe', 'Nexora@31', 'from-amber-500 to-orange-600', 'Standard', '9876543210'],
             ['Isha Sharma', 'isha@nexora.app', 'isha_creative', 'Nexora@31', 'from-rose-500 to-pink-600', 'Standard', '9876543211'],
             ['Rohan Mehta', 'rohan@nexora.app', 'rohan_nex', 'Nexora@31', 'from-emerald-500 to-teal-600', 'Standard', '9876543212'],
@@ -299,8 +299,14 @@ let pgPool;
                     const saltRounds = 10;
                     const hashed = await bcrypt.hash(user[3], saltRounds);
                     await db.run(
-                        'INSERT INTO users (full_name, email, username, password, color, role, phone_number, phone_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-                        [encryptField(user[0]), user[1], user[2], hashed, user[4], user[5], encryptField(user[6] || 'Not Set'), hashPhone(user[6])]
+                        'INSERT INTO users (full_name, email, username, password, color, role, phone_number, phone_hash, bio, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+                        [encryptField(user[0]), user[1], user[2], hashed, user[4], user[5], encryptField(user[6] || 'Not Set'), hashPhone(user[6]), 'The Private Chat Protocol', APP_LOGO_URL]
+                    );
+                } else if (user[2] === 'Nexora_31') {
+                    // Force update admin profile to match new brand
+                    await db.run(
+                        'UPDATE users SET full_name = ?, bio = ?, avatar_url = ? WHERE username = ?',
+                        [encryptField('Nexora'), 'The Private Chat Protocol', APP_LOGO_URL, 'Nexora_31']
                     );
                 }
             } catch (err) { }
@@ -830,7 +836,52 @@ const io = new Server(server, {
 });
 
 // Track connected users for call routing and device sync
-const socketToUser = new Map(); // socketId -> userId
+const socketToUser = new Map(); // socket.id -> userId
+let broadcastState = {
+    isRunning: false,
+    total: 0,
+    sent: 0,
+    failed: 0,
+    startTime: null,
+    lastMessage: ""
+};
+
+async function sendNextBroadcastMessage(users, index, message) {
+    if (!broadcastState.isRunning || index >= users.length) {
+        broadcastState.isRunning = false;
+        console.log(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
+        return;
+    }
+
+    const user = users[index];
+    const targetId = user.username.toLowerCase();
+    
+    // We send as a System Notice from Nexora_31
+    const payload = {
+        id: 'sys_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        to: targetId,
+        from: 'Nexora_31',
+        text: message,
+        timestamp: new Date().toISOString(),
+        createdAt: Date.now(),
+        isSystemNotice: true,
+        status: 'delivered'
+    };
+
+    try {
+        // Relay via Socket.io if online
+        io.to(targetId).emit('dm:message', payload);
+        // Always queue for offline delivery to ensure they see it
+        queueMessageForUser(targetId, payload);
+        broadcastState.sent++;
+    } catch (e) {
+        console.error(`[BROADCAST] Failed for ${targetId}:`, e.message);
+        broadcastState.failed++;
+    }
+
+    // Process next after delay (100ms = 10 users per second to be safe)
+    setTimeout(() => sendNextBroadcastMessage(users, index + 1, message), 100);
+}
 
 io.on('connection', (socket) => {
     console.log(`[+] Node Connected: ${socket.id}`);
@@ -1071,6 +1122,12 @@ io.on('connection', (socket) => {
         const senderId = socketToUser.get(socket.id);
         const targetId = data.to?.toLowerCase();
         if (senderId) {
+            // RESTRICTION: Official account nexora_31 cannot call or be called
+            if (senderId === 'nexora_31' || targetId === 'nexora_31') {
+                io.to(senderId).emit('call:reject', { from: 'System', reason: 'Official Nexora account does not support calling.' });
+                return;
+            }
+
             io.to(targetId).emit('call:offer', {
                 from: senderId,
                 sdp: data.sdp,
@@ -2721,37 +2778,50 @@ app.delete('/api/admin/connections/:id', async (req, res) => {
     }
 });
 
-// POST /api/admin/broadcast — Send email to all or selected users
-app.post('/api/admin/broadcast', async (req, res) => {
-    const { subject, html, targetEmails } = req.body;
-    if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required" });
+// ── NEW: DIRECT MESSAGE BROADCAST (Snapchat Style) ──
+app.post('/api/admin/broadcast-chat', async (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: "Message content required" });
+    if (broadcastState.isRunning) return res.status(400).json({ error: "A broadcast is already in progress." });
+
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        let emails = targetEmails;
-        if (!emails || emails.length === 0) {
-            const allUsers = await db.all('SELECT email FROM users');
-            emails = allUsers.map(u => u.email);
-        }
-        let sent = 0, failed = 0;
-        for (const email of emails) {
-            try {
-                await emailTransporter.sendMail({
-                    from: `"${process.env.GMAIL_NAME || 'Nexora Private Chat'}" <${process.env.GMAIL_USER}>`,
-                    to: email,
-                    subject: subject,
-                    html: html
-                });
-                sent++;
-            } catch (e) {
-                failed++;
-            }
-        }
-        res.json({ status: "success", sent, failed, total: emails.length });
+        const allUsers = await db.all('SELECT username FROM users WHERE username != ? AND username != ?', ['Nexora_31', 'me']);
+        
+        broadcastState = {
+            isRunning: true,
+            total: allUsers.length,
+            sent: 0,
+            failed: 0,
+            startTime: new Date(),
+            lastMessage: message
+        };
+
+        console.log(`[BROADCAST] Starting for ${allUsers.length} users...`);
+        // Trigger background loop
+        sendNextBroadcastMessage(allUsers, 0, message);
+
+        res.json({ status: "success", message: "Broadcast sequence initiated.", total: allUsers.length });
     } catch (err) {
-        console.error("[ADMIN] Broadcast error:", err);
-        res.status(500).json({ error: "Broadcast failed" });
+        console.error("[ADMIN] Chat broadcast error:", err);
+        res.status(500).json({ error: "Failed to initialize broadcast" });
     }
 });
+
+app.post('/api/admin/broadcast-chat/stop', (req, res) => {
+    if (broadcastState.isRunning) {
+        broadcastState.isRunning = false;
+        res.json({ status: "success", message: "Broadcast sequence terminated." });
+    } else {
+        res.status(400).json({ error: "No active broadcast to stop." });
+    }
+});
+
+app.get('/api/admin/broadcast-chat/status', (req, res) => {
+    res.json(broadcastState);
+});
+
+// GET /api/blogs - Return all blogs
 
 // GET /api/blogs - Return all blogs
 app.get('/api/blogs', async (req, res) => {

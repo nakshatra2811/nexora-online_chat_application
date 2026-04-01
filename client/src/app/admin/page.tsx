@@ -586,22 +586,57 @@ function EmailTemplatesTab() {
 // ═══════════════════════════════════════
 function BroadcastTab() {
   const { isDark } = useTheme();
+  const [activeSubTab, setActiveSubTab] = useState<"email" | "chat">("chat");
+  
+  // Email States
   const [subject, setSubject] = useState("");
   const [htmlBody, setHtmlBody] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
 
-  const handleBroadcast = async () => {
+  // Chat States
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatStatus, setChatStatus] = useState<any>(null);
+  const [isRefreshingChat, setIsRefreshingChat] = useState(false);
+
+  const fetchChatStatus = async () => {
+    const data = await adminFetch("/api/admin/broadcast-chat/status");
+    if (data) setChatStatus(data);
+  };
+
+  useEffect(() => {
+    fetchChatStatus();
+    const interval = setInterval(() => {
+      if (chatStatus?.isRunning) fetchChatStatus();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [chatStatus?.isRunning]);
+
+  const handleEmailBroadcast = async () => {
     if (!subject || !htmlBody) { alert("Subject and HTML body are required."); return; }
-    setIsSending(true);
-    setResult(null);
+    setIsSendingEmail(true);
+    setEmailResult(null);
     const data = await adminFetch("/api/admin/broadcast", {
       method: "POST",
       body: JSON.stringify({ subject, html: htmlBody })
     });
-    if (data) setResult({ sent: data.sent, failed: data.failed, total: data.total });
-    setIsSending(false);
+    if (data) setEmailResult({ sent: data.sent, failed: data.failed, total: data.total });
+    setIsSendingEmail(false);
+  };
+
+  const handleStartChatBroadcast = async () => {
+    if (!chatMessage.trim()) { alert("Message content required."); return; }
+    const data = await adminFetch("/api/admin/broadcast-chat", {
+      method: "POST",
+      body: JSON.stringify({ message: chatMessage })
+    });
+    if (data) fetchChatStatus();
+  };
+
+  const handleStopChatBroadcast = async () => {
+    await adminFetch("/api/admin/broadcast-chat/stop", { method: "POST" });
+    fetchChatStatus();
   };
 
   const inputStyle = {
@@ -611,68 +646,151 @@ function BroadcastTab() {
   };
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Broadcast Email</h2>
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>Send a custom HTML email to all registered users.</p>
-
-      {/* Subject */}
-      <div>
-        <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "#a29bfe" }}>Subject Line</label>
-        <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject..."
-          className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
+    <div className="space-y-6">
+      <div className="flex items-center gap-4 border-b border-white/5 pb-1">
+        <button onClick={() => setActiveSubTab("chat")} className={`pb-3 px-2 text-sm font-black transition-all relative ${activeSubTab === 'chat' ? 'text-[#00d4ff]' : 'text-muted-foreground opacity-50'}`}>
+          DIRECT MESSAGES (START)
+          {activeSubTab === 'chat' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00d4ff]" />}
+        </button>
+        <button onClick={() => setActiveSubTab("email")} className={`pb-3 px-2 text-sm font-black transition-all relative ${activeSubTab === 'email' ? 'text-[#a29bfe]' : 'text-muted-foreground opacity-50'}`}>
+          EMAIL BROADCAST
+          {activeSubTab === 'email' && <motion.div layoutId="subtab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#a29bfe]" />}
+        </button>
       </div>
 
-      {/* Edit / Preview toggle */}
-      <div className="flex gap-2">
-        {(["edit", "preview"] as const).map(t => (
-          <button key={t} onClick={() => setPreviewMode(t === "preview")}
-            className="px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all"
-            style={{
-              background: (previewMode ? t === "preview" : t === "edit") ? "rgba(162,155,254,0.15)" : "transparent",
-              color: (previewMode ? t === "preview" : t === "edit") ? "#a29bfe" : "var(--text-muted)",
-              border: `1px solid ${(previewMode ? t === "preview" : t === "edit") ? "rgba(162,155,254,0.4)" : "var(--border-subtle)"}`
-            }}>
-            {t === "edit" ? "✏️ Editor" : "👁 Preview"}
-          </button>
-        ))}
-      </div>
+      {activeSubTab === "chat" ? (
+        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
+           <div className="p-6 rounded-[2rem] bg-gradient-to-br from-[#00d4ff]/10 to-transparent border border-[#00d4ff]/10">
+              <h3 className="text-xl font-black mb-2" style={{ color: "#00d4ff" }}>Snapchat-Style Chat Broadcast</h3>
+              <p className="text-xs font-bold opacity-60 mb-6 uppercase tracking-widest">Sends a Direct Message from the official Nexora account to every registered user.</p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 block text-[#00d4ff]">Message Broadcast Payload</label>
+                  <textarea 
+                    value={chatMessage} 
+                    onChange={e => setChatMessage(e.target.value)}
+                    placeholder="Enter official broadcast message..."
+                    className="w-full p-5 rounded-3xl outline-none text-sm font-bold resize-none min-h-[150px] transition-all focus:shadow-[0_0_20px_rgba(0,212,255,0.15)]"
+                    style={inputStyle}
+                  />
+                </div>
 
-      {!previewMode ? (
-        <div>
-          <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "#a29bfe" }}>HTML Body</label>
-          <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={16} placeholder="<html>...</html>"
-            className="w-full p-4 rounded-xl outline-none font-mono text-xs resize-y"
-            style={{ ...inputStyle, lineHeight: 1.6, minHeight: "380px" }} spellCheck={false} />
+                <div className="flex items-center gap-3">
+                  {!chatStatus?.isRunning ? (
+                    <motion.button 
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                      onClick={handleStartChatBroadcast}
+                      className="flex-1 py-4 rounded-2xl bg-[#00d4ff] text-white font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-[#00d4ff]/20"
+                    >
+                      START BROADCAST
+                    </motion.button>
+                  ) : (
+                    <div className="flex gap-3 w-full">
+                       <div className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-[#00d4ff] animate-ping" />
+                          <span className="text-[10px] font-black uppercase text-[#00d4ff] tracking-widest">Sequence Active...</span>
+                       </div>
+                       <button onClick={handleStopChatBroadcast} className="px-8 py-4 rounded-2xl bg-red-500/10 text-red-500 font-black text-xs uppercase tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all">
+                          STOP
+                       </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+           </div>
+
+           {chatStatus && (
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+               <div className="p-5 rounded-3xl bg-white/5 border border-white/5 text-center">
+                  <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mb-1">Target Users</p>
+                  <p className="text-xl font-black">{chatStatus.total}</p>
+               </div>
+               <div className="p-5 rounded-3xl bg-white/5 border border-white/5 text-center">
+                  <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mb-1">Delivered</p>
+                  <p className="text-xl font-black text-[#00d4ff]">{chatStatus.sent}</p>
+               </div>
+               <div className="p-5 rounded-3xl bg-white/5 border border-white/5 text-center">
+                  <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mb-1">Processing</p>
+                  <p className="text-xl font-black">{chatStatus.total > 0 ? Math.round((chatStatus.sent / chatStatus.total) * 100) : 0}%</p>
+               </div>
+             </div>
+           )}
+
+           {chatStatus?.isRunning && (
+             <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(chatStatus.sent / chatStatus.total) * 100}%` }}
+                  className="h-full bg-gradient-to-r from-[#00d4ff] to-[#6c5ce7]" 
+                />
+             </div>
+           )}
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-hidden bg-white" style={{ borderColor: "var(--border-subtle)" }}>
-          <div className="px-4 py-2 border-b flex items-center gap-2"
-            style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
-            <div className="flex gap-1.5">
-              {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}
-            </div>
-            <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Broadcast Preview — {subject || "No subject"}</span>
+        <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Send a custom HTML email to all registered users.</p>
+
+          {/* Subject */}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "#a29bfe" }}>Subject Line</label>
+            <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject..."
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
           </div>
-          <iframe srcDoc={htmlBody} className="w-full" style={{ height: "550px", border: "none" }}
-            title="Broadcast Preview" sandbox="allow-same-origin" />
+
+          {/* Edit / Preview toggle */}
+          <div className="flex gap-2">
+            {(["edit", "preview"] as const).map(t => (
+              <button key={t} onClick={() => setPreviewMode(t === "preview")}
+                className="px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all"
+                style={{
+                  background: (previewMode ? t === "preview" : t === "edit") ? "rgba(162,155,254,0.15)" : "transparent",
+                  color: (previewMode ? t === "preview" : t === "edit") ? "#a29bfe" : "var(--text-muted)",
+                  border: `1px solid ${(previewMode ? t === "preview" : t === "edit") ? "rgba(162,155,254,0.4)" : "var(--border-subtle)"}`
+                }}>
+                {t === "edit" ? "✏️ Editor" : "👁 Preview"}
+              </button>
+            ))}
+          </div>
+
+          {!previewMode ? (
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "#a29bfe" }}>HTML Body</label>
+              <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={12} placeholder="<html>...</html>"
+                className="w-full p-4 rounded-xl outline-none font-mono text-xs resize-y"
+                style={{ ...inputStyle, lineHeight: 1.6, minHeight: "300px" }} spellCheck={false} />
+            </div>
+          ) : (
+            <div className="rounded-2xl border overflow-hidden bg-white" style={{ borderColor: "var(--border-subtle)" }}>
+              <div className="px-4 py-2 border-b flex items-center gap-2"
+                style={{ borderColor: "var(--border-subtle)", background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
+                <div className="flex gap-1.5">
+                  {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}
+                </div>
+                <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Broadcast Preview — {subject || "No subject"}</span>
+              </div>
+              <iframe srcDoc={htmlBody} className="w-full" style={{ height: "450px", border: "none" }}
+                title="Broadcast Preview" sandbox="allow-same-origin" />
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={handleEmailBroadcast} disabled={isSendingEmail}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #a29bfe, #6c5ce7)" }}>
+              <Send className="w-4 h-4" /> {isSendingEmail ? "Broadcasting..." : "Send to All Users"}
+            </motion.button>
+
+            {emailResult && (
+              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+                style={{ background: "rgba(46,213,115,0.08)", color: "#2ed573", border: "1px solid rgba(46,213,115,0.15)" }}>
+                <CheckCircle className="w-4 h-4" /> Sent: {emailResult.sent} · Failed: {emailResult.failed} · Total: {emailResult.total}
+              </motion.div>
+            )}
+          </div>
         </div>
       )}
-
-      <div className="flex flex-wrap items-center gap-3 pt-1">
-        <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={handleBroadcast} disabled={isSending}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, #a29bfe, #6c5ce7)" }}>
-          <Send className="w-4 h-4" /> {isSending ? "Broadcasting..." : "Send to All Users"}
-        </motion.button>
-
-        {result && (
-          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
-            style={{ background: "rgba(46,213,115,0.08)", color: "#2ed573", border: "1px solid rgba(46,213,115,0.15)" }}>
-            <CheckCircle className="w-4 h-4" /> Sent: {result.sent} · Failed: {result.failed} · Total: {result.total}
-          </motion.div>
-        )}
-      </div>
     </div>
   );
 }

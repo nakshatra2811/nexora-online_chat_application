@@ -353,6 +353,11 @@ function ChatsPageContent() {
 
   const handleBlockUser = (threadId: number) => {
     if (!threadId) return;
+    const thread = threads.find(t => t.id === threadId);
+    if (thread?.username === 'nexora_31') {
+      alert("This is an official Nexora account and cannot be blocked.");
+      return;
+    }
     setBlockedThreads(prev => {
       const next = prev.includes(threadId) ? prev : [...prev, threadId];
       localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
@@ -2838,12 +2843,16 @@ function ChatsPageContent() {
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full hidden sm:inline"
                 style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>AES-256 Encrypted</span>
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStartCall("voice")} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)]">
-                <Phone className="w-5 h-5" />
-              </motion.button>
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStartCall("video")} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)]">
-                <Video className="w-5 h-5" />
-              </motion.button>
+              {activeThread.username !== 'nexora_31' && (
+                <>
+                  <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStartCall("voice")} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)]">
+                    <Phone className="w-5 h-5" />
+                  </motion.button>
+                  <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStartCall("video")} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)]">
+                    <Video className="w-5 h-5" />
+                  </motion.button>
+                </>
+              )}
               <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setShowChatMenu(!showChatMenu); setShowDisappearSubmenu(false); }} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)] relative">
                 <MoreVertical className="w-5 h-5" />
               </motion.button>
@@ -3845,15 +3854,17 @@ function ChatsPageContent() {
                       <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
                         {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
                       </h2>
-                      <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10">Verified</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30' : 'bg-purple-500/10 text-purple-500 border border-purple-500/10'}`}>
+                        {selectedProfileUser.username === 'nexora_31' ? 'Official Protocol' : 'Verified'}
+                      </span>
                     </div>
                     <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
                       @{selectedProfileUser.username}
                     </p>
                     
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
-                      <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-                        Nexora User
+                      <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/10'} shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis`}>
+                        {selectedProfileUser.username === 'nexora_31' ? 'System Authority' : 'Nexora User'}
                       </span>
                       <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                         🔒 End-to-End Encrypted
@@ -3871,12 +3882,11 @@ function ChatsPageContent() {
                         <div className="py-2">
                            <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Loading..." />
                         </div>
-                      ) : profileData?.bio ? profileData.bio : <span className="opacity-50 italic">No bio yet.</span>}
+                      ) : (selectedProfileUser.username === 'nexora_31' ? 'The Private Chat Protocol' : (profileData?.bio ? profileData.bio : <span className="opacity-50 italic">No bio yet.</span>))}
                     </div>
                   </div>
 
-                  {/* Voice/Video calls removed per user request */}
-
+                  {/* Actions */}
                   <div className="flex gap-3 w-full">
                     <motion.button 
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
@@ -3890,22 +3900,28 @@ function ChatsPageContent() {
                       Message
                     </motion.button>
                     
-                    {blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
-                      <motion.button 
-                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                        onClick={() => handleUnblockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
-                        className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
-                      >
-                        Unblock
-                      </motion.button>
+                    {selectedProfileUser.username === 'nexora_31' ? (
+                       <div className="flex-1 py-4 rounded-[28px] bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
+                          <span className="text-[9px] font-black text-[#00d4ff] uppercase tracking-widest">Protocol Channel</span>
+                       </div>
                     ) : (
-                      <motion.button 
-                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                        onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
-                        className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
-                      >
-                        Block
-                      </motion.button>
+                      blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
+                        <motion.button 
+                          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                          onClick={() => handleUnblockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
+                          className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
+                        >
+                          Unblock
+                        </motion.button>
+                      ) : (
+                        <motion.button 
+                          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                          onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
+                          className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
+                        >
+                          Block
+                        </motion.button>
+                      )
                     )}
                   </div>
                 </div>
