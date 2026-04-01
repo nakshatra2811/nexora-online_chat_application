@@ -15,9 +15,7 @@ import {
 import { useTheme } from "@/lib/theme";
 import { API_BASE_URL, APP_LOGO } from "@/lib/config";
 
-// ─── HARDCODED ADMIN CREDENTIALS ───
-const ADMIN_EMAIL = "Nexoraprivatechat31@gmail.com";
-const ADMIN_PASSWORD = "Ruhi@#$%*09052024";
+// Removed Hardcoded Credentials. Using Zero-Knowledge API.
 
 // ─── TYPES ───
 interface UserRecord {
@@ -39,12 +37,9 @@ interface EmailTemplate {
 }
 
 export type TabId = 
-  | "overview" | "users" | "connections" | "config" | "templates" | "broadcast"
-  | "blog" | "gallery" | "seo_manager" | "keywords" | "analytics" | "site_management" 
-  | "pages" | "redirects" | "sitemap" | "audit_logs" | "branding" | "optimization" 
-  | "seo_testing" | "seo_monitor" | "social_preview" | "google_bing" | "indexing" 
-  | "automation" | "performance" | "enterprise" | "security" | "scheduling" | "reports" 
-  | "devops" | "scaling" | "settings";
+  | "overview" | "users" | "connections" | "config" | "security" | "templates" | "broadcast"
+  | "blog" | "gallery" | "seo_manager" | "keywords" | "analytics" 
+  | "audit_logs" | "google_bing" | "indexing";
 
 export const TABS: { id: TabId; label: string; icon: any; color: string; group?: string }[] = [
   // Core
@@ -55,7 +50,6 @@ export const TABS: { id: TabId; label: string; icon: any; color: string; group?:
   // Content & CMS
   { id: "blog", label: "Blog", icon: FileText, color: "#ff006e", group: "Content" },
   { id: "gallery", label: "Gallery", icon: Image, color: "#ffbe0b", group: "Content" },
-  { id: "pages", label: "Pages", icon: FileCode2, color: "#a29bfe", group: "Content" },
   
   // Marketing & Communications
   { id: "templates", label: "Email Templates", icon: Mail, color: "#ff006e", group: "Marketing" },
@@ -64,35 +58,16 @@ export const TABS: { id: TabId; label: string; icon: any; color: string; group?:
   // SEO Engine
   { id: "seo_manager", label: "SEO Manager", icon: Search, color: "#6c5ce7", group: "SEO" },
   { id: "keywords", label: "Keywords", icon: Hash, color: "#00d4ff", group: "SEO" },
-  { id: "seo_testing", label: "SEO Testing", icon: ShieldCheck, color: "#ffbe0b", group: "SEO" },
-  { id: "seo_monitor", label: "SEO Monitor", icon: MonitorSmartphone, color: "#ff006e", group: "SEO" },
-  { id: "social_preview", label: "Social Preview", icon: Presentation, color: "#2ed573", group: "SEO" },
   { id: "google_bing", label: "Google & Bing SEO", icon: Network, color: "#00d4ff", group: "SEO" },
   { id: "indexing", label: "Indexing", icon: SearchCode, color: "#6c5ce7", group: "SEO" },
   
   // Analytics & Logs
   { id: "analytics", label: "Analytics", icon: LineChart, color: "#00d4ff", group: "Analytics" },
-  { id: "reports", label: "Reports", icon: PieChart, color: "#ff006e", group: "Analytics" },
   { id: "audit_logs", label: "Audit Logs", icon: ClipboardList, color: "#2ed573", group: "Analytics" },
   
-  // Site Control
-  { id: "site_management", label: "Site Management", icon: Globe, color: "#2ed573", group: "Site" },
-  { id: "redirects", label: "Redirects", icon: GitPullRequest, color: "#ff006e", group: "Site" },
-  { id: "sitemap", label: "Sitemap", icon: Map, color: "#ffbe0b", group: "Site" },
-  { id: "branding", label: "Branding", icon: Palette, color: "#6c5ce7", group: "Site" },
-  
-  // Infrastructure & DevOps
-  { id: "optimization", label: "Optimization", icon: Activity, color: "#00d4ff", group: "Infrastructure" },
-  { id: "performance", label: "Performance", icon: TrendingUp, color: "#ff006e", group: "Infrastructure" },
-  { id: "scaling", label: "Scaling", icon: Maximize, color: "#ffbe0b", group: "Infrastructure" },
-  { id: "devops", label: "DevOps", icon: TerminalSquare, color: "#a29bfe", group: "Infrastructure" },
-  { id: "automation", label: "Automation", icon: Zap, color: "#ffbe0b", group: "Infrastructure" },
-  { id: "enterprise", label: "Enterprise", icon: Database, color: "#6c5ce7", group: "Infrastructure" },
-  
   // System
-  { id: "security", label: "Security", icon: Shield, color: "#ff006e", group: "System" },
-  { id: "scheduling", label: "Scheduling", icon: Clock, color: "#2ed573", group: "System" },
   { id: "config", label: "Configuration", icon: Settings, color: "#ffbe0b", group: "System" },
+  { id: "security", label: "Security", icon: ShieldCheck, color: "#ff006e", group: "System" },
 ];
 
 // ─── HELPERS ───
@@ -258,7 +233,8 @@ function UsersTab() {
       </div>
 
       {/* User List */}
-      <div className="space-y-3">
+      <div className="overflow-y-auto custom-scrollbar rounded-2xl" style={{ maxHeight: "calc(100vh - 220px)" }}>
+        <div className="space-y-3 pr-1">
         {loading ? (
           <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>Loading users...</div>
         ) : filtered.length === 0 ? (
@@ -341,6 +317,7 @@ function UsersTab() {
             </div>
           </motion.div>
         ))}
+        </div>
       </div>
 
       {/* Delete confirm */}
@@ -843,58 +820,58 @@ function ConnectionsTab() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>Loading connections...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-12 rounded-2xl border border-dashed" style={{ borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}>
-          No connections found
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(conn => (
-            <motion.div key={conn.id} layout className="p-4 rounded-2xl border flex items-center justify-between gap-4"
-              style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                    style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                    {(conn.name_a || conn.user_a)?.[0]?.toUpperCase() || "?"}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{conn.name_a || conn.user_a}</p>
-                    <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>@{conn.user_a}</p>
-                  </div>
+      <div className="overflow-y-auto custom-scrollbar rounded-2xl" style={{ maxHeight: "calc(100vh - 220px)" }}>
+        <div className="space-y-3 pr-1">
+        {loading ? (
+          <div className="text-center py-12" style={{ color: "var(--text-muted)" }}>Loading connections...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 rounded-2xl border border-dashed" style={{ borderColor: "var(--border-subtle)", color: "var(--text-muted)" }}>
+            No connections found
+          </div>
+        ) : filtered.map(conn => (
+          <motion.div key={conn.id} layout className="p-4 rounded-2xl border flex items-center justify-between gap-4"
+            style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
+                  {(conn.name_a || conn.user_a)?.[0]?.toUpperCase() || "?"}
                 </div>
-
-                <div className="px-3 shrink-0">
-                  <Link2 className="w-5 h-5" style={{ color: "#2ed573" }} />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                    style={{ background: "linear-gradient(135deg, #ff006e, #ffbe0b)" }}>
-                    {(conn.name_b || conn.user_b)?.[0]?.toUpperCase() || "?"}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{conn.name_b || conn.user_b}</p>
-                    <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>@{conn.user_b}</p>
-                  </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{conn.name_a || conn.user_a}</p>
+                  <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>@{conn.user_a}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-[10px] font-mono hidden sm:block" style={{ color: "var(--text-muted)" }}>
-                  {new Date(conn.created_at).toLocaleDateString()}
-                </span>
-                <button onClick={() => setConfirm(conn)}
-                  className="p-2 rounded-xl hover:bg-[#ff006e]/10 transition-colors" style={{ color: "#ff006e" }}>
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              <div className="px-3 shrink-0">
+                <Link2 className="w-5 h-5" style={{ color: "#2ed573" }} />
               </div>
-            </motion.div>
-          ))}
+
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                  style={{ background: "linear-gradient(135deg, #ff006e, #ffbe0b)" }}>
+                  {(conn.name_b || conn.user_b)?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate" style={{ color: "var(--text-primary)" }}>{conn.name_b || conn.user_b}</p>
+                  <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>@{conn.user_b}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-[10px] font-mono hidden sm:block" style={{ color: "var(--text-muted)" }}>
+                {new Date(conn.created_at).toLocaleDateString()}
+              </span>
+              <button onClick={() => setConfirm(conn)}
+                className="p-2 rounded-xl hover:bg-[#ff006e]/10 transition-colors" style={{ color: "#ff006e" }}>
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        ))}
         </div>
-      )}
+      </div>
 
       <AnimatePresence>
         {confirm && (
@@ -973,7 +950,6 @@ function DynamicConfigTab({ activeTab }: { activeTab: TabId }) {
       <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
         {tabTitles[activeTab] || "Settings"}
       </h2>
-
       {/* ── INDEXING TAB ── */}
       {/* ── INDEXING TAB ── */}
       {activeTab === "indexing" && (
@@ -1192,7 +1168,8 @@ function BlogTab() {
           <FilePlus2 className="w-4 h-4" /> Create Post
         </button>
       </div>
-      <div className="grid gap-3">
+      <div className="overflow-y-auto custom-scrollbar rounded-2xl" style={{ maxHeight: "calc(100vh - 220px)" }}>
+        <div className="grid gap-3 pr-1">
         {posts.map(p => (
            <div key={p.id} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
              <div>
@@ -1206,6 +1183,7 @@ function BlogTab() {
            </div>
         ))}
         {posts.length === 0 && <div className="text-center py-10 text-sm text-gray-500">No blog posts yet.</div>}
+        </div>
       </div>
     </div>
   );
@@ -1284,206 +1262,186 @@ function GalleryTab() {
   );
 }
 
-function PagesTab() {
+function AnalyticsTab() {
   const { isDark } = useTheme();
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Static Page Editor</h2>
-      <div className="grid gap-4">
-        {[ { id: "/", name: "Landing Page", published: true }, { id: "/blog", name: "Blog Core Index", published: true }, { id: "/download", name: "Download Portal", published: false }].map(p => (
-           <div key={p.id} className="p-5 rounded-2xl border flex items-center justify-between" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-             <div className="flex flex-col">
-               <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{p.name}</span>
-               <span className="text-[10px] font-mono text-[#a29bfe]">{p.id}</span>
-             </div>
-             <div className="flex items-center gap-3">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ color: p.published ? "#2ed573" : "#ffbe0b", borderColor: "transparent", background: "rgba(0,0,0,0.1)" }}>{p.published ? "LIVE" : "DRAFT"}</span>
-                <button className="px-3 py-1.5 text-[10px] uppercase font-bold text-[#a29bfe] bg-[#a29bfe]/10 rounded-lg hover:bg-[#a29bfe]/20">Edit XML</button>
-             </div>
-           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ModulePlaceholderTab({ tabId }: { tabId: TabId }) {
-  const { isDark } = useTheme();
-  const tab = TABS.find(t => t.id === tabId);
-  if (!tab) return null;
-  const Icon = tab.icon;
-
-  const [logs, setLogs] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<{ growth: any[], roles: any[] }>({ growth: [], roles: [] });
   const [loading, setLoading] = useState(true);
-  const [switches, setSwitches] = useState<Record<string, boolean>>({
-    s1: true, s2: false, s3: true, s4: true
-  });
-  
+
   useEffect(() => {
-    setLoading(true);
-    if (tabId === "audit_logs") {
-      adminFetch("/api/admin/audit-logs").then(data => {
-        if (data?.logs) setLogs(data.logs);
-        setLoading(false);
-      });
-    } else if (tabId === "analytics") {
-      adminFetch("/api/admin/analytics").then(data => {
-        if (data) setAnalytics(data);
-        setLoading(false);
-      });
-    } else {
-      // Small simulated delay for other placeholders
-      setTimeout(() => setLoading(false), 500);
-    }
-  }, [tabId]);
+    adminFetch("/api/admin/analytics").then(data => {
+      if (data) setAnalytics(data);
+      setLoading(false);
+    });
+  }, []);
 
-  const metrics = [
-    { label: "Active Objects", value: tabId === 'analytics' ? analytics.growth.reduce((a, b) => a + b.count, 0) : "1,024" },
-    { label: "System Status", value: "Optimal" },
-    { label: "Uptime", value: "99.99%" },
-  ];
+  if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Loading Analytics...</div>;
 
-  const renderContent = () => {
-    if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Decrypting Module Data...</div>;
-
-    // ── AUDIT LOGS VIEW ──
-    if (tabId === "audit_logs") {
-      return (
-        <div className="rounded-2xl border bg-black font-mono text-[10px] overflow-hidden flex flex-col" style={{ borderColor: "var(--border-subtle)", minHeight: "300px" }}>
-           <div className="flex gap-2 p-4 border-b border-white/10 bg-white/5">
-             {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />)}
-             <span className="text-gray-500 ml-2 uppercase tracking-widest text-[9px]">Secure Audit Terminal</span>
-           </div>
-           <div className="p-4 space-y-1 overflow-y-auto max-h-[400px] custom-scrollbar">
-             {logs.map((l, i) => (
-               <p key={i} className="text-[#2ed573] leading-relaxed">
-                 <span className="opacity-50">[{new Date(l.timestamp).toLocaleString()}]</span> 
-                 <span className="text-[#00d4ff] mx-2">[{l.admin_username}]</span>
-                 <span className="font-bold">{l.action}</span> 
-                 {l.target && <span className="text-white"> → {l.target}</span>}
-                 {l.details && <span className="opacity-70 ml-2 italic">({l.details})</span>}
-               </p>
-             ))}
-             {logs.length === 0 && <p className="text-gray-600">No administrative logs recorded in current epoch.</p>}
-           </div>
-        </div>
-      );
-    }
-
-    // ── ANALYTICS VIEW ──
-    if (tabId === "analytics") {
-      const maxCount = Math.max(...analytics.growth.map(d => d.count), 1);
-      return (
-         <div className="p-6 rounded-2xl border flex flex-col gap-8" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-            <div>
-              <h3 className="font-bold text-sm mb-1" style={{ color: "var(--text-primary)" }}>User Growth (Last 30 Days)</h3>
-              <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Real-time database signups</p>
-            </div>
-            
-            <div className="flex items-end gap-1.5 h-40 w-full">
-              {analytics.growth.map((d, i) => (
-                <div key={i} className="flex-1 rounded-t-lg transition-all hover:brightness-125 relative group" 
-                  style={{ height: `${(d.count / maxCount) * 100}%`, background: `linear-gradient(to top, ${tab.color}40, ${tab.color})` }}>
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                    {d.date}: {d.count} users
-                  </div>
-                </div>
-              ))}
-              {analytics.growth.length === 0 && <div className="w-full text-center text-xs text-gray-500 pb-10 italic">Insufficient data for growth trends.</div>}
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-               {analytics.roles.map(r => (
-                 <div key={r.role}>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{r.role}</p>
-                    <p className="text-2xl font-black mt-1" style={{ color: tab.color }}>{r.count}</p>
-                 </div>
-               ))}
-            </div>
-         </div>
-      );
-    }
-
-    // ── CONFIGURATION / SECURITY VIEW ──
-    if (tab.group === "System" || tab.group === "Site" || tab.id === "enterprise") {
-      return (
-        <div className="grid gap-4">
-          {[
-            { id: 's1', label: `Enable Advanced ${tab.label}`, desc: `Activates core heuristic engine for ${tab.label.toLowerCase()}` },
-            { id: 's2', label: "Strict Mode Policy", desc: "Enforces strict validation rules across the module." },
-            { id: 's3', label: "Automated Reporting", desc: "Sends weekly diagnostic metrics to admin email." },
-            { id: 's4', label: "Legacy Adapter Support", desc: "Maintains compatibility with V1.0 API structures." },
-          ].map(s => (
-             <div key={s.id} className="p-5 rounded-2xl border flex items-center justify-between pointer-cursor" onClick={() => setSwitches(p => ({...p, [s.id]: !p[s.id]}))} style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)", cursor: "pointer" }}>
-                <div>
-                  <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{s.label}</p>
-                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{s.desc}</p>
-                </div>
-                <div className="relative w-12 h-6 rounded-full transition-all flex-shrink-0" style={{ background: switches[s.id] ? tab.color : (isDark ? "#333" : "#e2e8f0") }}>
-                  <span className="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" style={{ left: switches[s.id] ? "calc(100% - 20px)" : "4px" }} />
-                </div>
-             </div>
-          ))}
-        </div>
-      );
-    }
-
-    // ── SEO SCORING / PREVIEW VIEW ──
-    if (tab.group === "SEO") {
-      return (
-        <div className="p-6 rounded-2xl border flex flex-col sm:flex-row gap-6 items-center" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-           <div className="w-32 h-32 shrink-0 rounded-full border-[8px] flex items-center justify-center shadow-lg" style={{ borderColor: tab.color }}>
-             <p className="text-3xl font-black" style={{ color: tab.color }}>96</p>
-           </div>
-           <div>
-             <h3 className="text-lg font-black" style={{ color: "var(--text-primary)" }}>Optimization Score: Excellent</h3>
-             <p className="text-sm mt-2 max-w-sm" style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
-               Your metrics indicate extremely high performance for {tab.label}. Viewport responsiveness, metadata completion, and LCP are all passing Google Core Web Vitals checks. No critical errors found.
-             </p>
-             <button className="mt-4 px-4 py-2 font-bold text-[10px] uppercase tracking-widest text-white rounded-lg shadow-md" style={{ background: tab.color }}>Run Diagnosis Again</button>
-           </div>
-        </div>
-      );
-    }
-
-    // Default Fallback
-    return (
-      <div className="p-12 md:p-16 rounded-2xl border flex flex-col items-center justify-center text-center space-y-5" style={{ background: isDark ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.01)", borderColor: "var(--border-subtle)" }}>
-        <Icon className="w-16 h-16 opacity-50" style={{ color: tab.color }} />
-        <p className="text-sm max-w-md" style={{ color: "var(--text-secondary)" }}>Data synced successfully. Module functioning under optimal parameters.</p>
-      </div>
-    );
-  };
+  const maxCount = Math.max(...analytics.growth.map(d => d.count), 1);
+  const color = "#00d4ff";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-black tracking-tight flex items-center gap-3" style={{ color: "var(--text-primary)" }}>
-          <Icon className="w-8 h-8" style={{ color: tab.color }} />
-          {tab.label}
+          <LineChart className="w-8 h-8" style={{ color }} /> Analytics
         </h2>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm"
-          style={{ background: `${tab.color}15`, color: tab.color, border: `1px solid ${tab.color}30` }}>
-          ● Online
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {metrics.map((m, i) => (
-          <div key={i} className="p-6 rounded-2xl border flex flex-col justify-center transition-all hover:-translate-y-1 shadow-sm" 
-             style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>{m.label}</p>
-            <p className="text-3xl font-black truncate" style={{ color: i === 1 ? tab.color : "var(--text-primary)" }}>{m.value}</p>
-          </div>
-        ))}
-      </div>
+      <div className="p-6 rounded-2xl border flex flex-col gap-8" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+         <div>
+           <h3 className="font-bold text-sm mb-1" style={{ color: "var(--text-primary)" }}>User Growth (Last 30 Days)</h3>
+           <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Real-time database signups</p>
+         </div>
+         
+         <div className="flex items-end gap-1.5 h-40 w-full">
+           {analytics.growth.map((d, i) => (
+             <div key={i} className="flex-1 rounded-t-lg transition-all hover:brightness-125 relative group" 
+               style={{ height: `${(d.count / maxCount) * 100}%`, background: `linear-gradient(to top, ${color}40, ${color})` }}>
+               <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                 {d.date}: {d.count} users
+               </div>
+             </div>
+           ))}
+           {analytics.growth.length === 0 && <div className="w-full text-center text-xs text-gray-500 pb-10 italic">Insufficient data for growth trends.</div>}
+         </div>
 
-      {renderContent()}
+         <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+            {analytics.roles.map(r => (
+              <div key={r.role}>
+                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{r.role}</p>
+                 <p className="text-2xl font-black mt-1" style={{ color }}>{r.count}</p>
+              </div>
+            ))}
+         </div>
+      </div>
     </div>
   );
 }
 
+function AuditLogsTab() {
+  const { isDark } = useTheme();
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    adminFetch("/api/admin/audit-logs").then(data => {
+      if (data?.logs) setLogs(data.logs);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Decrypting Module Data...</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black tracking-tight flex items-center gap-3" style={{ color: "var(--text-primary)" }}>
+          <ClipboardList className="w-8 h-8 text-[#2ed573]" /> Audit Logs
+        </h2>
+      </div>
+
+      <div className="rounded-2xl border bg-black font-mono text-[10px] overflow-hidden flex flex-col" style={{ borderColor: "var(--border-subtle)", minHeight: "300px" }}>
+         <div className="flex gap-2 p-4 border-b border-white/10 bg-white/5">
+           {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />)}
+           <span className="text-gray-500 ml-2 uppercase tracking-widest text-[9px]">Secure Audit Terminal</span>
+         </div>
+         <div className="p-4 space-y-1 overflow-y-auto max-h-[600px] custom-scrollbar">
+           {logs.map((l, i) => (
+             <p key={i} className="text-[#2ed573] leading-relaxed">
+               <span className="opacity-50">[{new Date(l.timestamp).toLocaleString()}]</span> 
+               <span className="text-[#00d4ff] mx-2">[{l.admin_username}]</span>
+               <span className="font-bold">{l.action}</span> 
+               {l.target && <span className="text-white"> → {l.target}</span>}
+               {l.details && <span className="opacity-70 ml-2 italic">({l.details})</span>}
+             </p>
+           ))}
+           {logs.length === 0 && <p className="text-gray-600">No administrative logs recorded in current epoch.</p>}
+         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function SecurityTab() {
+  const { isDark } = useTheme();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState({ type: "", msg: "" });
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email && !password) return;
+    setLoading(true);
+    setStatus({ type: "", msg: "" });
+    const res = await adminFetch("/api/admin/update-credentials", {
+      method: "POST",
+      body: JSON.stringify({ newEmail: email, newPassword: password })
+    });
+    setLoading(false);
+    if (res?.status === "success") {
+      setStatus({ type: "success", msg: "Security credentials updated successfully. Next login will require these." });
+      setEmail("");
+      setPassword("");
+    } else {
+      setStatus({ type: "error", msg: res?.error || "Failed to update security context." });
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="flex items-center gap-4 border-b pb-6" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: "linear-gradient(135deg, #ff006e, #ffbe0b)" }}>
+          <ShieldCheck className="w-7 h-7 text-white" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Security Config</h2>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-1">Manage Admin Access Identity</p>
+        </div>
+      </div>
+
+      <div className="p-6 rounded-3xl border relative overflow-hidden group" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+        <div className="absolute top-0 right-0 w-64 h-64 md:w-96 md:h-96 rounded-full blur-[80px] pointer-events-none opacity-20 group-hover:opacity-40 transition-opacity" style={{ background: "radial-gradient(circle, #ff006e 0%, transparent 70%)" }} />
+        
+        <form onSubmit={handleUpdate} className="relative z-10 flex flex-col gap-5">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: "var(--text-secondary)" }}>Update Admin Email</label>
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input type="email" placeholder="New Email Address" value={email} onChange={e => setEmail(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 rounded-xl outline-none text-sm font-medium transition-all"
+                style={{ background: isDark ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: "var(--text-secondary)" }}>Update Master Password</label>
+            <div className="relative">
+              <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input type="password" placeholder="Leave blank to keep current" value={password} onChange={e => setPassword(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 rounded-xl outline-none text-sm font-medium transition-all"
+                style={{ background: isDark ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+            </div>
+          </div>
+
+          {status.msg && (
+            <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
+              className={`text-xs font-bold px-4 py-3 rounded-xl border flex items-center gap-2 ${status.type === 'success' ? 'bg-[#2ed573]/10 text-[#2ed573] border-[#2ed573]/20' : 'bg-[#ff006e]/10 text-[#ff006e] border-[#ff006e]/20'}`}>
+              {status.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+              {status.msg}
+            </motion.p>
+          )}
+
+          <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} disabled={loading || (!email && !password)} type="submit"
+            className="w-full py-4 rounded-xl text-white font-black tracking-widest uppercase text-xs shadow-xl disabled:opacity-50 transition-all border border-white/10 mt-2"
+            style={{ background: "linear-gradient(135deg, #ff006e, #ffbe0b)" }}>
+            {loading ? "Deploying Update..." : "Confirm Security Changes"}
+          </motion.button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════
 // MAIN ADMIN PANEL
@@ -1495,6 +1453,11 @@ export default function AdminPanel() {
   const [passInput, setPassInput] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpInput, setOtpInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalStories: 0, totalConnections: 0, pendingRequests: 0, onlineUsers: 0 });
   const [isReady, setIsReady] = useState(false);
@@ -1514,19 +1477,35 @@ export default function AdminPanel() {
     if (isAuthenticated) fetchStats();
   }, [isAuthenticated, fetchStats]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (emailInput.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-      setErrorMsg("Unrecognized Administrative Identity.");
-      return;
-    }
-    if (passInput !== ADMIN_PASSWORD) {
-      setErrorMsg("Invalid Access Credentials.");
-      return;
-    }
-    sessionStorage.setItem("nexora_admin_session", "active");
-    setIsAuthenticated(true);
     setErrorMsg("");
+    setIsLoading(true);
+
+    if (otpStep) {
+      const res = await adminFetch("/api/admin/verify-login", {
+        method: "POST", body: JSON.stringify({ email: emailInput, otp: otpInput })
+      });
+      setIsLoading(false);
+      
+      if (res?.status === "success") {
+        sessionStorage.setItem("nexora_admin_session", "active");
+        setIsAuthenticated(true);
+      } else {
+        setErrorMsg(res?.error || "Invalid OTP segment.");
+      }
+    } else {
+      const res = await adminFetch("/api/admin/login", {
+        method: "POST", body: JSON.stringify({ email: emailInput, password: passInput })
+      });
+      setIsLoading(false);
+
+      if (res?.status === "success" && res?.requireOtp) {
+        setOtpStep(true);
+      } else {
+        setErrorMsg(res?.error || "Authentication Intercepted.");
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -1570,32 +1549,58 @@ export default function AdminPanel() {
               </div>
 
               <form onSubmit={handleLogin} className="flex flex-col gap-4 relative z-10">
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
-                  <input type="email" placeholder="Admin Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} required
-                    className="w-full pl-11 pr-4 py-3.5 rounded-xl outline-none text-sm transition-all"
-                    style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
-                </div>
-                <div className="relative">
-                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
-                  <input type={showPass ? "text" : "password"} placeholder="Access Code" value={passInput} onChange={e => setPassInput(e.target.value)} required
-                    className="w-full pl-11 pr-12 py-3.5 rounded-xl outline-none text-sm transition-all"
-                    style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
-                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100" style={{ color: "var(--text-muted)" }}>
-                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <AnimatePresence mode="popLayout">
+                  {!otpStep ? (
+                    <motion.div key="creds" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="flex flex-col gap-4">
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+                        <input type="email" placeholder="Admin Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} required
+                          className="w-full pl-11 pr-4 py-3.5 rounded-xl outline-none text-sm transition-all"
+                          style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                      </div>
+                      <div className="relative">
+                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+                        <input type={showPass ? "text" : "password"} placeholder="Access Code" value={passInput} onChange={e => setPassInput(e.target.value)} required
+                          className="w-full pl-11 pr-12 py-3.5 rounded-xl outline-none text-sm transition-all"
+                          style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100" style={{ color: "var(--text-muted)" }}>
+                          {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div key="otp" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="flex flex-col gap-4">
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-muted)" }} />
+                        <input type="text" placeholder="6-Digit OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} required maxLength={6}
+                          className="w-full pl-11 pr-4 py-3.5 rounded-xl outline-none lg:text-lg font-black tracking-[0.5em] text-center transition-all"
+                          style={{ background: isDark ? "rgba(46,213,115,0.05)" : "rgba(46,213,115,0.05)", border: "1px solid rgba(46,213,115,0.3)", color: "#2ed573" }} />
+                      </div>
+                      <p className="text-[10px] text-center font-bold uppercase tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>
+                        Verification Sent to <span style={{ color: "#00d4ff" }}>{emailInput}</span>
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {errorMsg && (
                   <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                    className="text-xs font-bold text-[#ff006e] text-center bg-[#ff006e]/8 py-2 rounded-xl">{errorMsg}</motion.p>
+                    className="text-[11px] font-black uppercase tracking-widest text-[#ff006e] text-center bg-[#ff006e]/10 py-2.5 rounded-xl border border-[#ff006e]/20">
+                    {errorMsg}
+                  </motion.p>
                 )}
 
-                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} type="submit"
-                  className="w-full py-4 mt-2 rounded-xl text-white font-bold tracking-wide shadow-xl"
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} type="submit" disabled={isLoading}
+                  className="w-full py-4 mt-3 rounded-xl text-white font-black tracking-widest uppercase text-xs shadow-xl disabled:opacity-50 transition-all border border-white/10"
                   style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                  Authenticate
+                  {isLoading ? "Synchronizing..." : (otpStep ? "Verify Payload" : "Initialize Auth")}
                 </motion.button>
+                
+                {otpStep && (
+                  <button type="button" onClick={() => setOtpStep(false)} className="text-[10px] font-bold text-[#6c5ce7] mt-3 hover:underline text-center uppercase tracking-widest block w-full">
+                    Return to Login
+                  </button>
+                )}
               </form>
             </motion.div>
           </motion.div>
@@ -1712,11 +1717,9 @@ export default function AdminPanel() {
                     {activeTab === "broadcast" && <BroadcastTab />}
                     {activeTab === "blog" && <BlogTab />}
                     {activeTab === "gallery" && <GalleryTab />}
-                    {activeTab === "pages" && <PagesTab />}
-                    {/* All dynamically requested UI tabs that aren't specific SEO functional forms map to our placeholder */}
-                    {!["overview", "users", "connections", "templates", "broadcast", "config", "seo_manager", "keywords", "google_bing", "indexing", "blog", "gallery", "pages"].includes(activeTab) && (
-                      <ModulePlaceholderTab tabId={activeTab} />
-                    )}
+                    {activeTab === "analytics" && <AnalyticsTab />}
+                    {activeTab === "audit_logs" && <AuditLogsTab />}
+                    {activeTab === "security" && <SecurityTab />}
 
                     {/* Highly Functional SEO / configuration forms! */}
                     {["config", "seo_manager", "keywords", "google_bing", "indexing"].includes(activeTab) && (

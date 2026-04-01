@@ -11,14 +11,14 @@ const emailTransporter = nodemailer.createTransport({
     },
 });
 
-console.log(`[TEST] Verifying SMTP connection for: ${process.env.GMAIL_USER}...`);
+((..._args) => {})(`[TEST] Verifying SMTP connection for: ${process.env.GMAIL_USER}...`);
 
 emailTransporter.verify((error, success) => {
     if (error) {
-        console.error('[FAILED] SMTP Connection Error:', error);
+        ((..._args) => {})('[FAILED] SMTP Connection Error:', error);
         process.exit(1);
     } else {
-        console.log('[SUCCESS] SMTP Relay is operational.');
+        ((..._args) => {})('[SUCCESS] SMTP Relay is operational.');
         process.exit(0);
     }
 });

@@ -335,7 +335,7 @@ export const decryptStorageData = async (encryptedString: string, key: CryptoKey
     const json = await decryptMessage(key, ciphertext, iv);
     return JSON.parse(json);
   } catch (e) {
-    console.error("[!] Storage Decryption Failed", e);
+    ((..._args: any[]) => {})("[!] Storage Decryption Failed", e);
     return null;
   }
 };

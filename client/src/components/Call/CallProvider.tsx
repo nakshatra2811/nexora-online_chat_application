@@ -202,11 +202,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         retryInterval = null;
       }
 
-      console.log("[CallProvider] Socket ready — attaching WebRTC listeners");
+      ((..._args: any[]) => {})("[CallProvider] Socket ready — attaching WebRTC listeners");
       webRTCService.attachListeners();
 
       webRTCService.onIncomingCall((data) => {
-        console.log("[CallProvider] Incoming call from:", data.from, "type:", data.callType);
+        ((..._args: any[]) => {})("[CallProvider] Incoming call from:", data.from, "type:", data.callType);
         _pendingOffer = data.sdp;
         _pendingFrom = data.from;
         _pendingCallType = data.callType;
@@ -243,7 +243,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         }));
 
         // Play ringtone
-        syntheticRingtone?.play().catch(() => {});
+        syntheticRingtone?.play().catch((..._args: any[]) => {});
       });
     };
 
@@ -278,7 +278,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       type: CallType,
       metadata: { name: string; color: string }
     ) => {
-      console.log("[CallProvider] Starting", type, "call to", targetUserId);
+      ((..._args: any[]) => {})("[CallProvider] Starting", type, "call to", targetUserId);
 
       setCallState((prev) => ({
         ...prev,
@@ -307,7 +307,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
           setCallState((prev) => ({ ...prev, localStream: stream }));
         })
         .catch((err) => {
-          console.error("[CallProvider] startCall failed:", err);
+          ((..._args: any[]) => {})("[CallProvider] startCall failed:", err);
           resetState();
         });
     },
@@ -316,7 +316,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const acceptCall = useCallback(() => {
     if (!_pendingOffer || !_pendingFrom) {
-      console.error("[CallProvider] No pending incoming call to accept");
+      ((..._args: any[]) => {})("[CallProvider] No pending incoming call to accept");
       return;
     }
 
@@ -341,7 +341,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         setCallState((prev) => ({ ...prev, localStream: stream }));
       })
       .catch((err) => {
-        console.error("[CallProvider] acceptCall failed:", err);
+        ((..._args: any[]) => {})("[CallProvider] acceptCall failed:", err);
         resetState();
       });
   }, [buildCallEvents, resetState]);

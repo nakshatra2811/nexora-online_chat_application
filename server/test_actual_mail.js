@@ -18,14 +18,14 @@ const mailOptions = {
     text: 'This is a test email to verify that SMTP relay is working correctly for login/recovery mails.'
 };
 
-console.log(`[TEST] Sending real test email to: ${process.env.GMAIL_USER}...`);
+((..._args) => {})(`[TEST] Sending real test email to: ${process.env.GMAIL_USER}...`);
 
 emailTransporter.sendMail(mailOptions, (error, info) => {
     if (error) {
-        console.error('[FAILED] Email failed to send:', error);
+        ((..._args) => {})('[FAILED] Email failed to send:', error);
         process.exit(1);
     } else {
-        console.log('[SUCCESS] Email sent successfully:', info.response);
+        ((..._args) => {})('[SUCCESS] Email sent successfully:', info.response);
         process.exit(0);
     }
 });

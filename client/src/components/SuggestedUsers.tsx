@@ -32,13 +32,13 @@ export function SuggestedUsers() {
             ).filter(num => num.length >= 10);
           }
         } catch (err: any) {
-          console.warn("Contact selection cancelled or failed:", err.message);
+          ((..._args: any[]) => {})("Contact selection cancelled or failed:", err.message);
           setIsSyncing(false);
           return;
         }
       } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         // DEVELOPER BYPASS: Mock data for localhost testing
-        console.info("[DEV] Localhost detected — injecting mock protocol for testing.");
+        ((..._args: any[]) => {})("[DEV] Localhost detected — injecting mock protocol for testing.");
         contactNumbers = ["9876543210", "9876543211", "9876543212", "9876543213", "9876543214", "9876543215"];
       } else {
         // Fallback for Production Desktop/Unsupported browsers
@@ -61,7 +61,7 @@ export function SuggestedUsers() {
         }
       }
     } catch (err) {
-      console.error("Sync protocol failure:", err);
+      ((..._args: any[]) => {})("Sync protocol failure:", err);
     } finally {
       setIsSyncing(false);
     }
@@ -76,7 +76,7 @@ export function SuggestedUsers() {
       });
       setSentUsernames(prev => [...prev, target]);
     } catch (err) {
-      console.error("Follow failed", err);
+      ((..._args: any[]) => {})("Follow failed", err);
     }
   };
 
@@ -88,7 +88,7 @@ export function SuggestedUsers() {
         title: 'Connect with me on Nexora',
         text: `Hey! Find me on Nexora Private Chat: @${username}`,
         url: url,
-      }).catch(console.error);
+      }).catch(((..._args: any[]) => {}));
     } else {
       navigator.clipboard.writeText(url);
       alert("Profile link copied to clipboard!");

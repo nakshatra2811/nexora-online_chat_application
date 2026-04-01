@@ -83,7 +83,7 @@ function AuthContent() {
             setConnectedUser(data);
           }
         } catch (e) {
-          console.error("Connect Protocol Error");
+          ((..._args: any[]) => {})("Connect Protocol Error");
         } finally {
           setFetchingTarget(false);
         }

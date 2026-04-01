@@ -97,7 +97,7 @@ export default function StoriesPage() {
           setCurrentUser(res.user);
           if (res.user.avatarUrl) localStorage.setItem("nexora_avatar_url", res.user.avatarUrl);
         }
-      } catch (e) { console.error(e); }
+      } catch (e) { ((..._args: any[]) => {})(e); }
     };
     
     fetchMe();
@@ -110,7 +110,7 @@ export default function StoriesPage() {
         const username = localStorage.getItem("nexora_signup_username");
         const res = await nexoraFetch(`/api/chats/threads?username=${username}`);
         if (res && res.threads) setThreads(res.threads);
-      } catch (e) { console.error(e); }
+      } catch (e) { ((..._args: any[]) => {})(e); }
     };
 
     fetchThreads();
@@ -146,7 +146,7 @@ export default function StoriesPage() {
         const username = selectedProfileUser.username;
         const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(username)}`);
         if (res && res.user) setProfileData(res.user);
-      } catch (e) { console.error(e); }
+      } catch (e) { ((..._args: any[]) => {})(e); }
       finally { setLoadingProfile(false); }
     };
     fetchProfile();
@@ -234,7 +234,7 @@ export default function StoriesPage() {
         setLikeCount(initialLikeCount);
       }
     } catch (e) {
-      console.error("Failed to fetch stories");
+      ((..._args: any[]) => {})("Failed to fetch stories");
     }
   };
 

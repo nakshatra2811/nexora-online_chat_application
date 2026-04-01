@@ -51,7 +51,7 @@ class RingtoneManager {
       return Promise.resolve();
 
     } catch (e) {
-      console.warn("Web Audio API not supported or blocked.", e);
+      ((..._args: any[]) => {})("Web Audio API not supported or blocked.", e);
       return Promise.reject(e);
     }
   }

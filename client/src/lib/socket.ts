@@ -13,11 +13,11 @@ class SocketService {
       });
 
       this.socket.on("connect", () => {
-        console.log("[Client] Connected to Void Server:", this.socket?.id);
+        ((..._args: any[]) => {})("[Client] Connected to Void Server:", this.socket?.id);
       });
 
       this.socket.on("disconnect", () => {
-        console.log("[Client] Disconnected from Void Server.");
+        ((..._args: any[]) => {})("[Client] Disconnected from Void Server.");
       });
     }
     return this.socket;

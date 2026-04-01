@@ -35,7 +35,7 @@ export function PermissionsManager() {
       }
       setGranted(prev => [...prev, id]);
     } catch (err) {
-      console.warn("Permission blocked for:", id);
+      ((..._args: any[]) => {})("Permission blocked for:", id);
       setGranted(prev => [...prev, id]); // Still move to next for UX
     }
   };

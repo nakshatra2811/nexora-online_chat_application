@@ -243,3 +243,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
     min-height: 52px;
   }
 }
+
+/* ═══════ CURSOR SETTINGS ═══════ */
+button, 
+[role="button"], 
+input[type="submit"], 
+input[type="button"], 
+input[type="reset"] {
+  cursor: pointer !important;
+}

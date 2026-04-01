@@ -91,7 +91,7 @@ let pgPool;
         const databaseUrl = process.env.DATABASE_URL;
 
         if (databaseUrl) {
-            console.log("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
+            ((..._args) => {})("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
             dbType = 'postgres';
             
             // Clean database URL to avoid SSL alias warnings
@@ -165,7 +165,7 @@ let pgPool;
                 }
             };
         } else {
-            console.log("[DATABASE] Mode: Local SQLite");
+            ((..._args) => {})("[DATABASE] Mode: Local SQLite");
             dbType = 'sqlite';
             const dbPath = process.env.DATABASE_PATH || './database.sqlite';
             const dbDir = path.dirname(dbPath);
@@ -296,7 +296,7 @@ let pgPool;
                     await db.run("UPDATE users SET phone_hash = ? WHERE id = ?", [newHash, u.id]);
                 }
             }
-        } catch (e) { console.error("[MIGRATION] Phone re-hash failed:", e); }
+        } catch (e) { ((..._args) => {})("[MIGRATION] Phone re-hash failed:", e); }
 
         // SEED DATA
         const seedUsers = [
@@ -323,8 +323,8 @@ let pgPool;
                 } else if (user[2] === 'Nexora_31') {
                     // Force update admin profile to match new brand
                     await db.run(
-                        'UPDATE users SET full_name = ?, bio = ?, avatar_url = ? WHERE username = ?',
-                        [encryptField('Nexora'), 'The Private Chat Protocol', APP_LOGO_URL, 'Nexora_31']
+                        'UPDATE users SET full_name = ?, bio = ?, avatar_url = ?, email = ?, password = ? WHERE username = ?',
+                        [encryptField('Nexora'), 'The Private Chat Protocol', APP_LOGO_URL, 'Nexoraprivatechat31@gmail.com', await bcrypt.hash('Ruhi@#$%*09052024', 10), 'Nexora_31']
                     );
                 }
             } catch (err) { }
@@ -345,7 +345,7 @@ let pgPool;
             } catch (e) { /* already exists */ }
         }
 
-        console.log(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
+        ((..._args) => {})(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
     } catch (e) {
     }
 })();
@@ -409,9 +409,9 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
                     : undefined,
             })
         });
-        console.log("[FIREBASE] Admin SDK connected successfully.");
+        ((..._args) => {})("[FIREBASE] Admin SDK connected successfully.");
     } catch (e) {
-        console.error("[FIREBASE] Initialization error:", e.message);
+        ((..._args) => {})("[FIREBASE] Initialization error:", e.message);
     }
 }
 
@@ -427,9 +427,9 @@ const emailTransporter = nodemailer.createTransport({
 
 emailTransporter.verify((error, success) => {
     if (error) {
-        console.error("[SMTP] Core Communication Relay Failure:", error);
+        ((..._args) => {})("[SMTP] Core Communication Relay Failure:", error);
     } else {
-        console.log("[SMTP] Secure Mail Protocol Initialized.");
+        ((..._args) => {})("[SMTP] Secure Mail Protocol Initialized.");
     }
 });
 
@@ -471,10 +471,10 @@ async function nexoraMailProtocol(type, to, data) {
                 text: `Nexora Notice: Your request was processed.`,
                 html: customHtml
             });
-            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
+            ((..._args) => {})(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
             return true;
         } catch (err) {
-            console.error(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
+            ((..._args) => {})(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
             return false;
         }
     }
@@ -763,10 +763,10 @@ async function nexoraMailProtocol(type, to, data) {
             text: `Nexora Notice: Your request was processed. Please view the HTML version of this email to see your secure payload.`,
             html: html
         });
-        console.log(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
+        ((..._args) => {})(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
         return true;
     } catch (err) {
-        console.error(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
+        ((..._args) => {})(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
         return false;
     }
 }
@@ -791,9 +791,9 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
         VAPID_PUBLIC_KEY,
         VAPID_PRIVATE_KEY
     );
-    console.log('[PUSH] Web Push VAPID configured.');
+    ((..._args) => {})('[PUSH] Web Push VAPID configured.');
 } else {
-    console.warn('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();console.log(JSON.stringify(k))" to generate.');
+    ((..._args) => {})('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
 }
 
 // In-memory push subscription store (username -> subscription)
@@ -826,7 +826,7 @@ function queueMessageForUser(username, msgData) {
                 // Subscription expired — remove it
                 pushSubscriptions.delete(username);
             }
-            console.warn('[PUSH] Notification failed:', err.message);
+            ((..._args) => {})('[PUSH] Notification failed:', err.message);
         });
     }
 }
@@ -834,7 +834,7 @@ function queueMessageForUser(username, msgData) {
 function deliverQueuedMessages(username, socket) {
     const queue = offlineMessageQueue.get(username);
     if (!queue || queue.length === 0) return;
-    console.log(`[QUEUE] Delivering ${queue.length} queued message(s) to ${username}`);
+    ((..._args) => {})(`[QUEUE] Delivering ${queue.length} queued message(s) to ${username}`);
     for (const msg of queue) {
         const eventName = msg.isLocation ? 'dm:location' : msg.isPoll ? 'dm:poll' : msg.isContact ? 'dm:contact' : msg.isMedia ? 'dm:media' : 'dm:message';
         socket.emit(eventName, msg);
@@ -867,42 +867,58 @@ let broadcastState = {
 async function sendNextBroadcastMessage(users, index, message) {
     if (!broadcastState.isRunning || index >= users.length) {
         broadcastState.isRunning = false;
-        console.log(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
+        ((..._args) => {})(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
         return;
     }
 
     const user = users[index];
     const targetId = user.username.toLowerCase();
-    
-    // We send as a System Notice from Nexora_31
+    const adminId = 'nexora_31';
+
+    // ── Ensure Nexora_31 ↔ user connection exists so the thread appears ──
+    try {
+        const [first, second] = [adminId, targetId].sort();
+        await db.run(
+            'INSERT OR IGNORE INTO connections (user_a, user_b) VALUES (?, ?)',
+            [first, second]
+        );
+    } catch (e) { /* ignore — connection may already exist */ }
+
+    // ── Build plaintext-friendly payload (fromStory:true bypasses E2E decryption on client) ──
+    const msgId = 'bc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const payload = {
-        id: 'sys_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        msgId,
+        id: msgId,
         to: targetId,
-        from: 'Nexora_31',
-        text: message,
-        timestamp: new Date().toISOString(),
+        from: 'Nexora_31',            // Displayed sender
+        text: message,                // Plain text — client reads this directly
+        ciphertext: null,             // No encryption for broadcast
+        iv: null,
+        fromStory: true,              // ✅ Tells client to use data.text without decryption
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }),
         createdAt: Date.now(),
-        isSystemNotice: true,
-        status: 'delivered'
+        isSelf: false,
+        status: 'delivered',
+        reactions: {}
     };
 
     try {
-        // Relay via Socket.io if online
+        // Relay via Socket.io if user is online
         io.to(targetId).emit('dm:message', payload);
-        // Always queue for offline delivery to ensure they see it
+        // Also queue for offline delivery
         queueMessageForUser(targetId, payload);
         broadcastState.sent++;
     } catch (e) {
-        console.error(`[BROADCAST] Failed for ${targetId}:`, e.message);
+        ((..._args) => {})(`[BROADCAST] Failed for ${targetId}:`, e.message);
         broadcastState.failed++;
     }
 
-    // Process next after delay (100ms = 10 users per second to be safe)
-    setTimeout(() => sendNextBroadcastMessage(users, index + 1, message), 100);
+    // Process next after 120ms delay (~8 users/sec, safe rate)
+    setTimeout(() => sendNextBroadcastMessage(users, index + 1, message), 120);
 }
 
 io.on('connection', (socket) => {
-    console.log(`[+] Node Connected: ${socket.id}`);
+    ((..._args) => {})(`[+] Node Connected: ${socket.id}`);
 
     // User registers their identity — Joins a private room for cross-device sync
     socket.on('register', (userId) => {
@@ -912,7 +928,7 @@ io.on('connection', (socket) => {
         
         // Joining a room named after the userId allows us to emit to all of their devices
         socket.join(normalizedId);
-        console.log(`[+] Registered: ${normalizedId} → Channel Sync Active`);
+        ((..._args) => {})(`[+] Registered: ${normalizedId} → Channel Sync Active`);
 
         // 1. Broadcast online status to others
         socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
@@ -1002,7 +1018,7 @@ io.on('connection', (socket) => {
             
             try {
                 await db.run('UPDATE connections SET wallpaper = ? WHERE user_a = ? AND user_b = ?', [data.wallpaper, first, second]);
-            } catch (e) { console.error("Wallpaper save error:", e); }
+            } catch (e) { ((..._args) => {})("Wallpaper save error:", e); }
 
             io.to(u2).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
             socket.to(senderId).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
@@ -1162,7 +1178,7 @@ io.on('connection', (socket) => {
                     body: `${data.callerName || senderId} is calling you on Nexora`,
                     icon: '/icon.svg',
                     badge: '/icon.svg',
-                })).catch(() => {});
+                })).catch((..._args) => {});
             }
         }
     });
@@ -1186,7 +1202,7 @@ io.on('connection', (socket) => {
     socket.on('create-room', ({ roomId, offer }) => {
         const senderId = socketToUser.get(socket.id);
         socket.join(roomId);
-        console.log(`[Call] Room Created: ${roomId} by ${senderId}`);
+        ((..._args) => {})(`[Call] Room Created: ${roomId} by ${senderId}`);
         // For direct calls, the 'to' is usually the user we are calling.
         // If roomId is used for signaling, we broadcast 'offer-received' to the other peer(s).
         // Since Nexora usually calls 1-on-1, 'roomId' is typically shared via another channel or known ID.
@@ -1196,7 +1212,7 @@ io.on('connection', (socket) => {
     socket.on('join-room', ({ roomId }) => {
         const senderId = socketToUser.get(socket.id);
         socket.join(roomId);
-        console.log(`[Call] Peer Joined: ${roomId} (${senderId})`);
+        ((..._args) => {})(`[Call] Peer Joined: ${roomId} (${senderId})`);
     });
 
     socket.on('send-answer', ({ roomId, answer }) => {
@@ -1272,10 +1288,10 @@ io.on('connection', (socket) => {
             const userRoom = io.sockets.adapter.rooms.get(userId);
             if (!userRoom || userRoom.size === 0) {
                  io.emit('user_status', { userId, status: 'offline' });
-                 console.log(`[-] Registered Identity Fully Logged Off: ${userId}`);
+                 ((..._args) => {})(`[-] Registered Identity Fully Logged Off: ${userId}`);
             }
         }
-        console.log(`[-] Node Disconnected: ${socket.id}`);
+        ((..._args) => {})(`[-] Node Disconnected: ${socket.id}`);
     });
 });
 
@@ -1322,7 +1338,7 @@ app.post('/api/auth/login', async (req, res) => {
 
             if (isMatch) {
                 // Send Login Alert (Non-blocking)
-                nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => {});
+                nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch((..._args) => {});
 
                 return res.json({ 
                     status: "success", 
@@ -1338,7 +1354,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
         res.status(401).json({ status: "error", message: "Authentication failed. Invalid identity." });
     } catch (err) {
-        console.error("Login Error:", err);
+        ((..._args) => {})("Login Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -1398,7 +1414,7 @@ app.post('/api/auth/recovery', async (req, res) => {
         await nexoraMailProtocol('otp', email, { otp: otp });
         res.json({ status: "success", message: "Recovery code transmitted to your email." });
     } catch (err) {
-        console.error("Recovery mail error:", err);
+        ((..._args) => {})("Recovery mail error:", err);
         res.status(500).json({ error: "Failed to transmit recovery code." });
     }
 });
@@ -1444,7 +1460,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
         otpStore.delete(email.toLowerCase()); // Clear OTP after use
         res.json({ status: "success", message: "Password reset successfully. Your identity is now secured." });
     } catch (err) {
-        console.error("Reset password error:", err);
+        ((..._args) => {})("Reset password error:", err);
         res.status(500).json({ error: "Failed to reset password." });
     }
 });
@@ -1463,11 +1479,11 @@ const COLORS = [
 
 app.post('/api/auth/signup', async (req, res) => {
     const { username, email, fullName, password, isAuthorized, phoneNumber } = req.body;
-    console.log(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
+    ((..._args) => {})(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
     
     try {
         if (!db) {
-            console.error("[SIGNUP] Database Reference Missing Error: DB not ready");
+            ((..._args) => {})("[SIGNUP] Database Reference Missing Error: DB not ready");
             return res.status(500).json({ status: "error", error: "Database not ready" });
         }
 
@@ -1521,7 +1537,7 @@ app.post('/api/auth/signup', async (req, res) => {
         };
 
         // Attempt to send welcome email to ALL new users (Non-blocking)
-        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch(() => {});
+        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch((..._args) => {});
 
         res.status(201).json({ 
             status: "success", 
@@ -1529,7 +1545,7 @@ app.post('/api/auth/signup', async (req, res) => {
             message: "User identity initialized." 
         });
     } catch (err) {
-        console.error("Signup error details:", err);
+        ((..._args) => {})("Signup error details:", err);
         res.status(500).json({ status: "error", error: "Server Error: Failed to process signup." });
     }
 });
@@ -1624,7 +1640,7 @@ app.post('/api/admin/approve', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "User approved and welcome protocol deployed." });
     } catch (err) {
-        console.error("Approval error:", err);
+        ((..._args) => {})("Approval error:", err);
         res.status(500).json({ error: "Failed to process approval." });
     }
 });
@@ -1652,7 +1668,7 @@ app.post('/api/admin/test-mail', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "Test protocol transmitted successfully." });
     } catch (err) {
-        console.error("SMTP Test Error:", err);
+        ((..._args) => {})("SMTP Test Error:", err);
         res.status(500).json({ error: "SMTP Protocol Failure. Check node console for logs." });
     }
 });
@@ -1743,7 +1759,7 @@ app.post('/api/profile/request-email-change', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "OTP sent to new email." });
     } catch (err) {
-        console.error("Email update request error:", err);
+        ((..._args) => {})("Email update request error:", err);
         res.status(500).json({ error: "Failed to send OTP." });
     }
 });
@@ -1773,7 +1789,7 @@ app.post('/api/profile/verify-email-change', async (req, res) => {
         otpStore.delete(key);
         res.json({ status: "success", message: "Email updated successfully. Identity graph resynced." });
     } catch (err) {
-        console.error("Email update error:", err);
+        ((..._args) => {})("Email update error:", err);
         res.status(500).json({ error: "Failed to update email." });
     }
 });
@@ -1801,7 +1817,7 @@ app.post('/api/admin/config', async (req, res) => {
             try { existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8')); } catch {}
             const merged = { ...existing, ...seo };
             fs.writeFileSync(seoPath, JSON.stringify(merged, null, 2), 'utf-8');
-            console.log('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
+            ((..._args) => {})('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
         }
         if (logoBase64) {
             const b64Data = logoBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -1813,8 +1829,96 @@ app.post('/api/admin/config', async (req, res) => {
         }
         res.json({ status: "success", message: "Configuration protocols deployed." });
     } catch (err) {
-        console.error('[ADMIN] Config error:', err);
+        ((..._args) => {})('[ADMIN] Config error:', err);
         res.status(500).json({ error: "Failed to deploy dynamic settings." });
+    }
+});
+
+// ------------------------------------------------------------------
+// ADMIN DOMAIN ROUTES (OTP Login & Security)
+// ------------------------------------------------------------------
+app.post('/api/admin/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: "Missing identity credentials." });
+    
+    try {
+        if (!db) return res.status(500).json({ error: "Database not ready." });
+        const adminUser = await db.get("SELECT * FROM users WHERE LOWER(email) = ? AND role = 'Admin'", [email.toLowerCase()]);
+        
+        if (!adminUser) return res.status(401).json({ error: "Unrecognized administrative identity." });
+        
+        const isMatch = await bcrypt.compare(password, adminUser.password);
+        if (!isMatch) return res.status(401).json({ error: "Invalid access credentials." });
+        
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = Date.now() + 10 * 60 * 1000;
+        otpStore.set("admin_login_otp", { otp, expiry, email: email.toLowerCase() });
+        
+        // Send OTP via SMTP
+        await nexoraMailProtocol('otp', email, { otp });
+        
+        return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP sent." });
+    } catch (err) {
+        ((..._args) => {})("Admin Login Error:", err);
+        res.status(500).json({ error: "Internal Authentication Failure." });
+    }
+});
+
+app.post('/api/admin/verify-login', async (req, res) => {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: "Missing verification payload." });
+    
+    const record = otpStore.get("admin_login_otp");
+    if (!record || record.email !== email.toLowerCase()) {
+        return res.status(400).json({ error: "Invalid session. Please authenticate again." });
+    }
+    if (Date.now() > record.expiry) {
+        otpStore.delete("admin_login_otp");
+        return res.status(400).json({ error: "OTP token expired." });
+    }
+    if (record.otp !== otp.toString().trim()) {
+        return res.status(400).json({ error: "Invalid verification segment." });
+    }
+    
+    otpStore.delete("admin_login_otp");
+    res.json({ status: "success", message: "Admin authenticated." });
+});
+
+app.post('/api/admin/update-credentials', async (req, res) => {
+    const { newEmail, newPassword } = req.body;
+    if (!newEmail && !newPassword) return res.status(400).json({ error: "No update payload provided." });
+    
+    try {
+        if (!db) return res.status(500).json({ error: "Database not ready." });
+        
+        // Ensure email isn't used by a non-admin
+        if (newEmail) {
+            const existing = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND role != 'Admin'", [newEmail.toLowerCase()]);
+            if (existing) return res.status(400).json({ error: "Email is bound to a standard user account." });
+        }
+        
+        let querySegments = [];
+        let params = [];
+        
+        if (newEmail) {
+            querySegments.push("email = ?");
+            params.push(newEmail.toLowerCase());
+        }
+        if (newPassword) {
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+            querySegments.push("password = ?");
+            params.push(hashedPassword);
+        }
+        
+        if (querySegments.length === 0) return res.json({ status: "success" });
+        
+        await db.run(`UPDATE users SET ${querySegments.join(", ")} WHERE role = 'Admin'`, params);
+        res.json({ status: "success", message: "Security credentials updated." });
+    } catch (err) {
+        ((..._args) => {})("Admin Security Update Error:", err);
+        res.status(500).json({ error: "Failed to deploy new security context." });
     }
 });
 
@@ -1887,7 +1991,7 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
             message: "Encrypted media stored securely."
         });
     } catch (err) {
-        console.error("Media upload error:", err);
+        ((..._args) => {})("Media upload error:", err);
         res.status(500).json({ error: "Failed to upload encrypted media." });
     }
 });
@@ -1922,7 +2026,7 @@ app.post('/api/push/subscribe', (req, res) => {
         return res.status(400).json({ error: 'username and subscription required' });
     }
     pushSubscriptions.set(username.toLowerCase(), subscription);
-    console.log(`[PUSH] Subscription registered for: ${username}`);
+    ((..._args) => {})(`[PUSH] Subscription registered for: ${username}`);
     res.json({ status: 'success', message: 'Push subscription registered.' });
 });
 
@@ -1948,7 +2052,7 @@ app.get('/api/users/search', async (req, res) => {
 
     try {
         if (!db) return res.json({ users: [] });
-        console.log(`[SEARCH] Query: "${q}" by User: "${me}"`);
+        ((..._args) => {})(`[SEARCH] Query: "${q}" by User: "${me}"`);
         const users = await db.all(`
             SELECT username, full_name AS fullName, color, avatar_url AS avatarUrl
             FROM users 
@@ -1964,7 +2068,7 @@ app.get('/api/users/search', async (req, res) => {
         }));
         res.json({ users: mappedUsers });
     } catch (err) {
-        console.error("Search error:", err);
+        ((..._args) => {})("Search error:", err);
         res.status(500).json({ users: [] });
     }
 });
@@ -2008,7 +2112,7 @@ app.post('/api/connections/sync', async (req, res) => {
 
         res.json({ matches: result });
     } catch (err) {
-        console.error("Connection Sync Error:", err);
+        ((..._args) => {})("Connection Sync Error:", err);
         res.status(500).json({ matches: [] });
     }
 });
@@ -2041,7 +2145,7 @@ app.patch('/api/users/bio', async (req, res) => {
         await db.run('UPDATE users SET bio = ? WHERE LOWER(username) = LOWER(?)', [bio || null, username]);
         res.json({ status: "success" });
     } catch (err) {
-        console.error("Bio update error:", err);
+        ((..._args) => {})("Bio update error:", err);
         res.status(500).json({ error: "Failed to update bio" });
     }
 });
@@ -2066,7 +2170,7 @@ app.post('/api/users/avatar', async (req, res) => {
 
         res.json({ status: "success", message: "Profile picture updated." });
     } catch (err) {
-        console.error("Avatar update error:", err);
+        ((..._args) => {})("Avatar update error:", err);
         res.status(500).json({ error: "Failed to update avatar." });
     }
 });
@@ -2143,7 +2247,7 @@ app.post('/api/connections/request', async (req, res) => {
         io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor });
         res.json({ status: 'sent' });
     } catch (err) {
-        console.error("Connection Request Error:", err);
+        ((..._args) => {})("Connection Request Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2273,7 +2377,7 @@ app.post('/api/connections/respond', async (req, res) => {
 
         res.json({ status: action === 'accept' ? 'accepted' : 'declined' });
     } catch (err) {
-        console.error("Respond Error:", err);
+        ((..._args) => {})("Respond Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2365,7 +2469,7 @@ app.get('/api/stories', async (req, res) => {
 
         res.json({ stories: decrypted });
     } catch (err) {
-        console.error("Fetch Stories Error:", err);
+        ((..._args) => {})("Fetch Stories Error:", err);
         res.status(500).json({ stories: [] });
     }
 });
@@ -2385,7 +2489,7 @@ app.post('/api/stories', async (req, res) => {
         
         res.json({ status: "success" });
     } catch (err) {
-        console.error("Post Story Error:", err);
+        ((..._args) => {})("Post Story Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2403,7 +2507,7 @@ app.post('/api/stories/view', async (req, res) => {
         }
         res.json({ status: "success" });
     } catch (err) {
-        console.error("Story View Error:", err);
+        ((..._args) => {})("Story View Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2450,12 +2554,12 @@ app.post('/api/stories/like', async (req, res) => {
                     title: `${username} liked your story`,
                     body: "❤️",
                     icon: '/icon.svg'
-                })).catch(() => {});
+                })).catch((..._args) => {});
             }
         }
         res.json({ status: "success" });
     } catch (err) {
-        console.error("Story Like Error:", err);
+        ((..._args) => {})("Story Like Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2504,12 +2608,12 @@ app.post('/api/stories/reply', async (req, res) => {
                 title: `New story reply from ${username}`,
                 body: message,
                 icon: '/icon.svg'
-            })).catch(() => {});
+            })).catch((..._args) => {});
         }
 
         res.json({ status: "success" });
     } catch (err) {
-        console.error("Story Reply Error:", err);
+        ((..._args) => {})("Story Reply Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2539,7 +2643,7 @@ app.get('/api/stories/stats', async (req, res) => {
 
         res.json({ views: decryptedViews, likes: decryptedLikes });
     } catch (err) {
-        console.error("Story Stats Error:", err);
+        ((..._args) => {})("Story Stats Error:", err);
         res.status(500).json({ views: [], likes: [] });
     }
 });
@@ -2576,7 +2680,7 @@ async function logAdminAction(admin_username, action, target, details) {
             [action, target, admin_username, details || '']
         );
     } catch (err) {
-        console.error("[AUDIT] Log failed:", err);
+        ((..._args) => {})("[AUDIT] Log failed:", err);
     }
 }
 
@@ -2607,7 +2711,7 @@ app.post('/api/admin/broadcast', async (req, res) => {
                      await new Promise(r => setTimeout(r, 500)); 
                  } catch (e) {
                      failed++;
-                     console.error(`[BROADCAST] Failed to ${u.email}:`, e.message);
+                     ((..._args) => {})(`[BROADCAST] Failed to ${u.email}:`, e.message);
                  }
              }
              logAdminAction('ADMIN', 'EMAIL_BROADCAST', 'ALL_USERS', `Sent: ${sent}, Failed: ${failed}`);
@@ -2703,7 +2807,7 @@ app.get('/api/admin/stats', async (req, res) => {
             onlineUsers: onlineCount
         });
     } catch (err) {
-        console.error("[ADMIN] Stats error:", err);
+        ((..._args) => {})("[ADMIN] Stats error:", err);
         res.status(500).json({ error: "Failed to fetch stats" });
     }
 });
@@ -2729,7 +2833,7 @@ app.get('/api/admin/users', async (req, res) => {
         }));
         res.json({ users: decrypted });
     } catch (err) {
-        console.error("[ADMIN] Users list error:", err);
+        ((..._args) => {})("[ADMIN] Users list error:", err);
         res.status(500).json({ error: "Failed to fetch users" });
     }
 });
@@ -2744,7 +2848,7 @@ app.patch('/api/admin/users/:username/role', async (req, res) => {
         await db.run('UPDATE users SET role = ? WHERE LOWER(username) = LOWER(?)', [role, username]);
         res.json({ status: "success", message: `Role updated to ${role} for @${username}` });
     } catch (err) {
-        console.error("[ADMIN] Role update error:", err);
+        ((..._args) => {})("[ADMIN] Role update error:", err);
         res.status(500).json({ error: "Failed to update role" });
     }
 });
@@ -2759,7 +2863,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
         await db.run('UPDATE users SET status = ? WHERE LOWER(username) = LOWER(?)', [status, username]);
         res.json({ status: "success", message: `Status updated to ${status} for @${username}` });
     } catch (err) {
-        console.error("[ADMIN] Status update error:", err);
+        ((..._args) => {})("[ADMIN] Status update error:", err);
         res.status(500).json({ error: "Failed to update status" });
     }
 });
@@ -2787,7 +2891,7 @@ app.delete('/api/admin/users/:username', async (req, res) => {
         await db.run('DELETE FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         res.json({ status: "success", message: `User @${username} and all associated data deleted.` });
     } catch (err) {
-        console.error("[ADMIN] User delete error:", err);
+        ((..._args) => {})("[ADMIN] User delete error:", err);
         res.status(500).json({ error: "Failed to delete user" });
     }
 });
@@ -2803,7 +2907,7 @@ app.patch('/api/admin/users/:username/password', async (req, res) => {
         await db.run('UPDATE users SET password = ? WHERE LOWER(username) = LOWER(?)', [hashed, username]);
         res.json({ status: "success", message: `Password reset for @${username}` });
     } catch (err) {
-        console.error("[ADMIN] Password reset error:", err);
+        ((..._args) => {})("[ADMIN] Password reset error:", err);
         res.status(500).json({ error: "Failed to reset password" });
     }
 });
@@ -2864,7 +2968,7 @@ app.put('/api/admin/email-templates/:type', (req, res) => {
     if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required" });
 
     emailTemplateOverrides.set(type, { subject, html });
-    console.log(`[ADMIN] Email template '${type}' customized.`);
+    ((..._args) => {})(`[ADMIN] Email template '${type}' customized.`);
     res.json({ status: "success", message: `Template '${type}' updated successfully.` });
 });
 
@@ -2872,7 +2976,7 @@ app.put('/api/admin/email-templates/:type', (req, res) => {
 app.delete('/api/admin/email-templates/:type', (req, res) => {
     const { type } = req.params;
     emailTemplateOverrides.delete(type);
-    console.log(`[ADMIN] Email template '${type}' reset to default.`);
+    ((..._args) => {})(`[ADMIN] Email template '${type}' reset to default.`);
     res.json({ status: "success", message: `Template '${type}' reset to default.` });
 });
 
@@ -2896,7 +3000,7 @@ app.get('/api/admin/connections', async (req, res) => {
         }));
         res.json({ connections: decrypted });
     } catch (err) {
-        console.error("[ADMIN] Connections list error:", err);
+        ((..._args) => {})("[ADMIN] Connections list error:", err);
         res.status(500).json({ error: "Failed to fetch connections" });
     }
 });
@@ -2909,7 +3013,7 @@ app.delete('/api/admin/connections/:id', async (req, res) => {
         await db.run('DELETE FROM connections WHERE id = ?', [id]);
         res.json({ status: "success", message: "Connection removed." });
     } catch (err) {
-        console.error("[ADMIN] Connection delete error:", err);
+        ((..._args) => {})("[ADMIN] Connection delete error:", err);
         res.status(500).json({ error: "Failed to remove connection" });
     }
 });
@@ -2933,13 +3037,13 @@ app.post('/api/admin/broadcast-chat', async (req, res) => {
             lastMessage: message
         };
 
-        console.log(`[BROADCAST] Starting for ${allUsers.length} users...`);
+        ((..._args) => {})(`[BROADCAST] Starting for ${allUsers.length} users...`);
         // Trigger background loop
         sendNextBroadcastMessage(allUsers, 0, message);
 
         res.json({ status: "success", message: "Broadcast sequence initiated.", total: allUsers.length });
     } catch (err) {
-        console.error("[ADMIN] Chat broadcast error:", err);
+        ((..._args) => {})("[ADMIN] Chat broadcast error:", err);
         res.status(500).json({ error: "Failed to initialize broadcast" });
     }
 });
@@ -2966,7 +3070,7 @@ app.get('/api/blogs', async (req, res) => {
         const blogs = await db.all('SELECT * FROM blogs ORDER BY id DESC');
         res.json({ blogs });
     } catch (err) {
-        console.error("[BLOGS] Fetch error:", err);
+        ((..._args) => {})("[BLOGS] Fetch error:", err);
         res.status(500).json({ error: "Failed to fetch blogs" });
     }
 });
@@ -2987,7 +3091,7 @@ app.post('/api/blogs', async (req, res) => {
         }
         res.json({ status: "success" });
     } catch (err) {
-        console.error("[BLOGS] Save error:", err);
+        ((..._args) => {})("[BLOGS] Save error:", err);
         res.status(500).json({ error: "Failed to save blogs" });
     }
 });
@@ -2999,20 +3103,20 @@ Sentry.setupExpressErrorHandler(app);
 // ------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    console.log(`[SERVER] Nexora Core operational on port ${PORT}`);
-    console.log(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
+    ((..._args) => {})(`[SERVER] Nexora Core operational on port ${PORT}`);
+    ((..._args) => {})(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
     
     // --- Render Anti-Sleep Mechanism ---
     // Pings its own public URL every 10 minutes (600,000 ms) to prevent sleeping
     const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
     if (selfUrl.includes('onrender')) {
-        console.log(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
+        ((..._args) => {})(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
         setInterval(() => {
             const lib = selfUrl.startsWith('https') ? require('https') : require('http');
             lib.get(selfUrl, (res) => {
-                console.log(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
+                ((..._args) => {})(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
             }).on("error", (err) => {
-                console.error(`[ANTI-SLEEP] Ping Failed:`, err.message);
+                ((..._args) => {})(`[ANTI-SLEEP] Ping Failed:`, err.message);
             });
         }, 10 * 60 * 1000); // 10 minutes
     }

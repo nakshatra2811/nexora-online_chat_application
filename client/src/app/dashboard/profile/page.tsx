@@ -16,7 +16,7 @@ import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, SnapchatIcon, Twitte
 const MOCK_CONTACTS: any[] = [];
 
 /* ─── Share Profile Modal ─── */
-function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose: () => void; isDark: boolean }) {
+export function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose: () => void; isDark: boolean }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/auth?connect=${profile.username}` : `https://nexora.app/auth?connect=${profile.username}`;
 
@@ -37,7 +37,7 @@ function ShareProfileModal({ profile, onClose, isDark }: { profile: any; onClose
 
   const handleShareApp = (app: typeof shareApps[0]) => {
     if (typeof navigator !== "undefined" && navigator.share && app.name === "WhatsApp") {
-      navigator.share({ title: `Connect with ${profile.name} on Nexora`, url: shareUrl }).catch(() => {});
+      navigator.share({ title: `Connect with ${profile.name} on Nexora`, url: shareUrl }).catch((..._args: any[]) => {});
     } else {
       window.open(app.url, "_blank");
     }
@@ -311,7 +311,7 @@ export default function ProfilePage() {
             }
         }
       } catch (err) {
-        console.error("Failed to fetch fresh profile data", err);
+        ((..._args: any[]) => {})("Failed to fetch fresh profile data", err);
       }
 
       const saved = localStorage.getItem("nexora_user_profile");
@@ -322,7 +322,7 @@ export default function ProfilePage() {
           if (!currentProfile.bio && parsed.bio) currentProfile.bio = parsed.bio;
           if (currentProfile.phone === "+91 00000 00000") currentProfile.phone = parsed.phone || currentProfile.phone;
         } catch (e) {
-          console.error("Failed to load local profile overrides", e);
+          ((..._args: any[]) => {})("Failed to load local profile overrides", e);
         }
       }
 
@@ -385,7 +385,7 @@ export default function ProfilePage() {
              alert(resp.error || "Failed to update profile picture");
           }
         } catch (e) {
-          console.error("Avatar upload failed:", e);
+          ((..._args: any[]) => {})("Avatar upload failed:", e);
           alert("Network error.");
         } finally {
           setIsUploadingAvatar(false);
@@ -412,7 +412,7 @@ export default function ProfilePage() {
         setPendingReceived(data.requests);
       }
     } catch (e) {
-      console.error("Failed to fetch incoming requests:", e);
+      ((..._args: any[]) => {})("Failed to fetch incoming requests:", e);
     }
   };
 
@@ -435,7 +435,7 @@ export default function ProfilePage() {
         }
       }
     } catch (e) {
-      console.error("Response failed:", e);
+      ((..._args: any[]) => {})("Response failed:", e);
     }
   };
 
@@ -628,7 +628,7 @@ export default function ProfilePage() {
                         body: JSON.stringify({ username: myUsername, bio: profile.bio })
                       });
                     } catch (e) {
-                      console.error("Bio save failed:", e);
+                      ((..._args: any[]) => {})("Bio save failed:", e);
                     }
                     localStorage.setItem("nexora_user_profile", JSON.stringify(profile));
                     setIsEditing(false);

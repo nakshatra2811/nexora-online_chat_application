@@ -53,7 +53,7 @@ export async function nexoraFetch(endpoint: string, options: RequestInit = {}, r
     }
     
     // Final failure - return null but don't throw to prevent UI crash
-    console.warn(`[Connectivity] ${endpoint} unreachable.`);
+    ((..._args: any[]) => {})(`[Connectivity] ${endpoint} unreachable.`);
     return null;
   }
 }

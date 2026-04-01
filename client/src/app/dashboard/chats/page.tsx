@@ -293,7 +293,7 @@ function ChatsPageContent() {
         setSyncMatches([]);
       }
     } catch (e) {
-       console.error("Manual add failed:", e);
+       ((..._args: any[]) => {})("Manual add failed:", e);
     } finally {
        setIsSyncing(false);
     }
@@ -311,7 +311,7 @@ function ChatsPageContent() {
           const contacts = await (navigator as any).contacts.select(props, opts);
           numbers = contacts.flatMap((c: any) => c.tel || []);
         } catch (err) {
-          console.warn("Contacts API failed/cancelled, using simulated baseline.");
+          ((..._args: any[]) => {})("Contacts API failed/cancelled, using simulated baseline.");
         }
       }
 
@@ -321,7 +321,7 @@ function ChatsPageContent() {
       // If no contacts found (empty or denied), we use a notification or mock for dev feedback
       if (cleanNumbers.length === 0) {
          // simulated contacts for development if real ones aren't available
-         console.warn("No contacts selected/found. Syncing limited to manual entries.");
+         ((..._args: any[]) => {})("No contacts selected/found. Syncing limited to manual entries.");
       }
 
       // Hash numbers for privacy before sending
@@ -338,7 +338,7 @@ function ChatsPageContent() {
         }
       }
     } catch (e) {
-      console.error("Sync failed:", e);
+      ((..._args: any[]) => {})("Sync failed:", e);
     } finally {
       setIsSyncing(false);
     }
@@ -393,7 +393,7 @@ function ChatsPageContent() {
         if (res && res.user) {
           setProfileData(res.user);
         }
-      } catch (e) { console.error(e); }
+      } catch (e) { ((..._args: any[]) => {})(e); }
       finally { setLoadingProfile(false); }
     };
     fetchProfile();
@@ -420,7 +420,7 @@ function ChatsPageContent() {
           localStorage.setItem("nexora_avatar_url", res.user.avatarUrl);
           setMyProfile(prev => ({ ...prev, avatarUrl: res.user.avatarUrl }));
         }
-      }).catch(() => {});
+      }).catch((..._args: any[]) => {});
     }
   }, []);
 
@@ -444,7 +444,7 @@ function ChatsPageContent() {
         }
         setIsSyncReady(true);
       } catch (e) {
-        console.warn("[NAV] Manual URL sync failed", e);
+        ((..._args: any[]) => {})("[NAV] Manual URL sync failed", e);
       }
     };
 
@@ -492,7 +492,7 @@ function ChatsPageContent() {
 
           // Handle call initiation (One-time check against the callInitiation state)
           if (callInitiation && callInitiation.user === found.username) {
-            console.log(`[NAV] Triggering call: ${callInitiation.type} to ${found.username}`);
+            ((..._args: any[]) => {})(`[NAV] Triggering call: ${callInitiation.type} to ${found.username}`);
             initiateCall(found.username, callInitiation.type as any, { name: found.name, color: found.color });
             
             // Clean up call param silently from URL without triggering a Next.js re-render loop
@@ -511,7 +511,7 @@ function ChatsPageContent() {
         document.body.classList.remove("chat-active");
       }
     } catch (e) {
-      console.warn("[NAV] Thread sync warning", e);
+      ((..._args: any[]) => {})("[NAV] Thread sync warning", e);
     }
   }, [currentChatUser, threads, isSyncReady, callInitiation]);
 
@@ -578,10 +578,10 @@ function ChatsPageContent() {
           setFriendsWithStories(Array.from(new Set(others)));
         }
       } catch (err) {
-        console.error("Story preview fetch failed", err);
+        ((..._args: any[]) => {})("Story preview fetch failed", err);
       }
     } catch (e) {
-      console.error("Failed to sync connections:", e);
+      ((..._args: any[]) => {})("Failed to sync connections:", e);
     }
   };
 
@@ -597,7 +597,7 @@ function ChatsPageContent() {
            fetchConnections(); // Server returns threads with proper username fields
         }
       }
-    } catch (e) { console.error("Error responding to request", e); }
+    } catch (e) { ((..._args: any[]) => {})("Error responding to request", e); }
   };
 
 
@@ -610,9 +610,9 @@ function ChatsPageContent() {
         const newKey = await generateAESKey();
         await KeyStore.saveVaultKey(newKey);
         key = newKey;
-        console.log("[VAULT] New storage vault key generated and locked.");
+        ((..._args: any[]) => {})("[VAULT] New storage vault key generated and locked.");
       } else {
-        console.log("[VAULT] Storage vault key recovered.");
+        ((..._args: any[]) => {})("[VAULT] Storage vault key recovered.");
       }
       setVaultKey(key);
       setVaultReady(true);
@@ -646,7 +646,7 @@ function ChatsPageContent() {
       const savedUnreads = localStorage.getItem("nexora_unread_counts");
       if (savedUnreads) setUnreadCounts(JSON.parse(savedUnreads));
     } catch (e) {
-      console.warn("[CHATS] LocalStorage parse failed - clearing corrupt entries", e);
+      ((..._args: any[]) => {})("[CHATS] LocalStorage parse failed - clearing corrupt entries", e);
     }
   }, []);
 
@@ -705,7 +705,7 @@ function ChatsPageContent() {
           );
           setMessages(unique);
         } catch (e) {
-          console.error("[!] Load failed", e);
+          ((..._args: any[]) => {})("[!] Load failed", e);
           setMessages([]);
         }
       } else {
@@ -1204,7 +1204,7 @@ function ChatsPageContent() {
           if (notifs?.notifications) setNotifications(notifs.notifications);
           if (reqs?.requests) setPendingRequests(reqs.requests);
         } catch (e) {
-          console.error("Initial activity fetch failed", e);
+          ((..._args: any[]) => {})("Initial activity fetch failed", e);
         }
       };
       fetchInitialData();
@@ -1212,7 +1212,7 @@ function ChatsPageContent() {
       // Re-register on reconnect
       socket.on("connect", () => {
         registerUser();
-        console.log("[Socket] Reconnected — re-registering identity");
+        ((..._args: any[]) => {})("[Socket] Reconnected — re-registering identity");
       });
 
 
@@ -1223,18 +1223,19 @@ function ChatsPageContent() {
         const senderUsername = data.from;
         try {
           let decryptedText = "";
-          if (data.fromStory || data.ciphertext === null) {
+          if (data.fromStory || data.ciphertext === null || data.ciphertext === undefined) {
+              // Plaintext message — broadcast DMs from Nexora_31 or story interactions
               decryptedText = data.text || "📷 Story Interaction";
           } else {
               decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
           }
           const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
           const newMsg: ChatMessage = {
-            id: data.msgId || Math.random().toString(),
+            id: data.msgId || data.id || Math.random().toString(),
             senderId: senderUsername,
             text: decryptedText,
             timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            createdAt: Date.now(),
+            createdAt: data.createdAt || Date.now(),
             isSelf: isFromSelf,
             status: "delivered",
             reactions: {},
@@ -1252,9 +1253,17 @@ function ChatsPageContent() {
             socket.emit("dm:seen", { to: senderUsername, msgId: newMsg.id });
           } else {
             // Different conversation — save to that thread's localStorage and increment unread
-            const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-            const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+            let connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+            let senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
             
+            // ── If thread not found (e.g. first Nexora_31 broadcast) → refresh connections ──
+            if (!senderThread) {
+              await fetchConnections();
+              // Re-read from localStorage after refresh
+              connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+              senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+            }
+
             if (senderThread) {
               const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
               if (!threadMsgs.find((m: any) => m.id === newMsg.id)) { // 🛡️ Prevent duplicates in storage
@@ -1281,7 +1290,7 @@ function ChatsPageContent() {
               { from: senderUsername }
             );
           }
-        } catch (e) { console.error("[!] Decryption failed:", e); }
+        } catch (e) { ((..._args: any[]) => {})("[!] Decryption failed:", e); }
       });
 
       // 4b. Handle incoming media DMs
@@ -1453,12 +1462,12 @@ function ChatsPageContent() {
           await KeyStore.saveSharedSecret(data.from, sharedSecret);
           const myPubKeyB64 = await exportPublicKey(keyPair.publicKey);
           socket.emit("key:exchange", { to: data.from, publicKey: myPubKeyB64 });
-        } catch (e) { console.error("[!] Key exchange failed:", e); }
+        } catch (e) { ((..._args: any[]) => {})("[!] Key exchange failed:", e); }
       });
 
       // 10. Connection updates
       socket.on("connection_accepted", (data: any) => {
-        console.log("[Protocol] Connection accepted by:", data.by);
+        ((..._args: any[]) => {})("[Protocol] Connection accepted by:", data.by);
         fetchConnections();
         // Remove from sent (sender side) and from pending (receiver side)
         setSentRequests(prev => prev.filter(req => req !== data.by));
@@ -1480,7 +1489,7 @@ function ChatsPageContent() {
       });
 
       socket.on("connection_request", (data: any) => {
-        console.log("[Protocol] Incoming request from:", data.from);
+        ((..._args: any[]) => {})("[Protocol] Incoming request from:", data.from);
         // Add real-time incoming request to sidebar
         setPendingRequests(prev => {
           if (prev.find(r => r.from === data.from)) return prev; // de-dup
@@ -1502,7 +1511,7 @@ function ChatsPageContent() {
 
       // 11. Setup Web Push (after socket is ready)
       if (myUsername) {
-        pushService.subscribe(myUsername).catch(() => {});
+        pushService.subscribe(myUsername).catch((..._args: any[]) => {});
       }
 
       // 12. New feature syncs
@@ -1874,7 +1883,7 @@ function ChatsPageContent() {
         t.username === activeThread.username ? { ...t, preview: text, lastMessageTime: Date.now() } : t
       ));
     } catch (e) {
-      console.error("[!] Encryption failed", e);
+      ((..._args: any[]) => {})("[!] Encryption failed", e);
     } finally {
       isSendingRef.current = false; // 🔓 Unlock
     }
@@ -2041,7 +2050,7 @@ function ChatsPageContent() {
         stream.getTracks().forEach((t) => t.stop());
         
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-            audioContextRef.current.close().catch(console.error);
+            audioContextRef.current.close().catch(((..._args: any[]) => {}));
         }
         if (visualizerInterval.current) clearInterval(visualizerInterval.current);
         
@@ -2106,7 +2115,7 @@ function ChatsPageContent() {
     if (recordingInterval.current) clearInterval(recordingInterval.current);
     if (visualizerInterval.current) clearInterval(visualizerInterval.current);
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close().catch(console.error);
+        audioContextRef.current.close().catch(((..._args: any[]) => {}));
     }
   };
 
@@ -2490,7 +2499,7 @@ function ChatsPageContent() {
         setSentRequests(prev => prev.filter(un => un !== user.username));
       }
     } catch (e) {
-      console.error("Request failed:", e);
+      ((..._args: any[]) => {})("Request failed:", e);
       setSentRequests(prev => prev.filter(un => (user?.username ? un !== user.username : true)));
     }
   }

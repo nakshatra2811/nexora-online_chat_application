@@ -78,7 +78,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   useEffect(() => {
     if (remoteAudioRef.current && remoteStream) {
       remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.play().catch(() => {});
+      remoteAudioRef.current.play().catch((..._args: any[]) => {});
     }
   }, [remoteStream]);
 
@@ -86,7 +86,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   useEffect(() => {
     if (localVideoRef.current && localStream && !isVideoOff) {
       localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch(() => {});
+      localVideoRef.current.play().catch((..._args: any[]) => {});
     }
   }, [localStream, isVideoOff]);
 
@@ -94,7 +94,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(() => {});
+      remoteVideoRef.current.play().catch((..._args: any[]) => {});
     }
   }, [remoteStream]);
 

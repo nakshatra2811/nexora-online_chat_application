@@ -107,7 +107,7 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
 
   const shareQRToFriend = () => {
     if (typeof navigator !== "undefined" && navigator.share) {
-      navigator.share({ title: `${friend.name}'s Nexora QR`, url: profileUrl }).catch(() => {});
+      navigator.share({ title: `${friend.name}'s Nexora QR`, url: profileUrl }).catch((..._args: any[]) => {});
     } else {
       copyLink();
     }

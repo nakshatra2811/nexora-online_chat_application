@@ -76,7 +76,7 @@ export class WebRTCService {
         callerName?: string;
         callerColor?: string;
       }) => {
-        console.log("[WebRTC] Incoming call:offer from:", data.from, "type:", data.callType);
+        ((..._args: any[]) => {})("[WebRTC] Incoming call:offer from:", data.from, "type:", data.callType);
         this.onIncomingCallCb?.(data);
       }
     );
@@ -84,7 +84,7 @@ export class WebRTCService {
     socket.on(
       "call:answer",
       async (data: { from: string; sdp: RTCSessionDescriptionInit }) => {
-        console.log("[WebRTC] call:answer received from:", data.from);
+        ((..._args: any[]) => {})("[WebRTC] call:answer received from:", data.from);
         if (!this.pc) return;
         try {
           await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
@@ -93,7 +93,7 @@ export class WebRTCService {
           // (connectionstatechange === 'connected') so timer starts only after
           // audio/video is actually flowing
         } catch (e) {
-          console.error("[WebRTC] Failed to set remote description (answer):", e);
+          ((..._args: any[]) => {})("[WebRTC] Failed to set remote description (answer):", e);
         }
       }
     );
@@ -106,12 +106,12 @@ export class WebRTCService {
     );
 
     socket.on("call:hangup", () => {
-      console.log("[WebRTC] call:hangup received");
+      ((..._args: any[]) => {})("[WebRTC] call:hangup received");
       this._cleanup("Remote user ended the call");
     });
 
     socket.on("call:reject", () => {
-      console.log("[WebRTC] call:reject received");
+      ((..._args: any[]) => {})("[WebRTC] call:reject received");
       const cb = this.events?.onCallRejected;
       this._cleanup("Call was rejected");
       cb?.();
@@ -120,7 +120,7 @@ export class WebRTCService {
     socket.on(
       "call:state-update",
       (data: { from: string; state: { isMuted?: boolean; isVideoOff?: boolean } }) => {
-        console.log("[WebRTC] call:state-update received from:", data.from, data.state);
+        ((..._args: any[]) => {})("[WebRTC] call:state-update received from:", data.from, data.state);
         this.events?.onRemoteStateUpdate?.(data.state);
       }
     );
@@ -162,7 +162,7 @@ export class WebRTCService {
 
     // Handle incoming remote tracks — ACCUMULATE into one stream
     this.pc.ontrack = (event) => {
-      console.log("[WebRTC] Remote track received:", event.track.kind,
+      ((..._args: any[]) => {})("[WebRTC] Remote track received:", event.track.kind,
         "readyState:", event.track.readyState);
 
       // Add track to our persistent remoteStream
@@ -193,7 +193,7 @@ export class WebRTCService {
     // Connection state monitoring — ONLY source of onCallConnected
     this.pc.onconnectionstatechange = () => {
       const state = this.pc?.connectionState;
-      console.log("[WebRTC] Connection state:", state);
+      ((..._args: any[]) => {})("[WebRTC] Connection state:", state);
       if (state === "connected" && !this._connected) {
         this._connected = true;
         this.events?.onCallConnected();
@@ -226,7 +226,7 @@ export class WebRTCService {
         this.pendingIceCandidates.push(candidate);
       }
     } catch (e) {
-      console.warn("[WebRTC] Failed to add ICE candidate:", e);
+      ((..._args: any[]) => {})("[WebRTC] Failed to add ICE candidate:", e);
     }
   }
 
@@ -237,7 +237,7 @@ export class WebRTCService {
       try {
         await this.pc.addIceCandidate(new RTCIceCandidate(c));
       } catch (e) {
-        console.warn("[WebRTC] Failed to add queued ICE candidate:", e);
+        ((..._args: any[]) => {})("[WebRTC] Failed to add queued ICE candidate:", e);
       }
     }
   }
@@ -373,7 +373,7 @@ export class WebRTCService {
     const oldVideoTrack = this.localStream.getVideoTracks()[0];
     const nextFacing = this.currentFacingMode === "user" ? "environment" : "user";
     
-    console.log("[WebRTC] Flipping camera to:", nextFacing);
+    ((..._args: any[]) => {})("[WebRTC] Flipping camera to:", nextFacing);
 
     try {
       // 1. Release previous camera hardware before requesting new one
@@ -390,7 +390,7 @@ export class WebRTCService {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         
-        console.log("[WebRTC] Available video devices:", videoDevices.length);
+        ((..._args: any[]) => {})("[WebRTC] Available video devices:", videoDevices.length);
 
         // Try exact facing mode first
         newStream = await navigator.mediaDevices.getUserMedia({
@@ -402,7 +402,7 @@ export class WebRTCService {
           audio: false // DO NOT request audio again
         });
       } catch (err) {
-        console.warn("[WebRTC] Exact facingMode failed, falling back to ideal:", err);
+        ((..._args: any[]) => {})("[WebRTC] Exact facingMode failed, falling back to ideal:", err);
         // Fallback to ideal if exact fails
         newStream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -437,12 +437,12 @@ export class WebRTCService {
       // 4. Update local stream
       this.localStream.addTrack(newVideoTrack);
 
-      console.log("[WebRTC] Camera flip successful. Mode:", this.currentFacingMode);
+      ((..._args: any[]) => {})("[WebRTC] Camera flip successful. Mode:", this.currentFacingMode);
 
       // Return a fresh stream object so React triggers a re-render
       return new MediaStream(this.localStream.getTracks());
     } catch (e) {
-      console.error("[WebRTC] Flip camera failed completely:", e);
+      ((..._args: any[]) => {})("[WebRTC] Flip camera failed completely:", e);
       
       // Recovery: If flip failed, try to restart the original camera
       try {
@@ -457,7 +457,7 @@ export class WebRTCService {
            this.localStream.addTrack(recTrack);
         }
       } catch (recErr) {
-        console.error("[WebRTC] Recovery failed:", recErr);
+        ((..._args: any[]) => {})("[WebRTC] Recovery failed:", recErr);
       }
       
       return null;

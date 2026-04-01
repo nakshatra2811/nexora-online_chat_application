@@ -37,9 +37,9 @@ async function seed() {
                 'INSERT INTO users (full_name, email, username, password, color, role) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password',
                 [encryptField(u.name), u.email, u.username, hashed, u.color, 'Standard']
             );
-            console.log(`User ${u.username} seeded.`);
+            ((..._args) => {})(`User ${u.username} seeded.`);
         } catch (e) {
-            console.error(`Error seeding ${u.username}:`, e.message);
+            ((..._args) => {})(`Error seeding ${u.username}:`, e.message);
         }
     }
     
@@ -47,9 +47,9 @@ async function seed() {
     try {
         const [u1, u2] = ['rahul_12', 'Shreya_14'].sort();
         await pool.query('INSERT INTO connections (user_a, user_b) VALUES ($1, $2) ON CONFLICT DO NOTHING', [u1, u2]);
-        console.log('Rahul and Shreya connected.');
+        ((..._args) => {})('Rahul and Shreya connected.');
     } catch (e) {
-        console.error('Error connecting users:', e.message);
+        ((..._args) => {})('Error connecting users:', e.message);
     }
 
     pool.end();

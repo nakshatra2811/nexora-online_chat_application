@@ -10,16 +10,16 @@ class PushNotificationService {
   /** Register the service worker */
   async init(): Promise<boolean> {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.warn('[Push] Push notifications not supported in this browser.');
+      ((..._args: any[]) => {})('[Push] Push notifications not supported in this browser.');
       return false;
     }
 
     try {
       this.registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('[Push] Service worker registered:', this.registration.scope);
+      ((..._args: any[]) => {})('[Push] Service worker registered:', this.registration.scope);
       return true;
     } catch (err) {
-      console.error('[Push] Service worker registration failed:', err);
+      ((..._args: any[]) => {})('[Push] Service worker registration failed:', err);
       return false;
     }
   }
@@ -35,14 +35,14 @@ class PushNotificationService {
       // Check permission
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
-        console.warn('[Push] Notification permission denied.');
+        ((..._args: any[]) => {})('[Push] Notification permission denied.');
         return false;
       }
 
       // Get VAPID public key from server
       const resp = await fetch(`${API_BASE_URL}/api/push/vapid-public-key`);
       if (!resp.ok) {
-        console.warn('[Push] VAPID key not available — push notifications disabled.');
+        ((..._args: any[]) => {})('[Push] VAPID key not available — push notifications disabled.');
         return false;
       }
       const { key } = await resp.json();
@@ -60,10 +60,10 @@ class PushNotificationService {
         body: JSON.stringify({ username, subscription }),
       });
 
-      console.log('[Push] Subscribed successfully for:', username);
+      ((..._args: any[]) => {})('[Push] Subscribed successfully for:', username);
       return true;
     } catch (err) {
-      console.error('[Push] Subscription failed:', err);
+      ((..._args: any[]) => {})('[Push] Subscription failed:', err);
       return false;
     }
   }
@@ -78,9 +78,9 @@ class PushNotificationService {
       await fetch(`${API_BASE_URL}/api/push/subscribe/${encodeURIComponent(username)}`, {
         method: 'DELETE',
       });
-      console.log('[Push] Unsubscribed:', username);
+      ((..._args: any[]) => {})('[Push] Unsubscribed:', username);
     } catch (err) {
-      console.error('[Push] Unsubscribe failed:', err);
+      ((..._args: any[]) => {})('[Push] Unsubscribe failed:', err);
     }
   }
 

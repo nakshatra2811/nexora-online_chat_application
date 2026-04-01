@@ -6,12 +6,13 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   MessageSquare, LayoutTemplate, Lock, Users, Settings, User,
   LogOut, Sun, Moon, Shield, Menu, X, Eye, EyeOff, KeyRound, HelpCircle, ChevronLeft,
-  Bell, Check, UserPlus
+  Bell, Check, UserPlus, Share2
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch, APP_LOGO } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { NotificationSkeleton } from "@/components/Skeleton";
+import { ShareProfileModal } from "./profile/page";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
 import { PermissionGate } from "@/components/PermissionGate";
 
@@ -24,6 +25,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isChatActive, setIsChatActive] = useState(false);
+
+  // Global Share Profile
+  const [showGlobalShare, setShowGlobalShare] = useState(false);
+  const [globalProfile, setGlobalProfile] = useState<any>(null);
 
   // Notifications
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -81,6 +86,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, []);
 
+  useEffect(() => {
+    // Load local profile for global sharing
+    if (typeof window !== "undefined") {
+      const signupEmail = localStorage.getItem("nexora_signup_email") || "user@nexora.io";
+      const name = localStorage.getItem("nexora_signup_name") || signupEmail.split("@")[0];
+      const username = localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0];
+      setGlobalProfile({ name, username, email: signupEmail, avatarUrl: localStorage.getItem("nexora_avatar_url") || "" });
+    }
+  }, []);
+
   // ═══ Global Action Notification Protocol ═══
   useEffect(() => {
     const username = localStorage.getItem("nexora_signup_username") || "";
@@ -102,7 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (sent?.requests) setSentRequests(sent.requests);
           if (notifs?.notifications) setGeneralNotifications(notifs.notifications);
         } catch (err) {
-          console.error("Global protocol fetch failed", err);
+          ((..._args: any[]) => {})("Global protocol fetch failed", err);
         } finally {
           setIsLoadingNotifs(false);
         }
@@ -187,7 +202,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (notifId) setActionedIds(prev => prev.filter(id => id !== notifId));
       }, 400);
     } catch (err) {
-      console.error("Follow back failed");
+      ((..._args: any[]) => {})("Follow back failed");
     }
   };
 
@@ -625,6 +640,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </AnimatePresence>
           </div>
 
+          {/* Share Profile */}
+          <motion.button
+            whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }}
+            onClick={() => setShowGlobalShare(true)}
+            className="h-9 w-9 rounded-xl flex items-center justify-center transition-all bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20"
+            title="Share Profile"
+          >
+            <Share2 className="h-4 w-4" />
+          </motion.button>
+
           {/* Theme toggle */}
           <motion.button
             whileHover={{ scale: 1.08, rotate: isDark ? 180 : 0 }}
@@ -655,6 +680,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ═══════════════════════════════════════
           MAIN CONTENT AREA
       ═══════════════════════════════════════ */}
+      <AnimatePresence>
+        {showGlobalShare && globalProfile && (
+           <ShareProfileModal key="global-share" profile={globalProfile} onClose={() => setShowGlobalShare(false)} isDark={isDark} />
+        )}
+      </AnimatePresence>
+
       <main className={`flex-1 relative w-full overflow-hidden flex ${(!isKeyboardVisible && !isChatActive) ? "pb-[72px]" : "pb-0"} md:pb-0 safe-bottom`}>
         {/* Ambient glow blobs */}
         <div className="absolute top-0 right-0 h-80 w-80 rounded-full pointer-events-none"
@@ -731,6 +762,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               })}
 
               {/* Mobile Notification Bell */}
+              <motion.button whileTap={{ scale: 0.85 }} onClick={() => setShowGlobalShare(true)}
+                className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300">
+                <Share2 className="h-6 w-6" style={{ color: "#00d4ff" }} />
+              </motion.button>
+
               <motion.button whileTap={{ scale: 0.85 }}
                 onClick={() => setShowNotifPanel(v => !v)}
                 className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300"
