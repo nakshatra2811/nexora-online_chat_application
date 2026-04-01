@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "title": "Introducing Nexora 1.0: The Future of Private Communication",
+    "excerpt": "We are thrilled to announce the absolute first version of Nexora. Built from the ground up to redefine how secure instant messaging should function within a Zero-Knowledge paradigm.",
+    "date": "April 1, 2026",
+    "author": "Nexora Core Team",
+    "category": "Announcements",
+    "image": "https://images.unsplash.com/photo-1639322537228-f710d846310a?auto=format&fit=crop&q=80&w=2000",
+    "status": "Published"
+  },
+  {
+    "id": 2,
+    "title": "Understanding the Zero-Knowledge Protocol",
+    "excerpt": "How our proprietary end-to-end encryption guarantees that absolutely nobody—not even our own servers—can intercept or decrypt your messages.",
+    "date": "March 28, 2026",
+    "author": "Security Research Lab",
+    "category": "Cryptography",
+    "image": "https://images.unsplash.com/photo-1555949963-aa79dcee981c?auto=format&fit=crop&q=80&w=2000",
+    "status": "Published"
+  },
+  {
+    "id": 3,
+    "title": "Why WebRTC is critical for P2P Voice & Video",
+    "excerpt": "An deep-dive into our implementation of low-latency, peer-to-peer audio and visual real-time calling systems.",
+    "date": "March 15, 2026",
+    "author": "Infrastructure Team",
+    "category": "Engineering",
+    "image": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=2000",
+    "status": "Draft"
+  }
+]

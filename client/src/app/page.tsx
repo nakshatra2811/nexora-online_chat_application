@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Shield, Zap, EyeOff, Lock, MessageSquare, Video, ArrowRight, X, CheckCircle, UserPlus, LogIn } from "lucide-react";
+import { Shield, Zap, EyeOff, Lock, MessageSquare, Video, ArrowRight, X, CheckCircle, UserPlus, LogIn, ChevronDown, ChevronRight } from "lucide-react";
 import { APP_LOGO } from "@/lib/config";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
 import { Scene3D } from "@/components/Scene3D";
@@ -26,6 +26,7 @@ const fadeUp: any = {
 export default function LandingPage() {
   const router = useRouter();
   const [showWhitepaper, setShowWhitepaper] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const { scrollY } = useScroll();
   const bgY = useTransform(scrollY, [0, 800], [0, 200]);
   const heroOpacity = useTransform(scrollY, [0, 350], [1, 0]);
@@ -59,6 +60,37 @@ export default function LandingPage() {
           <img src={APP_LOGO} alt="Nexora Logo" className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 object-contain drop-shadow-lg rounded-[10px]" />
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tighter select-none" style={{ color: "var(--text-primary)" }}>Nexora</h1>
         </div>
+        
+        <div className="hidden md:flex items-center gap-6 text-sm font-semibold" style={{ color: "var(--text-secondary)" }}>
+          <span className="cursor-pointer hover:text-[#00d4ff] transition-colors" onClick={() => router.push("/blog")}>Blog</span>
+          
+          {/* Download Dropdown */}
+          <div 
+            className="relative group"
+            onMouseEnter={() => setShowDownloadMenu(true)}
+            onMouseLeave={() => setShowDownloadMenu(false)}
+          >
+            <div className="flex items-center gap-1 cursor-pointer hover:text-[#6c5ce7] transition-colors py-2">
+              Download <ChevronDown className="w-4 h-4" />
+            </div>
+            
+            <AnimatePresence>
+              {showDownloadMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-full left-0 mt-2 w-48 bg-[#1a1a2e] text-white rounded-xl shadow-2xl border border-white/10 overflow-hidden py-2"
+                >
+                   <div className="px-5 py-3 hover:bg-white/10 cursor-pointer text-sm font-bold transition-colors" onClick={() => window.dispatchEvent(new CustomEvent("nexora-toast", { detail: { message: "Android App Coming Soon", type: "info" } }))}>Android (APK)</div>
+                   <div className="px-5 py-3 hover:bg-white/10 cursor-pointer text-sm font-bold transition-colors" onClick={() => window.dispatchEvent(new CustomEvent("nexora-toast", { detail: { message: "Windows App Coming Soon", type: "info" } }))}>Windows (EXE)</div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 sm:gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}

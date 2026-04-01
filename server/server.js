@@ -1681,6 +1681,29 @@ app.post('/api/admin/config', async (req, res) => {
     }
 });
 
+// GET /api/blogs — Read all blogs
+app.get('/api/blogs', (req, res) => {
+    try {
+        const blogsPath = path.join(__dirname, '../client/src/config/blogs.json');
+        const blogs = JSON.parse(fs.readFileSync(blogsPath, 'utf-8'));
+        res.json({ blogs });
+    } catch (err) {
+        res.json({ blogs: [] });
+    }
+});
+
+// POST /api/blogs — Save all blogs
+app.post('/api/blogs', (req, res) => {
+    try {
+        const { blogs } = req.body;
+        const blogsPath = path.join(__dirname, '../client/src/config/blogs.json');
+        fs.writeFileSync(blogsPath, JSON.stringify(blogs, null, 2), 'utf-8');
+        res.json({ status: "success", message: "Blogs updated." });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to save blogs." });
+    }
+});
+
 
 // ------------------------------------------------------------------
 // ENCRYPTED MEDIA UPLOAD (Phase 4)

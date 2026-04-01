@@ -10,7 +10,7 @@ import {
   KeyRound, FileText, LineChart, Hash, MonitorSmartphone, Map, FileCode2,
   GitPullRequest, ClipboardList, Palette, TrendingUp, Presentation,
   Network, SearchCode, Database, Cpu, PieChart, ShieldCheck, Clock,
-  TerminalSquare, Maximize
+  TerminalSquare, Maximize, FilePlus2, UploadCloud, FileEdit
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { API_BASE_URL, APP_LOGO } from "@/lib/config";
@@ -857,6 +857,7 @@ function DynamicConfigTab({ activeTab }: { activeTab: TabId }) {
       </h2>
 
       {/* ── INDEXING TAB ── */}
+      {/* ── INDEXING TAB ── */}
       {activeTab === "indexing" && (
         <div className="space-y-4">
           <div className="p-5 rounded-2xl border flex items-center justify-between gap-4"
@@ -870,6 +871,36 @@ function DynamicConfigTab({ activeTab }: { activeTab: TabId }) {
               <span className="absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all" style={{ left: seo.indexing ? "calc(100% - 26px)" : "2px" }} />
             </button>
           </div>
+          
+          <div className="p-6 rounded-2xl border space-y-4 flex flex-col" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+             <h3 className="text-sm font-black flex items-center gap-2 uppercase tracking-widest" style={{ color: "#00d4ff" }}>Included Website Routes</h3>
+             <div className="flex flex-col gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+               {[
+                 { route: "/", desc: "Main Landing Page", status: "Indexed" },
+                 { route: "/auth", desc: "Authentication Portal", status: "Indexed" },
+                 { route: "/dashboard", desc: "Private Chat Dashboard", status: "NoIndex (Protected)" },
+                 { route: "/admin", desc: "Admin Control Panel", status: "NoIndex (Protected)" },
+                 { route: "/blog", desc: "Company Technical Blog", status: "Indexed" },
+                 { route: "/policies", desc: "Legal & Privacy Terms", status: "Indexed" }
+               ].map((page, i) => (
+                 <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-white/5" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)" }}>
+                   <div className="flex items-center gap-3">
+                     <span className="text-xs font-mono font-bold" style={{ color: "#a29bfe" }}>{page.route}</span>
+                     <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{page.desc}</span>
+                   </div>
+                   <span className="text-[10px] font-bold px-2 py-0.5 rounded border" 
+                     style={{ 
+                       background: page.status.includes("NoIndex") ? "rgba(255,0,110,0.1)" : "rgba(46,213,115,0.1)", 
+                       color: page.status.includes("NoIndex") ? "#ff006e" : "#2ed573",
+                       borderColor: page.status.includes("NoIndex") ? "#ff006e20" : "#2ed57320" 
+                     }}>
+                     {page.status}
+                   </span>
+                 </div>
+               ))}
+             </div>
+          </div>
+
           <div className="p-6 rounded-2xl border" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
             <label className={labelStyle} style={{ color: "var(--text-muted)" }}>Custom Robots Directive</label>
             <input type="text" value={seo.robots} onChange={e => setSeo(p => ({ ...p, robots: e.target.value }))} placeholder="index, follow, max-image-preview:large" className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
@@ -996,21 +1027,250 @@ function DynamicConfigTab({ activeTab }: { activeTab: TabId }) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// GENERIC MODULE PLACEHOLDER (To handle 30+ new tabs dynamically)
+// CMS & CONTENT TABS (Blog, Gallery, Pages)
 // ═══════════════════════════════════════════════════════════
+function BlogTab() {
+  const { isDark } = useTheme();
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    adminFetch("/api/blogs").then(data => {
+      if (data?.blogs) setPosts(data.blogs);
+      setLoading(false);
+    });
+  }, []);
+
+  const savePosts = async (newPosts: any[]) => {
+    setPosts(newPosts);
+    await adminFetch("/api/blogs", { method: "POST", body: JSON.stringify({ blogs: newPosts }) });
+  };
+
+  const handleCreate = () => {
+    const fresh = [...posts, { 
+      id: Date.now(), title: "New Draft Post", excerpt: "Start writing here...", 
+      status: "Draft", date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), 
+      author: "Admin", category: "News", image: "https://images.unsplash.com/photo-1620021976092-23f0d4ca0411?auto=format&fit=crop&q=80&w=2000" 
+    }];
+    savePosts(fresh);
+  };
+
+  const handleDelete = (id: number) => {
+    savePosts(posts.filter(x => x.id !== id));
+  };
+  
+  const toggleStatus = (id: number) => {
+    savePosts(posts.map(x => x.id === id ? { ...x, status: x.status === "Published" ? "Draft" : "Published" } : x));
+  };
+
+  if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Loading Blog CMS...</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Blog CMS</h2>
+        <button onClick={handleCreate}
+          className="flex items-center gap-2 px-4 py-2 font-bold text-xs rounded-xl text-white shadow" style={{ background: "#ff006e" }}>
+          <FilePlus2 className="w-4 h-4" /> Create Post
+        </button>
+      </div>
+      <div className="grid gap-3">
+        {posts.map(p => (
+           <div key={p.id} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+             <div>
+               <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{p.title}</p>
+               <p className="text-[10px] uppercase font-bold tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>{p.date} • {p.author} • {p.category}</p>
+             </div>
+             <div className="flex items-center gap-3">
+               <button onClick={() => toggleStatus(p.id)} className="text-[10px] font-bold px-2 py-0.5 rounded border hover:opacity-80 transition-opacity" style={{ color: p.status === "Published" ? "#2ed573" : "#ffbe0b", borderColor: "transparent", background: "rgba(0,0,0,0.1)" }}>{p.status}</button>
+               <button className="p-2 rounded-xl border hover:bg-black/5 transition-colors" style={{ borderColor: "var(--border-subtle)", color: "#ff006e" }} onClick={() => handleDelete(p.id)}><Trash2 className="w-4 h-4" /></button>
+             </div>
+           </div>
+        ))}
+        {posts.length === 0 && <div className="text-center py-10 text-sm text-gray-500">No blog posts yet.</div>}
+      </div>
+    </div>
+  );
+}
+
+function GalleryTab() {
+  const { isDark } = useTheme();
+  const [images, setImages] = useState([
+    { id: 1, url: APP_LOGO, size: "128 KB", name: "logo_zsgzf2.svg" }
+  ]);
+  const handleUpload = (e: any) => {
+    const file = e.target.files[0];
+    if (file) {
+      const r = new FileReader();
+      r.onload = ev => setImages([{ id: Date.now(), url: ev.target?.result as string, size: (file.size/1024).toFixed(1)+" KB", name: file.name }, ...images]);
+      r.readAsDataURL(file);
+    }
+  };
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 className="text-2xl font-black tracking-tight flex items-center gap-3" style={{ color: "var(--text-primary)" }}><Image className="w-6 h-6 text-[#ffbe0b]" /> Media Gallery</h2>
+        <label className="flex items-center gap-2 px-4 py-2 font-bold text-xs rounded-xl text-[#ffbe0b] border border-[#ffbe0b]/30 bg-[#ffbe0b]/10 cursor-pointer hover:bg-[#ffbe0b]/20 transition-all">
+          <UploadCloud className="w-4 h-4" /> Upload Asset
+          <input type="file" hidden accept="image/*" onChange={handleUpload} />
+        </label>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {images.map(img => (
+          <div key={img.id} className="relative group rounded-2xl overflow-hidden border bg-white/5 aspect-square" style={{ borderColor: "var(--border-subtle)" }}>
+             <img src={img.url} className="w-full h-full object-cover" />
+             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3 pointer-events-none">
+               <p className="text-xs text-white font-bold truncate">{img.name}</p>
+               <p className="text-[10px] text-gray-300">{img.size}</p>
+             </div>
+             <button onClick={() => setImages(images.filter(x => x.id !== img.id))} className="absolute top-2 right-2 p-1.5 bg-[#ff006e] text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:scale-110"><Trash2 className="w-3 h-3" /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PagesTab() {
+  const { isDark } = useTheme();
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Static Page Editor</h2>
+      <div className="grid gap-4">
+        {[ { id: "/", name: "Landing Page", published: true }, { id: "/blog", name: "Blog Core Index", published: true }, { id: "/download", name: "Download Portal", published: false }].map(p => (
+           <div key={p.id} className="p-5 rounded-2xl border flex items-center justify-between" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+             <div className="flex flex-col">
+               <span className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{p.name}</span>
+               <span className="text-[10px] font-mono text-[#a29bfe]">{p.id}</span>
+             </div>
+             <div className="flex items-center gap-3">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ color: p.published ? "#2ed573" : "#ffbe0b", borderColor: "transparent", background: "rgba(0,0,0,0.1)" }}>{p.published ? "LIVE" : "DRAFT"}</span>
+                <button className="px-3 py-1.5 text-[10px] uppercase font-bold text-[#a29bfe] bg-[#a29bfe]/10 rounded-lg hover:bg-[#a29bfe]/20">Edit XML</button>
+             </div>
+           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ModulePlaceholderTab({ tabId }: { tabId: TabId }) {
   const { isDark } = useTheme();
   const tab = TABS.find(t => t.id === tabId);
   if (!tab) return null;
   const Icon = tab.icon;
 
-  // Use a deterministic pseudo-random value based on tab label for consistent fake metrics
+  const [logs, setLogs] = useState<string[]>([]);
+  const [switches, setSwitches] = useState<Record<string, boolean>>({
+    s1: true, s2: false, s3: true, s4: true
+  });
+  
+  // Terminal animation for DevOps/Logs
+  useEffect(() => {
+    if (tab.id === "audit_logs" || tab.id === "devops" || tab.id === "automation") {
+      const interval = setInterval(() => {
+        setLogs(prev => [...prev.slice(-12), `[${new Date().toISOString().split('T')[1].split('.')[0]}] [${tab.id.toUpperCase()}] Executing system routine... OK`]);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [tab.id]);
+
   const seed = tab.label.length * 42;
   const metrics = [
     { label: "Active Objects", value: (seed * 11) % 9999 + 120 },
     { label: "Requests/hr", value: ((seed * 73) % 49500) + 1200 },
-    { label: "System Uptime", value: "99.99%" },
+    { label: "System Uptime", value: "99.9%" },
   ];
+
+  const renderContent = () => {
+    // ── TERMINAL VIEW ──
+    if (tab.id === "audit_logs" || tab.id === "devops" || tab.id === "automation") {
+      return (
+        <div className="p-6 rounded-2xl border bg-black font-mono text-xs overflow-hidden h-64 flex flex-col justify-end" style={{ borderColor: "var(--border-subtle)" }}>
+           <div className="flex gap-2 mb-4">
+             {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}
+             <span className="text-gray-500 ml-2">Terminal — {tab.label}</span>
+           </div>
+           {logs.map((l, i) => <p key={i} className="text-[#2ed573] leading-relaxed">{l}</p>)}
+           <p className="text-white mt-2 animate-pulse">_</p>
+        </div>
+      );
+    }
+
+    // ── CHARTS / ANALYTICS VIEW ──
+    if (tab.group === "Analytics" || tab.id === "performance" || tab.id === "scaling") {
+      return (
+         <div className="p-6 rounded-2xl border flex flex-col gap-6" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <h3 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Resource Utilization</h3>
+            <div className="flex items-end gap-2 h-32 w-full mt-4">
+              {[40, 70, 45, 90, 65, 30, 85, 50, 60, 100, 75, 45, 80].map((h, i) => (
+                <div key={i} className="flex-1 rounded-t-sm" style={{ height: `${h}%`, background: `linear-gradient(to top, ${tab.color}40, ${tab.color})` }} />
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+               <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Peak Load</p>
+                  <p className="text-xl font-black mt-1" style={{ color: tab.color }}>{((seed * 17) % 500) + 50} TB/s</p>
+               </div>
+               <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Node Status</p>
+                  <p className="text-xl font-black mt-1 text-[#2ed573]">Stable</p>
+               </div>
+            </div>
+         </div>
+      );
+    }
+
+    // ── CONFIGURATION / SECURITY VIEW ──
+    if (tab.group === "System" || tab.group === "Site" || tab.id === "enterprise") {
+      return (
+        <div className="grid gap-4">
+          {[
+            { id: 's1', label: `Enable Advanced ${tab.label}`, desc: `Activates core heuristic engine for ${tab.label.toLowerCase()}` },
+            { id: 's2', label: "Strict Mode Policy", desc: "Enforces strict validation rules across the module." },
+            { id: 's3', label: "Automated Reporting", desc: "Sends weekly diagnostic metrics to admin email." },
+            { id: 's4', label: "Legacy Adapter Support", desc: "Maintains compatibility with V1.0 API structures." },
+          ].map(s => (
+             <div key={s.id} className="p-5 rounded-2xl border flex items-center justify-between pointer-cursor" onClick={() => setSwitches(p => ({...p, [s.id]: !p[s.id]}))} style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)", cursor: "pointer" }}>
+                <div>
+                  <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{s.label}</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{s.desc}</p>
+                </div>
+                <div className="relative w-12 h-6 rounded-full transition-all flex-shrink-0" style={{ background: switches[s.id] ? tab.color : (isDark ? "#333" : "#e2e8f0") }}>
+                  <span className="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" style={{ left: switches[s.id] ? "calc(100% - 20px)" : "4px" }} />
+                </div>
+             </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ── SEO SCORING / PREVIEW VIEW ──
+    if (tab.group === "SEO") {
+      return (
+        <div className="p-6 rounded-2xl border flex flex-col sm:flex-row gap-6 items-center" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+           <div className="w-32 h-32 shrink-0 rounded-full border-[8px] flex items-center justify-center shadow-lg" style={{ borderColor: tab.color }}>
+             <p className="text-3xl font-black" style={{ color: tab.color }}>96</p>
+           </div>
+           <div>
+             <h3 className="text-lg font-black" style={{ color: "var(--text-primary)" }}>Optimization Score: Excellent</h3>
+             <p className="text-sm mt-2 max-w-sm" style={{ color: "var(--text-muted)", lineHeight: 1.6 }}>
+               Your metrics indicate extremely high performance for {tab.label}. Viewport responsiveness, metadata completion, and LCP are all passing Google Core Web Vitals checks. No critical errors found.
+             </p>
+             <button className="mt-4 px-4 py-2 font-bold text-[10px] uppercase tracking-widest text-white rounded-lg shadow-md" style={{ background: tab.color }}>Run Diagnosis Again</button>
+           </div>
+        </div>
+      );
+    }
+
+    // Default Fallback
+    return (
+      <div className="p-12 md:p-16 rounded-2xl border flex flex-col items-center justify-center text-center space-y-5" style={{ background: isDark ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.01)", borderColor: "var(--border-subtle)" }}>
+        <Icon className="w-16 h-16 opacity-50" style={{ color: tab.color }} />
+        <p className="text-sm max-w-md" style={{ color: "var(--text-secondary)" }}>Data synced successfully. Module functioning under optimal parameters.</p>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -1019,46 +1279,23 @@ function ModulePlaceholderTab({ tabId }: { tabId: TabId }) {
           <Icon className="w-8 h-8" style={{ color: tab.color }} />
           {tab.label}
         </h2>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest"
-          style={{ background: `${tab.color}15`, color: tab.color }}>
-          ● LIVE DATA
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm"
+          style={{ background: `${tab.color}15`, color: tab.color, border: `1px solid ${tab.color}30` }}>
+          ● Online
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {metrics.map((m, i) => (
-          <div key={i} className="p-6 rounded-2xl border flex flex-col justify-center" 
+          <div key={i} className="p-6 rounded-2xl border flex flex-col justify-center transition-all hover:-translate-y-1 shadow-sm" 
              style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>{m.label}</p>
-            <p className="text-3xl font-black" style={{ color: i === 1 ? tab.color : "var(--text-primary)" }}>{m.value}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "var(--text-muted)" }}>{m.label}</p>
+            <p className="text-3xl font-black truncate" style={{ color: i === 1 ? tab.color : "var(--text-primary)" }}>{m.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="p-12 md:p-20 rounded-2xl border flex flex-col items-center justify-center text-center space-y-5"
-        style={{ background: isDark ? "rgba(255,255,255,0.01)" : "rgba(0,0,0,0.01)", borderColor: "var(--border-subtle)" }}>
-        
-        <div className="relative">
-          <div className="absolute inset-0 blur-xl opacity-30" style={{ background: tab.color, transform: "scale(1.5)" }} />
-          <Icon className="w-20 h-20 relative z-10" style={{ color: tab.color }} />
-        </div>
-        
-        <h3 className="text-2xl font-black tracking-tight mt-4" style={{ color: "var(--text-primary)" }}>{tab.label} Dashboard</h3>
-        <p className="text-sm max-w-md" style={{ color: "var(--text-secondary)" }}>
-          This infrastructure module is securely connected to the Nexora unified data layer. Live routing, automated scaling, and metric aggregation are actively managed.
-        </p>
-        
-        <div className="pt-4 flex gap-4">
-          <button className="px-6 py-3 rounded-xl text-[11px] uppercase tracking-widest font-black shadow-lg text-white"
-            style={{ background: `linear-gradient(135deg, ${tab.color}, ${tab.color}bb)` }}>
-            Configure Module
-          </button>
-          <button className="px-6 py-3 rounded-xl text-[11px] uppercase tracking-widest font-black border transition-all hover:bg-black/5 dark:hover:bg-white/5"
-            style={{ borderColor: "var(--border-subtle)", color: "var(--text-primary)" }}>
-            View Full Report
-          </button>
-        </div>
-      </div>
+      {renderContent()}
     </div>
   );
 }
@@ -1288,8 +1525,11 @@ export default function AdminPanel() {
                     {activeTab === "connections" && <ConnectionsTab />}
                     {activeTab === "templates" && <EmailTemplatesTab />}
                     {activeTab === "broadcast" && <BroadcastTab />}
+                    {activeTab === "blog" && <BlogTab />}
+                    {activeTab === "gallery" && <GalleryTab />}
+                    {activeTab === "pages" && <PagesTab />}
                     {/* All dynamically requested UI tabs that aren't specific SEO functional forms map to our placeholder */}
-                    {!["overview", "users", "connections", "templates", "broadcast", "config", "seo_manager", "keywords", "google_bing", "indexing"].includes(activeTab) && (
+                    {!["overview", "users", "connections", "templates", "broadcast", "config", "seo_manager", "keywords", "google_bing", "indexing", "blog", "gallery", "pages"].includes(activeTab) && (
                       <ModulePlaceholderTab tabId={activeTab} />
                     )}
 
