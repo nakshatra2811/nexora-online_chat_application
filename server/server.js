@@ -256,6 +256,24 @@ let pgPool;
                 category TEXT,
                 image TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                action TEXT NOT NULL,
+                target TEXT,
+                admin_username TEXT NOT NULL,
+                details TEXT,
+                timestamp ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+            );
+
+            CREATE TABLE IF NOT EXISTS media_assets (
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                url TEXT NOT NULL,
+                name TEXT NOT NULL,
+                size TEXT,
+                type TEXT,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+            );
         `);
 
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
@@ -2549,6 +2567,124 @@ app.delete('/api/stories/:id', async (req, res) => {
 // ------------------------------------------------------------------
 // ADMIN PANEL API (Full CRUD Management)
 // ------------------------------------------------------------------
+
+async function logAdminAction(admin_username, action, target, details) {
+    try {
+        if (!db) return;
+        await db.run(
+            'INSERT INTO audit_logs (action, target, admin_username, details) VALUES (?, ?, ?, ?)',
+            [action, target, admin_username, details || '']
+        );
+    } catch (err) {
+        console.error("[AUDIT] Log failed:", err);
+    }
+}
+
+// POST /api/admin/broadcast — Real Email Broadcast
+app.post('/api/admin/broadcast', async (req, res) => {
+    const { subject, html } = req.body;
+    if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required." });
+
+    try {
+        if (!db) return res.status(503).json({ error: "Database initializing" });
+        const users = await db.all('SELECT email, username FROM users');
+        
+        let sent = 0;
+        let failed = 0;
+
+        // Background loop to prevent blocking (admin gets immediate success)
+        (async () => {
+             for (const u of users) {
+                 try {
+                     await emailTransporter.sendMail({
+                         from: `"${process.env.GMAIL_NAME || 'Nexora Admin'}" <${process.env.GMAIL_USER}>`,
+                         to: u.email,
+                         subject: subject,
+                         html: html.split('{{username}}').join(u.username)
+                     });
+                     sent++;
+                     // Small delay to prevent SMTP throttling
+                     await new Promise(r => setTimeout(r, 500)); 
+                 } catch (e) {
+                     failed++;
+                     console.error(`[BROADCAST] Failed to ${u.email}:`, e.message);
+                 }
+             }
+             logAdminAction('ADMIN', 'EMAIL_BROADCAST', 'ALL_USERS', `Sent: ${sent}, Failed: ${failed}`);
+        })();
+
+        res.json({ status: "success", message: "Broadcast sequence initialized.", total: users.length });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to start broadcast." });
+    }
+});
+
+// GET /api/admin/analytics — Real Growth Data
+app.get('/api/admin/analytics', async (req, res) => {
+    try {
+        if (!db) return res.status(503).json({ error: "DB initializing" });
+        
+        // Signups over last 30 days
+        const growthSql = dbType === 'postgres' 
+            ? "SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY date ASC"
+            : "SELECT date(created_at) as date, COUNT(*) as count FROM users WHERE created_at > date('now', '-30 days') GROUP BY date(created_at) ORDER BY date ASC";
+        
+        const growth = await db.all(growthSql);
+        
+        // Distribution of user roles
+        const roles = await db.all("SELECT role, COUNT(*) as count FROM users GROUP BY role");
+        
+        res.json({ growth, roles });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+});
+
+// GET /api/admin/audit-logs
+app.get('/api/admin/audit-logs', async (req, res) => {
+    try {
+        if (!db) return res.status(503).json({ error: "DB initializing" });
+        const logs = await db.all('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100');
+        res.json({ logs });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch logs" });
+    }
+});
+
+// GET /api/admin/media — Real Asset Gallery
+app.get('/api/admin/media', async (req, res) => {
+    try {
+        if (!db) return res.status(503).json({ error: "DB initializing" });
+        const assets = await db.all('SELECT * FROM media_assets ORDER BY created_at DESC');
+        res.json({ assets });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch media assets" });
+    }
+});
+
+// POST /api/admin/media — Add asset
+app.post('/api/admin/media', async (req, res) => {
+    const { url, name, size, type } = req.body;
+    try {
+        await db.run('INSERT INTO media_assets (url, name, size, type) VALUES (?, ?, ?, ?)', [url, name, size, type]);
+        res.json({ status: "success" });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to add asset" });
+    }
+});
+
+// DELETE /api/admin/media/:id — Remove asset
+app.delete('/api/admin/media/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('DELETE FROM media_assets WHERE id = ?', [id]);
+        logAdminAction('ADMIN', 'MEDIA_DELETE', `asset_${id}`, 'Media asset removed');
+        res.json({ status: "success" });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to delete asset" });
+    }
+});
 
 // GET /api/admin/stats — Dashboard overview stats
 app.get('/api/admin/stats', async (req, res) => {

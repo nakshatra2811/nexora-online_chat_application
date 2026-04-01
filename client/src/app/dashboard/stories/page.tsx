@@ -774,17 +774,6 @@ export default function StoriesPage() {
           </p>
         </div>
 
-        {/* New Snap button */}
-        <motion.button
-          whileHover={{ scale: 1.05, boxShadow: "0 0 28px rgba(108,92,231,0.45)" }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => startCameraView()}
-          className="flex items-center gap-2 px-5 py-3 rounded-full text-white font-bold text-sm shadow-lg"
-          style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
-          <Camera className="w-4 h-4" />
-          <span>New Story</span>
-          <Zap className="w-4 h-4 fill-white" />
-        </motion.button>
       </motion.div>
 
       {/* ─── Story Grid ─── */}
@@ -831,14 +820,6 @@ export default function StoriesPage() {
                 <Plus className="w-4 h-4 text-white stroke-[3px]" />
               </motion.div>
 
-              {/* View + Like Count Badge — Total for all active stories */}
-              {myStories.length > 0 && (
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap font-mono tracking-widest">
-                  <Eye className="w-3 h-3 shrink-0" /> {formatCount(myStories.reduce((acc, s) => acc + (s.views || 0), 0))}
-                  <span className="opacity-30">·</span>
-                  <Heart className="w-3 h-3 text-[#ff006e] shrink-0" fill="#ff006e" /> {formatCount(myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0))}
-                </div>
-              )}
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
@@ -857,7 +838,11 @@ export default function StoriesPage() {
             className="flex flex-col items-center cursor-pointer group relative"
           >            {/* Ring + Avatar */}
             <div className="relative mb-3" onClick={() => setActiveStory(group.stories[0])}>
-              <div className={`p-[3px] rounded-full bg-gradient-to-tr ${group.isViewed ? 'from-gray-400 to-gray-600' : 'from-[#f09433] via-[#e6683c] via-[#dc2743] via-[#cc2366] to-[#bc1888]'} shadow-lg group-hover:shadow-2xl transition-shadow`}>
+              <div className={`p-[1px] rounded-full transition-all duration-500 ${
+                group.isViewed 
+                  ? (isDark ? 'bg-white/10 border border-white/5' : 'bg-black/5 border border-black/5') 
+                  : 'bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] p-[3px]'
+              } shadow-lg group-hover:shadow-2xl`}>
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#ffffff", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
                   {group.avatarUrl ? (

@@ -439,13 +439,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         initial={{ y: -80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="hidden md:flex items-center justify-between h-[60px] px-8 z-50 shrink-0 sticky top-0"
+        className="hidden md:flex items-center justify-between h-[60px] px-8 z-[100] shrink-0 sticky top-0"
         style={{
           background: isDark ? "rgba(10, 10, 16, 0.75)" : "rgba(255, 255, 255, 0.65)",
           backdropFilter: "blur(40px) saturate(2)",
           WebkitBackdropFilter: "blur(40px) saturate(2)",
           borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"}`,
           boxShadow: isDark ? "0 4px 30px rgba(0,0,0,0.5)" : "0 4px 30px rgba(0,0,0,0.04)",
+          pointerEvents: "auto",
         }}
       >
         <div className="flex items-center gap-4">
@@ -472,7 +473,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Center Navigation Protocol */}
         <div className="flex items-center gap-1.5 h-full">
           {navItems.map((item, i) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname.startsWith(item.href);
             return (
               <motion.button
                 key={item.name}
@@ -481,10 +482,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 transition={{ delay: 0.1 + i * 0.05, ease: "easeOut" }}
                 whileTap={{ scale: 0.96 }}
                 onClick={() => triggerAction(item.href)}
-                className="relative flex items-center gap-2.5 px-4 h-10 rounded-2xl transition-all duration-300"
+                className="relative flex items-center gap-2.5 px-4 h-10 rounded-2xl transition-all duration-300 cursor-pointer active:scale-95"
                 style={{
                   color: isActive ? "#6c5ce7" : "var(--text-secondary)",
                   background: isActive ? (isDark ? "rgba(108,92,231,0.12)" : "rgba(108,92,231,0.08)") : "transparent",
+                  pointerEvents: "auto",
                 }}
               >
                 <item.icon className="h-[15px] w-[15px]" strokeWidth={isActive ? 2.5 : 2} />
@@ -704,21 +706,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="md:hidden fixed z-[95] rounded-full flex justify-center shadow-2xl"
+            className="md:hidden fixed z-[200] rounded-full flex justify-center shadow-2xl"
             style={{
               background: isDark ? "rgba(16,16,24,0.9)" : "rgba(255,255,255,0.9)",
               backdropFilter: "blur(24px) saturate(1.8)",
               border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
               bottom: "calc(16px + env(safe-area-inset-bottom))",
-              left: "16px", right: "16px"
+              left: "16px", right: "16px",
+              pointerEvents: "auto",
             }}>
             <div className="flex w-full items-center justify-around px-1 py-1.5">
               {bottomNavItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathname.startsWith(item.href);
                 return (
                   <motion.button key={item.name} whileTap={{ scale: 0.85 }} onClick={() => triggerAction(item.href)}
-                    className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300"
-                    style={{ background: isActive ? "linear-gradient(135deg, #0066ff, #00d4ff)" : "transparent" }}>
+                    className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300 cursor-pointer active:scale-90"
+                    style={{ 
+                      background: isActive ? "linear-gradient(135deg, #0066ff, #00d4ff)" : "transparent",
+                      pointerEvents: "auto",
+                    }}>
                     <item.icon className="h-6 w-6" style={{ color: isActive ? "#fff" : "var(--text-secondary)" }} />
                   </motion.button>
                 );

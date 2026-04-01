@@ -1213,21 +1213,49 @@ function BlogTab() {
 
 function GalleryTab() {
   const { isDark } = useTheme();
-  const [images, setImages] = useState([
-    { id: 1, url: APP_LOGO, size: "128 KB", name: "logo_zsgzf2.svg" }
-  ]);
-  const handleUpload = (e: any) => {
+  const [images, setImages] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchMedia = useCallback(async () => {
+    setLoading(true);
+    const data = await adminFetch("/api/admin/media");
+    if (data?.assets) setImages(data.assets);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchMedia(); }, [fetchMedia]);
+
+  const handleUpload = async (e: any) => {
     const file = e.target.files[0];
     if (file) {
       const r = new FileReader();
-      r.onload = ev => setImages([{ id: Date.now(), url: ev.target?.result as string, size: (file.size/1024).toFixed(1)+" KB", name: file.name }, ...images]);
+      r.onload = async ev => {
+        const payload = {
+          url: ev.target?.result as string,
+          name: file.name,
+          size: (file.size/1024).toFixed(1)+" KB",
+          type: file.type
+        };
+        await adminFetch("/api/admin/media", { method: "POST", body: JSON.stringify(payload) });
+        fetchMedia();
+      };
       r.readAsDataURL(file);
     }
   };
+
+  const handleDelete = async (id: number) => {
+    await adminFetch(`/api/admin/media/${id}`, { method: "DELETE" });
+    fetchMedia();
+  };
+
+  if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Syncing Media Protocol...</div>;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-2xl font-black tracking-tight flex items-center gap-3" style={{ color: "var(--text-primary)" }}><Image className="w-6 h-6 text-[#ffbe0b]" /> Media Gallery</h2>
+        <h2 className="text-2xl font-black tracking-tight flex items-center gap-3" style={{ color: "var(--text-primary)" }}>
+          <Image className="w-6 h-6 text-[#ffbe0b]" /> Media Gallery
+        </h2>
         <label className="flex items-center gap-2 px-4 py-2 font-bold text-xs rounded-xl text-[#ffbe0b] border border-[#ffbe0b]/30 bg-[#ffbe0b]/10 cursor-pointer hover:bg-[#ffbe0b]/20 transition-all">
           <UploadCloud className="w-4 h-4" /> Upload Asset
           <input type="file" hidden accept="image/*" onChange={handleUpload} />
@@ -1236,14 +1264,21 @@ function GalleryTab() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {images.map(img => (
           <div key={img.id} className="relative group rounded-2xl overflow-hidden border bg-white/5 aspect-square" style={{ borderColor: "var(--border-subtle)" }}>
-             <img src={img.url} className="w-full h-full object-cover" />
+             <img src={img.url} className="w-full h-full object-cover" alt={img.name} />
              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3 pointer-events-none">
                <p className="text-xs text-white font-bold truncate">{img.name}</p>
                <p className="text-[10px] text-gray-300">{img.size}</p>
              </div>
-             <button onClick={() => setImages(images.filter(x => x.id !== img.id))} className="absolute top-2 right-2 p-1.5 bg-[#ff006e] text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:scale-110"><Trash2 className="w-3 h-3" /></button>
+             <button onClick={() => handleDelete(img.id)} className="absolute top-2 right-2 p-1.5 bg-[#ff006e] text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:scale-110">
+               <Trash2 className="w-3 h-3" />
+             </button>
           </div>
         ))}
+        {images.length === 0 && (
+          <div className="col-span-full py-20 text-center rounded-3xl border border-dashed border-white/10" style={{ color: "var(--text-muted)" }}>
+             No assets cached in the cloud.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1278,62 +1313,93 @@ function ModulePlaceholderTab({ tabId }: { tabId: TabId }) {
   if (!tab) return null;
   const Icon = tab.icon;
 
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<{ growth: any[], roles: any[] }>({ growth: [], roles: [] });
+  const [loading, setLoading] = useState(true);
   const [switches, setSwitches] = useState<Record<string, boolean>>({
     s1: true, s2: false, s3: true, s4: true
   });
   
-  // Terminal animation for DevOps/Logs
   useEffect(() => {
-    if (tab.id === "audit_logs" || tab.id === "devops" || tab.id === "automation") {
-      const interval = setInterval(() => {
-        setLogs(prev => [...prev.slice(-12), `[${new Date().toISOString().split('T')[1].split('.')[0]}] [${tab.id.toUpperCase()}] Executing system routine... OK`]);
-      }, 2000);
-      return () => clearInterval(interval);
+    setLoading(true);
+    if (tabId === "audit_logs") {
+      adminFetch("/api/admin/audit-logs").then(data => {
+        if (data?.logs) setLogs(data.logs);
+        setLoading(false);
+      });
+    } else if (tabId === "analytics") {
+      adminFetch("/api/admin/analytics").then(data => {
+        if (data) setAnalytics(data);
+        setLoading(false);
+      });
+    } else {
+      // Small simulated delay for other placeholders
+      setTimeout(() => setLoading(false), 500);
     }
-  }, [tab.id]);
+  }, [tabId]);
 
-  const seed = tab.label.length * 42;
   const metrics = [
-    { label: "Active Objects", value: (seed * 11) % 9999 + 120 },
-    { label: "Requests/hr", value: ((seed * 73) % 49500) + 1200 },
-    { label: "System Uptime", value: "99.9%" },
+    { label: "Active Objects", value: tabId === 'analytics' ? analytics.growth.reduce((a, b) => a + b.count, 0) : "1,024" },
+    { label: "System Status", value: "Optimal" },
+    { label: "Uptime", value: "99.99%" },
   ];
 
   const renderContent = () => {
-    // ── TERMINAL VIEW ──
-    if (tab.id === "audit_logs" || tab.id === "devops" || tab.id === "automation") {
+    if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Decrypting Module Data...</div>;
+
+    // ── AUDIT LOGS VIEW ──
+    if (tabId === "audit_logs") {
       return (
-        <div className="p-6 rounded-2xl border bg-black font-mono text-xs overflow-hidden h-64 flex flex-col justify-end" style={{ borderColor: "var(--border-subtle)" }}>
-           <div className="flex gap-2 mb-4">
-             {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-3 h-3 rounded-full" style={{ background: c }} />)}
-             <span className="text-gray-500 ml-2">Terminal — {tab.label}</span>
+        <div className="rounded-2xl border bg-black font-mono text-[10px] overflow-hidden flex flex-col" style={{ borderColor: "var(--border-subtle)", minHeight: "300px" }}>
+           <div className="flex gap-2 p-4 border-b border-white/10 bg-white/5">
+             {["#ff5f57","#febc2e","#28c840"].map(c => <div key={c} className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />)}
+             <span className="text-gray-500 ml-2 uppercase tracking-widest text-[9px]">Secure Audit Terminal</span>
            </div>
-           {logs.map((l, i) => <p key={i} className="text-[#2ed573] leading-relaxed">{l}</p>)}
-           <p className="text-white mt-2 animate-pulse">_</p>
+           <div className="p-4 space-y-1 overflow-y-auto max-h-[400px] custom-scrollbar">
+             {logs.map((l, i) => (
+               <p key={i} className="text-[#2ed573] leading-relaxed">
+                 <span className="opacity-50">[{new Date(l.timestamp).toLocaleString()}]</span> 
+                 <span className="text-[#00d4ff] mx-2">[{l.admin_username}]</span>
+                 <span className="font-bold">{l.action}</span> 
+                 {l.target && <span className="text-white"> → {l.target}</span>}
+                 {l.details && <span className="opacity-70 ml-2 italic">({l.details})</span>}
+               </p>
+             ))}
+             {logs.length === 0 && <p className="text-gray-600">No administrative logs recorded in current epoch.</p>}
+           </div>
         </div>
       );
     }
 
-    // ── CHARTS / ANALYTICS VIEW ──
-    if (tab.group === "Analytics" || tab.id === "performance" || tab.id === "scaling") {
+    // ── ANALYTICS VIEW ──
+    if (tabId === "analytics") {
+      const maxCount = Math.max(...analytics.growth.map(d => d.count), 1);
       return (
-         <div className="p-6 rounded-2xl border flex flex-col gap-6" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-            <h3 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>Resource Utilization</h3>
-            <div className="flex items-end gap-2 h-32 w-full mt-4">
-              {[40, 70, 45, 90, 65, 30, 85, 50, 60, 100, 75, 45, 80].map((h, i) => (
-                <div key={i} className="flex-1 rounded-t-sm" style={{ height: `${h}%`, background: `linear-gradient(to top, ${tab.color}40, ${tab.color})` }} />
-              ))}
+         <div className="p-6 rounded-2xl border flex flex-col gap-8" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <div>
+              <h3 className="font-bold text-sm mb-1" style={{ color: "var(--text-primary)" }}>User Growth (Last 30 Days)</h3>
+              <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest">Real-time database signups</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-               <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Peak Load</p>
-                  <p className="text-xl font-black mt-1" style={{ color: tab.color }}>{((seed * 17) % 500) + 50} TB/s</p>
-               </div>
-               <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Node Status</p>
-                  <p className="text-xl font-black mt-1 text-[#2ed573]">Stable</p>
-               </div>
+            
+            <div className="flex items-end gap-1.5 h-40 w-full">
+              {analytics.growth.map((d, i) => (
+                <div key={i} className="flex-1 rounded-t-lg transition-all hover:brightness-125 relative group" 
+                  style={{ height: `${(d.count / maxCount) * 100}%`, background: `linear-gradient(to top, ${tab.color}40, ${tab.color})` }}>
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                    {d.date}: {d.count} users
+                  </div>
+                </div>
+              ))}
+              {analytics.growth.length === 0 && <div className="w-full text-center text-xs text-gray-500 pb-10 italic">Insufficient data for growth trends.</div>}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-6 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+               {analytics.roles.map(r => (
+                 <div key={r.role}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{r.role}</p>
+                    <p className="text-2xl font-black mt-1" style={{ color: tab.color }}>{r.count}</p>
+                 </div>
+               ))}
             </div>
          </div>
       );
@@ -1417,6 +1483,7 @@ function ModulePlaceholderTab({ tabId }: { tabId: TabId }) {
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // MAIN ADMIN PANEL

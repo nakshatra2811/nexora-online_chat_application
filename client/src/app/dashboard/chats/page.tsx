@@ -83,6 +83,7 @@ export interface Thread {
   unread: number;
   avatarUrl?: string;
   wallpaper?: string;
+  lastMessageTime?: number; // Unix ms timestamp of last message — used for sorting
 }
 
 function ChatsPageContent() {
@@ -1267,10 +1268,10 @@ function ChatsPageContent() {
               localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
               return next;
             });
-            // Update thread preview
+            // Update thread preview + bump to top
             setThreads(prev => prev.map(t =>
               t.username?.toLowerCase() === senderUsername?.toLowerCase()
-                ? { ...t, preview: decryptedText, unread: (t.unread || 0) + 1 }
+                ? { ...t, preview: decryptedText, unread: (t.unread || 0) + 1, lastMessageTime: Date.now() }
                 : t
             ));
             // Local push notification (tab not focused on this chat)
@@ -1868,9 +1869,9 @@ function ChatsPageContent() {
         });
       }
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: "delivered" } : m));
-      // Update preview
+      // Update preview + bump thread to top
       setThreads(prev => prev.map(t =>
-        t.username === activeThread.username ? { ...t, preview: text } : t
+        t.username === activeThread.username ? { ...t, preview: text, lastMessageTime: Date.now() } : t
       ));
     } catch (e) {
       console.error("[!] Encryption failed", e);
@@ -2702,7 +2703,9 @@ function ChatsPageContent() {
             .sort((a, b) => {
               const aPinned = pinnedThreads.includes(a.id) ? 1 : 0;
               const bPinned = pinnedThreads.includes(b.id) ? 1 : 0;
-              return bPinned - aPinned;
+              if (bPinned !== aPinned) return bPinned - aPinned; // Pinned first
+              // Then sort by most recent message time (newest at top)
+              return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
             })
             .map((thread, i) => {
               const isActive = activeThread?.id === thread.id;
