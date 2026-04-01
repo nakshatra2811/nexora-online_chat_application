@@ -157,7 +157,7 @@ function AuthContent() {
           alert(data.message || "Authentication failed: Invalid credentials.");
         } else if (data && data.status === "success") {
           const role = data.role || "Standard";
-          document.cookie = `nexora_role=${role}; path=/; SameSite=Lax`;
+          document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`; // 30 days persistence
           localStorage.setItem("nexora_assigned_role", role);
           localStorage.setItem("nexora_signup_username", data.username);
           localStorage.setItem("nexora_signup_name", data.fullName);
@@ -203,7 +203,7 @@ function AuthContent() {
           } else if (data.status === "success" && data.user) {
             const u = data.user;
             const role = u.role || "Standard";
-            document.cookie = `nexora_role=${role}; path=/; SameSite=Lax`;
+            document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`; // 30 days persistence
             localStorage.setItem("nexora_assigned_role", role);
             localStorage.setItem("nexora_signup_username", u.username);
             localStorage.setItem("nexora_signup_name", u.fullName);

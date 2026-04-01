@@ -13,7 +13,7 @@ import {
   RefreshCcw, Bell, UserCheck, Clock, Star
 } from "lucide-react";
 import { socketService } from "@/lib/socket";
-import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, KeyStore } from "@/lib/crypto";
+import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, KeyStore, generateAESKey, encryptStorageData, decryptStorageData } from "@/lib/crypto";
 import { syntheticRingtone } from "@/lib/ringtone";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
@@ -86,6 +86,7 @@ export default function ChatsPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
+  const [vaultKey, setVaultKey] = useState<CryptoKey | null>(null);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [userRole, setUserRole] = useState("Standard Account");
@@ -247,6 +248,7 @@ export default function ChatsPage() {
   const [lockSetupEntry, setLockSetupEntry] = useState<{ threadId: number; step: "pin" | "confirm"; pin: string; confirmPin: string; error: string } | null>(null);
   const [globalChatLockEntry, setGlobalChatLockEntry] = useState<{ pin: string; error: string; showPin: boolean; forgotMode: boolean; forgotAnswer: string; forgotNewPin: string; forgotStep: "answer" | "newpin"; forgotError: string } | null>(null);
 
+  const [vaultReady, setVaultReady] = useState(false);
   const [ecdhReady, setEcdhReady] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
@@ -421,6 +423,24 @@ export default function ChatsPage() {
 
 
 
+  // ═══ Initialize Vault Key ═══
+  useEffect(() => {
+    const initVault = async () => {
+      let key = await KeyStore.getVaultKey();
+      if (!key) {
+        const newKey = await generateAESKey();
+        await KeyStore.saveVaultKey(newKey);
+        key = newKey;
+        console.log("[VAULT] New storage vault key generated and locked.");
+      } else {
+        console.log("[VAULT] Storage vault key recovered.");
+      }
+      setVaultKey(key);
+      setVaultReady(true);
+    };
+    initVault();
+  }, []);
+
   useEffect(() => {
     const myUsername = localStorage.getItem("nexora_signup_username") || "";
     myUsernameRef.current = myUsername;
@@ -499,18 +519,33 @@ export default function ChatsPage() {
   }, [activeThread]);
 
   useEffect(() => {
-    if (activeThread) {
+    const loadMessages = async () => {
+      if (!activeThread || !vaultReady) return;
+      
       localStorage.setItem("nexora_active_thread_id", activeThread.id.toString());
       const savedMsgs = localStorage.getItem(`nexora_msgs_${activeThread.id}`);
+      
       if (savedMsgs) {
         try {
-          const parsed = JSON.parse(savedMsgs);
+          let parsed: ChatMessage[] = [];
+          if (savedMsgs.startsWith("anc:")) {
+            // Encrypted format
+            if (vaultKey) {
+              const decrypted = await decryptStorageData(savedMsgs, vaultKey);
+              parsed = decrypted || [];
+            }
+          } else {
+            // Legacy plain text format - Migration path
+            parsed = JSON.parse(savedMsgs);
+          }
+
           // 🛡️ De-duplicate by ID to prevent "Non-unique key" console errors
           const unique = parsed.filter((m: ChatMessage, idx: number, self: ChatMessage[]) =>
             idx === self.findIndex((t) => t.id === m.id)
           );
           setMessages(unique);
         } catch (e) {
+          console.error("[!] Load failed", e);
           setMessages([]);
         }
       } else {
@@ -527,16 +562,21 @@ export default function ChatsPage() {
       } else {
         setDisappearTimer("off");
       }
-      
-    }
-  }, [activeThread]);
+    };
+    
+    loadMessages();
+  }, [activeThread, vaultReady, vaultKey]);
 
-  // Persist messages whenever they change
+  // Persist messages whenever they change (Encrypted)
   useEffect(() => {
-    if (activeThread) {
-      localStorage.setItem(`nexora_msgs_${activeThread.id}`, JSON.stringify(messages));
-    }
-  }, [messages, activeThread]);
+    const saveMessages = async () => {
+      if (activeThread && vaultKey && vaultReady) {
+        const encrypted = await encryptStorageData(messages, vaultKey);
+        localStorage.setItem(`nexora_msgs_${activeThread.id}`, encrypted);
+      }
+    };
+    saveMessages();
+  }, [messages, activeThread, vaultKey, vaultReady]);
 
   useEffect(() => {
     localStorage.setItem("nexora_blocked_threads", JSON.stringify(blockedThreads));
@@ -1527,23 +1567,35 @@ export default function ChatsPage() {
 
   // ═══ Disappearing Messages "After View" Logic ═══
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && disappearTimer === "after_view") {
+    const handleVisibilityChange = async () => {
+      if (document.hidden && disappearTimer === "after_view" && vaultKey && vaultReady) {
         setMessages(prev => {
           const remaining = prev.filter(m => m.status !== "seen" && !m.isSystemNotice);
           if (activeThreadRef.current?.id) {
-             localStorage.setItem(`nexora_msgs_${activeThreadRef.current.id}`, JSON.stringify(remaining));
+             encryptStorageData(remaining, vaultKey).then(encrypted => {
+               localStorage.setItem(`nexora_msgs_${activeThreadRef.current!.id}`, encrypted);
+             });
           }
           return remaining;
         });
       }
     };
     
-    const handleBeforeUnload = () => {
-       if (disappearTimer === "after_view" && activeThreadRef.current?.id) {
-          const currentMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${activeThreadRef.current.id}`) || "[]");
+    const handleBeforeUnload = async () => {
+       if (disappearTimer === "after_view" && activeThreadRef.current?.id && vaultKey && vaultReady) {
+          const stored = localStorage.getItem(`nexora_msgs_${activeThreadRef.current.id}`);
+          if (!stored) return;
+          
+          let currentMsgs: any[] = [];
+          if (stored.startsWith("anc:")) {
+            currentMsgs = await decryptStorageData(stored, vaultKey) || [];
+          } else {
+            currentMsgs = JSON.parse(stored);
+          }
+
           const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
-          localStorage.setItem(`nexora_msgs_${activeThreadRef.current.id}`, JSON.stringify(remaining));
+          const encrypted = await encryptStorageData(remaining, vaultKey);
+          localStorage.setItem(`nexora_msgs_${activeThreadRef.current.id}`, encrypted);
        }
     };
 
@@ -1914,27 +1966,39 @@ export default function ChatsPage() {
     }
     
     // Persist locally
-    if (activeThread) {
+    if (activeThread && vaultKey && vaultReady) {
         const key = `nexora_msgs_${activeThread.id}`;
-        const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
-        const updated = currentMsgs.map((m: any) => {
-            if (m.id === msgId) {
-                const reactions = { ...(m.reactions || {}), [emoji]: ((m.reactions || {})[emoji] || 0) + 1 };
-                return { ...m, reactions };
-            }
-            return m;
-        });
-        localStorage.setItem(key, JSON.stringify(updated));
+        const stored = localStorage.getItem(key);
+        (async () => {
+          let currentMsgs: any[] = [];
+          if (stored?.startsWith("anc:")) {
+            currentMsgs = await decryptStorageData(stored, vaultKey) || [];
+          } else if (stored) {
+            currentMsgs = JSON.parse(stored);
+          }
+
+          const updated = currentMsgs.map((m: any) => {
+              if (m.id === msgId) {
+                  const reactions = { ...(m.reactions || {}), [emoji]: ((m.reactions || {})[emoji] || 0) + 1 };
+                  return { ...m, reactions };
+              }
+              return m;
+          });
+          const encrypted = await encryptStorageData(updated, vaultKey);
+          localStorage.setItem(key, encrypted);
+        })();
     }
   };
 
-  const deleteMsg = (msgId: string) => {
+  const deleteMsg = async (msgId: string) => {
     setMessages(prev => {
         const nextMsgs = prev.filter(m => m.id !== msgId);
-        // Persist to local storage immediately, handling 0 items case
-        if (activeThread) {
+        // Persist to local storage immediately
+        if (activeThread && vaultKey && vaultReady) {
           const key = `nexora_msgs_${activeThread.id}`;
-          localStorage.setItem(key, JSON.stringify(nextMsgs));
+          encryptStorageData(nextMsgs, vaultKey).then(encrypted => {
+            localStorage.setItem(key, encrypted);
+          });
         }
         return nextMsgs;
     });
@@ -1945,11 +2009,13 @@ export default function ChatsPage() {
     }
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
     if (!confirm("Are you sure you want to clear this entire chat for everyone? This action cannot be undone.")) return;
     setMessages([]);
-    if (activeThread) {
-        localStorage.setItem(`nexora_msgs_${activeThread.id}`, "[]");
+    if (activeThread && vaultKey && vaultReady) {
+        const key = `nexora_msgs_${activeThread.id}`;
+        const encrypted = await encryptStorageData([], vaultKey);
+        localStorage.setItem(key, encrypted);
         const socket = socketService.getSocket();
         if (socket && activeThread.username) {
             socket.emit("dm:clear_chat", { to: activeThread.username });

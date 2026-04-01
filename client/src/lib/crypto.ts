@@ -171,6 +171,9 @@ const openKeyStore = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains("shared_secrets")) {
         db.createObjectStore("shared_secrets", { keyPath: "peerId" });
       }
+      if (!db.objectStoreNames.contains("vault_key")) {
+        db.createObjectStore("vault_key", { keyPath: "id" });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -269,4 +272,63 @@ export const KeyStore = {
       request.onerror = () => reject(request.error);
     });
   },
+
+  async getVaultKey(): Promise<CryptoKey | null> {
+    const db = await openKeyStore();
+    const tx = db.transaction("vault_key", "readonly");
+    const request = tx.objectStore("vault_key").get("my_storage_vault");
+    return new Promise((resolve, reject) => {
+      request.onsuccess = async () => {
+        const record = request.result;
+        if (!record) return resolve(null);
+        try {
+          const key = await crypto.subtle.importKey(
+            "jwk",
+            record.keyJwk,
+            { name: "AES-GCM", length: 256 },
+            true,
+            ["encrypt", "decrypt"]
+          );
+          resolve(key);
+        } catch {
+          resolve(null);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  async saveVaultKey(key: CryptoKey): Promise<void> {
+    const db = await openKeyStore();
+    const jwk = await crypto.subtle.exportKey("jwk", key);
+    const tx = db.transaction("vault_key", "readwrite");
+    tx.objectStore("vault_key").put({ id: "my_storage_vault", keyJwk: jwk, createdAt: Date.now() });
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// 6. LOCAL STORAGE ENCRYPTION HELPERS
+//    Used to lock the entire chat history on disk (localStorage)
+// ═══════════════════════════════════════════════════════
+
+export const encryptStorageData = async (data: any, key: CryptoKey): Promise<string> => {
+  const json = JSON.stringify(data);
+  const { ciphertext, iv } = await encryptMessage(key, json);
+  return `anc:${iv}:${ciphertext}`; // "anc" prefix for Nexora Encrypted
+};
+
+export const decryptStorageData = async (encryptedString: string, key: CryptoKey): Promise<any> => {
+  if (!encryptedString.startsWith("anc:")) return null;
+  const [, iv, ciphertext] = encryptedString.split(":");
+  try {
+    const json = await decryptMessage(key, ciphertext, iv);
+    return JSON.parse(json);
+  } catch (e) {
+    console.error("[!] Storage Decryption Failed", e);
+    return null;
+  }
 };

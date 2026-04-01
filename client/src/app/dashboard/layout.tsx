@@ -285,7 +285,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const handleLogout = () => {
-    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
     router.push("/");
   };
 
