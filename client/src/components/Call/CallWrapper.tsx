@@ -1,24 +1,18 @@
 "use client";
 
+import { CallProvider } from "./CallProvider";
+
 /**
- * CallWrapper.tsx — Client-only wrapper for the CallProvider.
+ * CallWrapper.tsx — Global provider wrapper for calls.
  *
- * Next.js App Router requires that client-only components (those using
- * browser APIs like WebRTC, AudioContext, etc.) are NOT imported directly
- * into server components. This thin wrapper ensures the CallProvider is
- * only instantiated on the client side.
+ * It must be a Client Component so it can use Context and state,
+ * but it MUST NOT return null or skip wrapping children, because
+ * sub-components (like ChatsPage) expect the CallContext to exist.
  */
-
-import dynamic from "next/dynamic";
-
-const CallProvider = dynamic(
-  () => import("./CallProvider").then((mod) => ({ default: mod.CallProvider })),
-  {
-    ssr: false,
-    loading: () => null,
-  }
-);
-
 export function CallWrapper({ children }: { children: React.ReactNode }) {
-  return <CallProvider>{children}</CallProvider>;
+  return (
+    <CallProvider>
+      {children}
+    </CallProvider>
+  );
 }

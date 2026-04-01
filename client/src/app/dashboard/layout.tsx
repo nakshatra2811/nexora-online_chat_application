@@ -18,7 +18,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState("Normal");
+  const [isMounted, setIsMounted] = useState(false);
+  const [userRole, setUserRole] = useState("Standard Account");
   const { isDark, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -48,8 +49,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [appForgotStep, setAppForgotStep] = useState<"answer" | "newpin">("answer");
   const [appForgotError, setAppForgotError] = useState("");
 
-  const [isMounted, setIsMounted] = useState(false);
-
   useEffect(() => {
     setIsMounted(true);
     const match = document.cookie.match(new RegExp('(^| )nexora_role=([^;]+)'));
@@ -72,7 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setIsChatActive(document.body.classList.contains("chat-active"));
       });
       observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-      // Initial check
+      // Initial check (non-blocking)
       setIsChatActive(document.body.classList.contains("chat-active"));
 
       return () => {
@@ -81,8 +80,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       };
     }
   }, []);
-
-  if (!isMounted) return null;
 
   // ═══ Global Action Notification Protocol ═══
   useEffect(() => {
