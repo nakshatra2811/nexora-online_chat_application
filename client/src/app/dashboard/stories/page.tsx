@@ -204,10 +204,11 @@ export default function StoriesPage() {
         // or OLDEST if user explicitly asked for chronological feed?
         // User said: "ensure story playback follows a strict chronological order" (usually means oldest-first playback)
         // and "sort from Oldest to Newest" in implementation plan.
+        // Sort groups such that the one with the NEWEST updated story comes first
         const othersGrouped = Object.values(groupedMap).sort((a: any, b: any) => {
-          const aFirst = a.stories[0].created_at;
-          const bFirst = b.stories[0].created_at;
-          return new Date(aFirst).getTime() - new Date(bFirst).getTime();
+          const aLast = a.stories[a.stories.length - 1].created_at;
+          const bLast = b.stories[b.stories.length - 1].created_at;
+          return new Date(bLast).getTime() - new Date(aLast).getTime();
         });
         
         setMyStories(mine);
@@ -830,22 +831,12 @@ export default function StoriesPage() {
                 <Plus className="w-4 h-4 text-white stroke-[3px]" />
               </motion.div>
 
-              {/* View + Like Count Badge — Dynamic show/hide and clean format */}
-              {myStories.length > 0 && (myStories.reduce((acc, s) => acc + (s.views || 0), 0) > 0 || myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0) > 0) && (
+              {/* View + Like Count Badge — Total for all active stories */}
+              {myStories.length > 0 && (
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-black/75 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap font-mono tracking-widest">
-                  {myStories.reduce((acc, s) => acc + (s.views || 0), 0) > 0 && (
-                    <>
-                      <Eye className="w-3 h-3 shrink-0" /> {formatCount(myStories.reduce((acc, s) => acc + (s.views || 0), 0))}
-                    </>
-                  )}
-                  {myStories.reduce((acc, s) => acc + (s.views || 0), 0) > 0 && myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0) > 0 && (
-                    <span className="opacity-30">·</span>
-                  )}
-                  {myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0) > 0 && (
-                    <>
-                      <Heart className="w-3 h-3 text-[#ff006e] shrink-0" fill="#ff006e" /> {formatCount(myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0))}
-                    </>
-                  )}
+                  <Eye className="w-3 h-3 shrink-0" /> {formatCount(myStories.reduce((acc, s) => acc + (s.views || 0), 0))}
+                  <span className="opacity-30">·</span>
+                  <Heart className="w-3 h-3 text-[#ff006e] shrink-0" fill="#ff006e" /> {formatCount(myStories.reduce((acc, s) => acc + (likeCount[s.id] || s.likes || 0), 0))}
                 </div>
               )}
             </div>
@@ -884,10 +875,10 @@ export default function StoriesPage() {
             </div>
 
             <h3 className="font-bold text-xs text-center truncate w-full px-1" style={{ color: "var(--text-primary)" }}>
-              {nicknames[group.username] || group.user}
+              {nicknames[group.username] || group.user || group.username}
             </h3>
             <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-              <Clock className="w-2.5 h-2.5" /> {getTimeAgo(group.stories[0].created_at, now)}
+              <Clock className="w-2.5 h-2.5" /> {getTimeAgo(group.stories[group.stories.length - 1].created_at, now)}
             </p>
           </motion.div>
         ))}
@@ -1127,7 +1118,7 @@ export default function StoriesPage() {
                         className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
                         style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
                         <Eye className="w-3.5 h-3.5" />
-                        <span className="font-mono tracking-widest">{formatCount(activeStory.views ?? viewersList.length ?? 0)}</span>
+                        <span className="font-mono tracking-widest">{formatCount(activeStory.views_count ?? viewersList.length ?? 0)}</span>
                         <span className="opacity-60 font-medium text-[10px]">views</span>
                       </motion.button>
 
@@ -1138,7 +1129,7 @@ export default function StoriesPage() {
                         className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-black border border-white/15 backdrop-blur-xl shadow-lg"
                         style={{ background: "rgba(255,0,110,0.18)", color: "white", borderColor: "rgba(255,0,110,0.3)" }}>
                         <Heart className="w-3.5 h-3.5" fill="#ff006e" style={{ color: "#ff006e" }} />
-                        <span className="font-mono tracking-widest">{formatCount(likeCount[activeStory.id] ?? activeStory.likes ?? 0)}</span>
+                        <span className="font-mono tracking-widest">{formatCount(likeCount[activeStory.id] ?? activeStory.likes_count ?? 0)}</span>
                         <span className="opacity-60 font-medium text-[10px]">likes</span>
                       </motion.button>
                     </div>

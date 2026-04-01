@@ -2395,7 +2395,7 @@ export default function ChatsPage() {
       {/* ═══ THREAD LIST ═══ */}
       <motion.div
         initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-        className={`${activeThread ? "hidden lg:flex" : "flex"} flex-col w-full lg:w-[360px] shrink-0 overflow-hidden relative border-r z-30`}
+        className={`${activeThread ? "hidden sm:flex" : "flex"} flex-col w-full sm:w-[320px] lg:w-[360px] shrink-0 overflow-hidden relative border-r z-30`}
         style={{
           background: "var(--bg-surface)",
           backdropFilter: "blur(var(--blur-medium))",
@@ -2668,7 +2668,7 @@ export default function ChatsPage() {
 
       {/* ═══ ACTIVE CHAT ═══ */}
       {activeThread ? (
-        <div className="flex-1 flex flex-col min-w-0 max-h-full min-h-0 overflow-hidden relative"
+        <div className="flex-1 flex flex-col min-w-0 max-h-full min-h-0 overflow-hidden relative animate-in fade-in slide-in-from-right-4 duration-500"
           style={{
             background: chatWallpaper ? "transparent" : "var(--bg-base)",
             ...(chatWallpaper ? { backgroundImage: `url(${chatWallpaper})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "local" } : {})
@@ -2682,7 +2682,7 @@ export default function ChatsPage() {
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
                     onClick={() => setActiveThread(null)}
-                    className="p-2 md:p-2.5 rounded-2xl lg:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
+                    className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </motion.button>
