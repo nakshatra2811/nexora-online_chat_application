@@ -25,7 +25,7 @@ export default function BlogPage() {
   }, []);
 
   return (
-    <div className={`min-h-[100dvh] font-sans selection:bg-[#6c5ce7] selection:text-white transition-colors duration-500 ease-in-out ${isDark ? 'bg-[#0f0f13] text-white' : 'bg-gray-50 text-gray-900'}`}>
+    <div className={`h-[100dvh] overflow-y-auto custom-scrollbar font-sans selection:bg-[#6c5ce7] selection:text-white transition-colors duration-500 ease-in-out ${isDark ? 'bg-[#0f0f13] text-white' : 'bg-gray-50 text-gray-900'}`}>
       
       {/* Dynamic Background Noise & Blur */}
       <div className="fixed inset-0 pointer-events-none z-0 mix-blend-overlay opacity-20" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }} />

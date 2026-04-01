@@ -243,6 +243,17 @@ let pgPool;
                 created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(story_id, liker_username)
             );
+
+            CREATE TABLE IF NOT EXISTS blogs (
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                title TEXT,
+                excerpt TEXT,
+                status TEXT DEFAULT 'Draft',
+                date TEXT,
+                author TEXT,
+                category TEXT,
+                image TEXT
+            );
         `);
 
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
@@ -2679,6 +2690,39 @@ app.post('/api/admin/broadcast', async (req, res) => {
     } catch (err) {
         console.error("[ADMIN] Broadcast error:", err);
         res.status(500).json({ error: "Broadcast failed" });
+    }
+});
+
+// GET /api/blogs - Return all blogs
+app.get('/api/blogs', async (req, res) => {
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const blogs = await db.all('SELECT * FROM blogs ORDER BY id DESC');
+        res.json({ blogs });
+    } catch (err) {
+        console.error("[BLOGS] Fetch error:", err);
+        res.status(500).json({ error: "Failed to fetch blogs" });
+    }
+});
+
+// POST /api/blogs - Replace all blogs (simple array overwrite based on frontend logic)
+app.post('/api/blogs', async (req, res) => {
+    const { blogs } = req.body;
+    if (!blogs || !Array.isArray(blogs)) return res.status(400).json({ error: "Invalid blogs data" });
+    
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('DELETE FROM blogs');
+        for (const blog of blogs) {
+            await db.run(
+                'INSERT INTO blogs (id, title, excerpt, status, date, author, category, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [blog.id, blog.title, blog.excerpt, blog.status, blog.date, blog.author, blog.category, blog.image]
+            );
+        }
+        res.json({ status: "success" });
+    } catch (err) {
+        console.error("[BLOGS] Save error:", err);
+        res.status(500).json({ error: "Failed to save blogs" });
     }
 });
 
