@@ -36,6 +36,15 @@ CREATE TABLE chat_participants (
     PRIMARY KEY (chat_id, user_id)
 );
 
+CREATE TABLE connections (
+    id SERIAL PRIMARY KEY,
+    user_a TEXT NOT NULL,
+    user_b TEXT NOT NULL,
+    wallpaper TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_a, user_b)
+);
+
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,

@@ -48,7 +48,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [appForgotStep, setAppForgotStep] = useState<"answer" | "newpin">("answer");
   const [appForgotError, setAppForgotError] = useState("");
 
+  const [isMounted, setIsMounted] = useState(false);
+
   useEffect(() => {
+    setIsMounted(true);
     const match = document.cookie.match(new RegExp('(^| )nexora_role=([^;]+)'));
     if (!match) {
       router.replace("/auth");
@@ -69,12 +72,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setIsChatActive(document.body.classList.contains("chat-active"));
       });
       observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      // Initial check
+      setIsChatActive(document.body.classList.contains("chat-active"));
+
       return () => {
         window.visualViewport?.removeEventListener("resize", handleResize);
         observer.disconnect();
       };
     }
   }, []);
+
+  if (!isMounted) return null;
 
   // ═══ Global Action Notification Protocol ═══
   useEffect(() => {

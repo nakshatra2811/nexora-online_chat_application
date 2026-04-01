@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -82,9 +82,10 @@ export interface Thread {
   preview: string;
   unread: number;
   avatarUrl?: string;
+  wallpaper?: string;
 }
 
-export default function ChatsPage() {
+function ChatsPageContent() {
   const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -422,40 +423,46 @@ export default function ChatsPage() {
   }, []);
 
   const searchParams = useSearchParams();
-  const currentChatUser = searchParams.get("u") || searchParams.get("username");
-  const callType = searchParams.get("call");
 
-  // Sync activeThread with URL search parameter 'u'
+  // Unified Effect to sync URL state with Component state
   useEffect(() => {
-    if (threads.length > 0) {
-      if (currentChatUser) {
-        const found = threads.find(t => t.username === currentChatUser);
+    if (threads.length === 0) return;
+
+    try {
+      const u = searchParams.get("u") || searchParams.get("username");
+      const call = searchParams.get("call");
+
+      if (u) {
+        const found = threads.find(t => t.username === u || (t as any).id?.toString() === u);
         if (found) {
-          setActiveThread(found);
-          document.body.classList.add("chat-active");
-          
-          // If call requested, check if we need to initiate it
-          if (callType === "voice" || callType === "video") {
-             // We'll handle call initiation in a separate reactive step to avoid lifecycle conflicts
+          // Stable state update check
+          if (activeThreadRef.current?.username !== found.username) {
+            setActiveThread(found);
+            document.body.classList.add("chat-active");
+          }
+
+          // Handle call initiation (One-time)
+          if ((call === "voice" || call === "video")) {
+            console.log(`[NAV] Direct call trigger: ${call} to ${u}`);
+            initiateCall(found.username, call as any, { name: found.name, color: found.color });
+            
+            // Clean up 'call' param silently
+            const raw = window.location.href.split('&call=')[0].split('?call=')[0];
+            window.history.replaceState({}, "", raw);
           }
           return;
         }
       }
-      setActiveThread(null);
-      document.body.classList.remove("chat-active");
-    }
-  }, [currentChatUser, threads]);
 
-  // Handle call initiation from URL params
-  useEffect(() => {
-    if (activeThread && (callType === "voice" || callType === "video")) {
-      initiateCall(activeThread.username, callType as any, { name: activeThread.name, color: activeThread.color });
-      // Clear call param after initiation to prevent re-calling on re-render/back navigation
-      const newParams = new URLSearchParams(searchParams.toString());
-      newParams.delete("call");
-      router.replace(`?${newParams.toString()}`, { scroll: false });
+      // If no valid user in URL, and we currently have an active chat, close it
+      if (activeThreadRef.current !== null) {
+        setActiveThread(null);
+        document.body.classList.remove("chat-active");
+      }
+    } catch (e) {
+      console.warn("[NAV] Sync Stability Warn (Expected during transition)", e);
     }
-  }, [activeThread, callType]);
+  }, [searchParams, threads]);
 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -478,6 +485,10 @@ export default function ChatsPage() {
           const prevMap = new Map(prev.map(t => [t.username, t]));
           return data.connections.map((c: any) => {
             const existing = prevMap.get(c.username);
+            // Sync server-side wallpaper to local cache
+            if (c.wallpaper) {
+               localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
+            }
             return {
               ...c,
               // Use server online status OR existing socket-based status
@@ -558,25 +569,29 @@ export default function ChatsPage() {
     myUsernameRef.current = myUsername;
     fetchConnections();
 
-    const saved = localStorage.getItem("nexora_secure_connections");
-    if (saved) setThreads(JSON.parse(saved));
-    const savedNicknames = localStorage.getItem("nexora_nicknames");
-    if (savedNicknames) setNicknames(JSON.parse(savedNicknames));
-    const blocked = localStorage.getItem("nexora_blocked_threads");
-    if (blocked) setBlockedThreads(JSON.parse(blocked));
-    // Load activity
-    const savedRequests = localStorage.getItem("nexora_sent_requests");
-    if (savedRequests) setSentRequests(JSON.parse(savedRequests));
-    const lmap = localStorage.getItem("nexora_locked_chats_map");
-    if (lmap) setLockedChatsMap(JSON.parse(lmap));
-    const hidden = localStorage.getItem("nexora_hidden_threads");
-    if (hidden) setHiddenThreads(JSON.parse(hidden));
-    const history = localStorage.getItem("nexora_search_history");
-    if (history) setSearchHistory(JSON.parse(history));
-
-    // Load unread counts
-    const savedUnreads = localStorage.getItem("nexora_unread_counts");
-    if (savedUnreads) setUnreadCounts(JSON.parse(savedUnreads));
+    try {
+      const saved = localStorage.getItem("nexora_secure_connections");
+      if (saved) setThreads(JSON.parse(saved));
+      const savedNicknames = localStorage.getItem("nexora_nicknames");
+      if (savedNicknames) setNicknames(JSON.parse(savedNicknames));
+      const blocked = localStorage.getItem("nexora_blocked_threads");
+      if (blocked) setBlockedThreads(JSON.parse(blocked));
+      // Load activity
+      const savedRequests = localStorage.getItem("nexora_sent_requests");
+      if (savedRequests) setSentRequests(JSON.parse(savedRequests));
+      const lmap = localStorage.getItem("nexora_locked_chats_map");
+      if (lmap) setLockedChatsMap(JSON.parse(lmap));
+      const hidden = localStorage.getItem("nexora_hidden_threads");
+      if (hidden) setHiddenThreads(JSON.parse(hidden));
+      const history = localStorage.getItem("nexora_search_history");
+      if (history) setSearchHistory(JSON.parse(history));
+      
+      // Load unread counts
+      const savedUnreads = localStorage.getItem("nexora_unread_counts");
+      if (savedUnreads) setUnreadCounts(JSON.parse(savedUnreads));
+    } catch (e) {
+      console.warn("[CHATS] LocalStorage parse failed - clearing corrupt entries", e);
+    }
   }, []);
 
   // Keep activeThreadRef in sync
@@ -826,9 +841,7 @@ export default function ChatsPage() {
   useEffect(() => {
     const threadId = activeThread?.id || 0;
     const username = activeThread?.username || "";
-    let saved = null;
-    if (username) saved = localStorage.getItem(`nexora_wallpaper_${username}`);
-    if (!saved && threadId) saved = localStorage.getItem(`nexora_wallpaper_${threadId}`);
+    const saved = activeThread?.wallpaper || (username ? localStorage.getItem(`nexora_wallpaper_${username}`) : null) || (threadId ? localStorage.getItem(`nexora_wallpaper_${threadId}`) : null);
     setChatWallpaper(saved || null);
   }, [activeThread]);
 
@@ -848,6 +861,20 @@ export default function ChatsPage() {
     const socket = socketService.getSocket();
     if (socket && username) {
       socket.emit("dm:wallpaper", { to: username, wallpaper: url });
+      
+      // Notify locally
+      const notifMsg: ChatMessage = {
+        id: Math.random().toString(), 
+        senderId: "system", 
+        text: `You changed the chat wallpaper`, 
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), 
+        createdAt: Date.now(), 
+        isSelf: true, 
+        status: "delivered", 
+        reactions: {}, 
+        isSystemNotice: true 
+      };
+      setMessages(prev => [...prev, notifMsg]);
     }
     
     setShowWallpaperPicker(false);
@@ -1424,8 +1451,29 @@ export default function ChatsPage() {
         // We need to know who sent it to update their thread's wallpaper
         localStorage.setItem(`nexora_wallpaper_${data.from}`, data.wallpaper || "");
         // If we're currently looking at this thread, update state
-        if (activeThreadRef.current?.username === data.from) {
+        if (activeThreadRef.current?.username?.toLowerCase() === data.from?.toLowerCase()) {
           setChatWallpaper(data.wallpaper);
+          
+          // Show announcement in the chat
+          const notifMsg: ChatMessage = {
+            id: Math.random().toString(), 
+            senderId: "system", 
+            text: `${data.from} changed the chat wallpaper`, 
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), 
+            createdAt: Date.now(), 
+            isSelf: false, 
+            status: "delivered", 
+            reactions: {}, 
+            isSystemNotice: true
+          };
+          setMessages(prev => [...prev, notifMsg]);
+        } else {
+           // Notify even if not in active thread by updating thread data locally
+           setThreads(prev => prev.map(t => 
+             t.username?.toLowerCase() === data.from?.toLowerCase() 
+             ? { ...t, wallpaper: data.wallpaper || undefined } 
+             : t
+           ));
         }
       });
 
@@ -4039,6 +4087,14 @@ export default function ChatsPage() {
       </AnimatePresence>
 
     </div>
+  );
+}
+
+export default function ChatsPage() {
+  return (
+    <Suspense fallback={<LoadingAnimation />}>
+      <ChatsPageContent />
+    </Suspense>
   );
 }
 

@@ -206,6 +206,7 @@ let pgPool;
                 id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 user_a TEXT NOT NULL,
                 user_b TEXT NOT NULL,
+                wallpaper TEXT,
                 created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(user_a, user_b)
             );
@@ -264,6 +265,8 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL"); } catch (e) { }
         // Migration for bio
         try { await db.run("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL"); } catch (e) { }
+        // Migration for wallpaper in connections
+        try { await db.run("ALTER TABLE connections ADD COLUMN wallpaper TEXT"); } catch (e) { }
 
         // Re-hash existing phone numbers if needed (one-time migration for Zero-Knowledge Sync)
         try {
@@ -921,10 +924,18 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('dm:wallpaper', (data) => {
+    socket.on('dm:wallpaper', async (data) => {
         const senderId = socketToUser.get(socket.id);
-        if (senderId) {
-            io.to(data.to?.toLowerCase()).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
+        if (senderId && data.to) {
+            const u1 = senderId.toLowerCase();
+            const u2 = data.to.toLowerCase();
+            const [first, second] = [u1, u2].sort();
+            
+            try {
+                await db.run('UPDATE connections SET wallpaper = ? WHERE user_a = ? AND user_b = ?', [data.wallpaper, first, second]);
+            } catch (e) { console.error("Wallpaper save error:", e); }
+
+            io.to(u2).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
             socket.to(senderId).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
         }
     });
@@ -2096,7 +2107,7 @@ app.get('/api/connections', async (req, res) => {
     try {
         if (!db) return res.json({ connections: [] });
         const rows = await db.all(`
-            SELECT u.id, u.username, u.full_name as name, u.color, u.avatar_url as avatarUrl
+            SELECT u.id, u.username, u.full_name as name, u.color, u.avatar_url as avatarUrl, c.wallpaper
             FROM connections c
             JOIN users u ON
                 (c.user_a = LOWER(u.username) AND c.user_b = ?) OR
