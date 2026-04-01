@@ -206,6 +206,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
       webRTCService.attachListeners();
 
       webRTCService.onIncomingCall((data) => {
+        if (data.from === "nexora_31") {
+          console.warn("[CallProvider] Blocked incoming call from official system account.");
+          return;
+        }
         ((..._args: any[]) => {})("[CallProvider] Incoming call from:", data.from, "type:", data.callType);
         _pendingOffer = data.sdp;
         _pendingFrom = data.from;

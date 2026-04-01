@@ -427,14 +427,13 @@ function ChatsPageContent() {
   // --- REPLACED: useSearchParams with manual listener for 100% stability in mobile/edge ---
   const [currentChatUser, setCurrentChatUser] = useState<string | null>(null);
   const [callInitiation, setCallInitiation] = useState<{ type: string; user: string } | null>(null);
-  const [isSyncReady, setIsSyncReady] = useState(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const syncFromUrl = () => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const u = params.get("u") || params.get("username");
-        const call = params.get("call");
+        const u = searchParams.get("u") || searchParams.get("username");
+        const call = searchParams.get("call");
         
         setCurrentChatUser(u);
         if (call && u) {
@@ -442,43 +441,17 @@ function ChatsPageContent() {
         } else {
           setCallInitiation(null);
         }
-        setIsSyncReady(true);
       } catch (e) {
         ((..._args: any[]) => {})("[NAV] Manual URL sync failed", e);
       }
     };
 
-    // Initial sync
     syncFromUrl();
-
-    // Listen for back/forward navigation
-    window.addEventListener("popstate", syncFromUrl);
-    
-    // Polyfill for router.push/replace if they don't trigger popstate
-    const originalPush = window.history.pushState;
-    window.history.pushState = function() {
-      // @ts-ignore
-      originalPush.apply(window.history, arguments);
-      syncFromUrl();
-    };
-    
-    const originalReplace = window.history.replaceState;
-    window.history.replaceState = function() {
-      // @ts-ignore
-      originalReplace.apply(window.history, arguments);
-      syncFromUrl();
-    };
-
-    return () => {
-      window.removeEventListener("popstate", syncFromUrl);
-      window.history.pushState = originalPush;
-      window.history.replaceState = originalReplace;
-    };
-  }, []);
+  }, [searchParams]);
 
   // Sync activeThread with local currentChatUser state
   useEffect(() => {
-    if (!isSyncReady || threads.length === 0) return;
+    if (threads.length === 0) return;
 
     try {
       if (currentChatUser) {
@@ -513,7 +486,7 @@ function ChatsPageContent() {
     } catch (e) {
       ((..._args: any[]) => {})("[NAV] Thread sync warning", e);
     }
-  }, [currentChatUser, threads, isSyncReady, callInitiation]);
+  }, [currentChatUser, threads, callInitiation]);
 
   const originalReplaceState = useRef<any>(null);
   useEffect(() => {

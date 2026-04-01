@@ -223,14 +223,16 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
             )}
           </div>
 
-          {/* 4 Action buttons: Chat, Voice, Video, Block */}
+          {/* Action buttons */}
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3">
+            <div className={`grid gap-3 ${friend.username === "nexora_31" ? "grid-cols-1" : "grid-cols-3"}`}>
               {[
                 { label: "Message", icon: MessageSquare, color: "#6c5ce7", bg: isDark ? "rgba(108,92,231,0.15)" : "rgba(108,92,231,0.08)", action: onChat },
                 { label: "Voice", icon: Phone, color: "#2ed573", bg: isDark ? "rgba(46,213,115,0.15)" : "rgba(46,213,115,0.08)", action: onVoiceCall },
                 { label: "Video", icon: Video, color: "#00d4ff", bg: isDark ? "rgba(0,212,255,0.15)" : "rgba(0,212,255,0.08)", action: onVideoCall },
-              ].map(btn => (
+              ]
+                .filter(btn => !(friend.username === 'nexora_31' && (btn.label === 'Voice' || btn.label === 'Video')))
+                .map(btn => (
                 <motion.button key={btn.label} whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
                   onClick={btn.action}
                   className="flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all border border-transparent hover:border-current"
@@ -241,13 +243,15 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
               ))}
             </div>
             
-            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={onBlock}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
-              style={{ background: isDark ? "rgba(255,0,110,0.1)" : "rgba(255,0,110,0.05)", color: "#ff006e", border: "1px solid rgba(255,0,110,0.15)" }}>
-              <UserMinus className="w-4 h-4" />
-              Restrict Node Identity (Block)
-            </motion.button>
+            {friend.username !== "nexora_31" && (
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={onBlock}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                style={{ background: isDark ? "rgba(255,0,110,0.1)" : "rgba(255,0,110,0.05)", color: "#ff006e", border: "1px solid rgba(255,0,110,0.15)" }}>
+                <UserMinus className="w-4 h-4" />
+                Restrict Node Identity (Block)
+              </motion.button>
+            )}
           </div>
 
           {/* QR + Share row */}
