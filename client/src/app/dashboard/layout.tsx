@@ -12,7 +12,7 @@ import { useTheme } from "@/lib/theme";
 import { nexoraFetch, APP_LOGO } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { NotificationSkeleton } from "@/components/Skeleton";
-import { ShareProfileModal } from "./profile/page";
+import { ShareProfileModal } from "@/components/ShareProfileModal";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
 import { PermissionGate } from "@/components/PermissionGate";
 
