@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Phone, Video, Send, Mic, MicOff, Paperclip, Lock,
@@ -83,6 +84,7 @@ export interface Thread {
 }
 
 export default function ChatsPage() {
+  const router = useRouter();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -423,9 +425,22 @@ export default function ChatsPage() {
     activeThreadRef.current = activeThread;
     if (activeThread) {
       document.body.classList.add("chat-active");
+      // Push a new state so back button closes chat instead of leaving page
+      window.history.pushState({ chatActive: true }, "");
     } else {
       document.body.classList.remove("chat-active");
     }
+    
+    const handlePopState = (e: PopStateEvent) => {
+      if (activeThreadRef.current) {
+        setActiveThread(null);
+        // Prevent default browser back navigation
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, [activeThread]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
