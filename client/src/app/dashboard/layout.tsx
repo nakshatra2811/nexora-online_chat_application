@@ -12,6 +12,7 @@ import { useTheme } from "@/lib/theme";
 import { nexoraFetch, APP_LOGO } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { pushService } from "@/lib/push";
+import { formatToIndianTime } from "@/lib/time";
 import { NotificationSkeleton } from "@/components/Skeleton";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
@@ -103,7 +104,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!username) return;
 
     const socket = socketService.connect();
-    socket.emit("register", username);
+    
+    const doRegister = () => {
+      socket.emit("register", username);
+      ((..._args: any[]) => {})("[DashboardLayout] Protocol Registered for", username);
+    };
+
+    if (socket.connected) doRegister();
+    socket.on("connect", doRegister);
 
     // Proactive Push Subscription Protocol
     pushService.subscribe(username).catch((..._args: any[]) => {});
@@ -138,7 +146,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             from: data.from,
             fromName: data.fromName || data.from,
             fromColor: data.fromColor || "from-purple-500 to-indigo-500",
-            time: "Just now"
+            time: formatToIndianTime()
           };
           return [newReq, ...prev];
         });
@@ -153,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           type: 'request_accepted',
           message: `${data.byName || data.by} accepted your follow request.`,
           from_username: data.by,
-          time: 'Just now'
+          time: formatToIndianTime()
         }, ...prev]);
       };
 
@@ -163,27 +171,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           type: data.type,
           message: data.message,
           from_username: data.from_username,
-          time: 'Just now'
+          time: formatToIndianTime()
         }, ...prev]);
       };
 
       // ═══ Global Message Listener (Handles background message reception) ═══
-      const handleGlobalMessage = async (data: any) => {
+      const handleGlobalMessage = (data: any) => {
         const sender = data.senderId || data.from;
         if (!sender) return;
 
+        // Skip global handling if we are on the chats page (the page itself handles the UI)
+        const isCurrentlyViewingChat = typeof window !== "undefined" && window.location.pathname?.includes("/dashboard/chats"); 
+        if (isCurrentlyViewingChat) return;
+
         // 1. Update Unread Count in storage
         const counts = JSON.parse(localStorage.getItem("nexora_unread_counts") || "{}");
-        const isCurrentlyViewingChat = pathname?.includes("/dashboard/chats"); 
-        
-        counts[sender] = (counts[sender] || 0) + 1;
-        localStorage.setItem("nexora_unread_counts", JSON.stringify(counts));
-
-        // 2. Update Thread Preview in storage
+        // Update thread preview in storage
         const threadsStr = localStorage.getItem("nexora_secure_connections") || "[]";
         let threads = JSON.parse(threadsStr);
         const threadIndex = threads.findIndex((t: any) => t.username?.toLowerCase() === sender.toLowerCase());
         
+        counts[sender] = (counts[sender] || 0) + 1;
+        localStorage.setItem("nexora_unread_counts", JSON.stringify(counts));
+
         if (threadIndex !== -1) {
           threads[threadIndex] = { 
             ...threads[threadIndex], 
@@ -191,27 +201,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             lastMessageTime: Date.now(),
             unread: counts[sender]
           };
-          // Move to top
           threads = [threads[threadIndex], ...threads.filter((_: any, i: number) => i !== threadIndex)];
           localStorage.setItem("nexora_secure_connections", JSON.stringify(threads));
         }
 
-        // 3. Trigger Toast if NOT on chats page and NOT muted
+        // 2. Trigger Toast if NOT muted
         const muted = JSON.parse(localStorage.getItem("nexora_muted") || "[]");
-        const isMuted = muted.includes(threadIndex !== -1 ? threads[threadIndex].id : -1);
+        const threadId = threadIndex !== -1 ? (threads[0]?.id || -1) : -1;
+        const isMuted = muted.includes(threadId);
 
-        if (!isCurrentlyViewingChat && !isMuted) {
+        if (!isMuted) {
           pushService.showLocalNotification(sender, 'Encrypted Message is here 🔐', { from: sender });
-          setGeneralNotifications(prev => [{
-            id: Date.now(),
-            type: 'message',
-            message: `New message from @${sender}`,
-            from_username: sender,
-            time: 'Just now'
-          }, ...prev]);
+          
+          setGeneralNotifications(prev => {
+             if (prev.some(n => n.from_username === sender && n.type === 'message')) return prev;
+             return [{ id: Date.now() + Math.random(), type: 'message', message: `Encrypted Message is here 🔐`, from_username: sender, time: formatToIndianTime() }, ...prev].slice(0, 20);
+          });
         }
 
         window.dispatchEvent(new Event("storage"));
+      };
+
+      const handleCallOffer = (_data: any) => {
+        // High-level call signaling is mostly handled by CallProvider
+        // We just ensure we have one active socket handler here if needed.
       };
 
       socket.on("connection_request", handleNewRequest);
@@ -220,16 +233,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       socket.on("dm:message", handleGlobalMessage);
       socket.on("dm:media", handleGlobalMessage);
       socket.on("dm:poll", handleGlobalMessage);
+      socket.on("call:offer", handleCallOffer);
 
       return () => {
+        socket.off("connect", doRegister);
         socket.off("connection_request", handleNewRequest);
         socket.off("connection_accepted", handleAccepted);
         socket.off("new_notification", handleNewNotification);
         socket.off("dm:message", handleGlobalMessage);
         socket.off("dm:media", handleGlobalMessage);
         socket.off("dm:poll", handleGlobalMessage);
+        socket.off("call:offer", handleCallOffer);
       };
-  }, [pathname]);
+  }, []);
 
   // Close notif panel on outside click
   useEffect(() => {
@@ -278,7 +294,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           type: 'request_back_prompt',
           message: `${req.fromName} started following you.`,
           from_username: req.from,
-          time: 'Just now'
+          time: formatToIndianTime()
         }, ...prev]);
 
         // Add to secure connections in localStorage so chats page picks it up
@@ -796,13 +812,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
             className="md:hidden fixed z-[200] rounded-full flex justify-center shadow-2xl"
             style={{
-              background: isDark ? "rgba(16,16,24,0.92)" : "rgba(255,255,255,0.95)",
+              background: isDark ? "rgba(16,16,24,0.94)" : "rgba(255,255,255,0.96)",
               backdropFilter: "blur(40px) saturate(2)",
-              border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"}`,
-              bottom: "calc(10px + env(safe-area-inset-bottom))",
-              left: "12px", right: "12px",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"}`,
+              bottom: "calc(6px + env(safe-area-inset-bottom))",
+              left: "14px", right: "14px",
               pointerEvents: "auto",
-              boxShadow: isDark ? "0 10px 40px rgba(0,0,0,0.4)" : "0 8px 30px rgba(108,92,231,0.08)",
+              boxShadow: isDark ? "0 10px 40px rgba(0,0,0,0.5)" : "0 8px 30px rgba(108,92,231,0.08)",
             }}>
             <div className="flex w-full items-center justify-around px-2 py-2">
               {bottomNavItems.map((item) => {
@@ -811,16 +827,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 
                 return (
                   <motion.button key={item.name} whileTap={{ scale: 0.8 }} onClick={() => triggerAction(item.href)}
-                    className="relative flex flex-col items-center justify-center gap-1 transition-all duration-300 cursor-pointer active:scale-95 px-3 py-1.5 rounded-2xl"
-                    style={{ 
-                      background: isActive ? (isDark ? "rgba(108,92,231,0.12)" : "rgba(108,92,231,0.06)") : "transparent",
-                    }}>
+                    className="relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 px-2 py-2"
+                  >
                     {isProfile ? (
-                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm border overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-[#6c5ce7] ring-offset-2 scale-110' : 'scale-100'}`}
+                      <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-md border overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-[#6c5ce7] ring-offset-2 scale-110' : 'scale-100 opacity-70'}`}
                            style={{ 
                              background: "linear-gradient(135deg, #6c5ce7, #00d4ff)",
-                             borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
-                             borderWidth: isActive ? "2px" : "1px"
+                             borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)",
+                             borderWidth: "1.5px"
                            }}>
                         {globalProfile.avatarUrl ? (
                           <img src={globalProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
@@ -829,21 +843,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         )}
                       </div>
                     ) : (
-                      <item.icon className="h-[20px] w-[20px] transition-all duration-300" 
-                                 fill={isActive ? "#6c5ce7" : "none"}
-                                 style={{ 
-                                   color: isActive ? "#6c5ce7" : "var(--text-secondary)", 
-                                   transform: isActive ? "scale(1.1)" : "scale(1)" 
-                                 }} />
+                      <div className="relative">
+                        <item.icon className="h-[21px] w-[21px] transition-all duration-300" 
+                                   fill={isActive ? "#6c5ce7" : "none"}
+                                   style={{ 
+                                     color: isActive ? "#6c5ce7" : "var(--text-secondary)", 
+                                     transform: isActive ? "scale(1.15)" : "scale(1)" 
+                                   }} />
+                        {item.name === "Chats" && (pendingRequests.length + generalNotifications.length) > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white dark:border-[#0a0a14] flex items-center justify-center text-[7px] font-black text-white" />
+                        )}
+                      </div>
                     )}
                     
-                    <span className="text-[9px] font-bold leading-none tracking-tight transition-colors duration-300"
-                          style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)" }}>
+                    <span className="text-[10px] font-black leading-none tracking-tight transition-colors duration-300 uppercase"
+                          style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)", opacity: isActive ? 1 : 0.6 }}>
                       {item.name}
                     </span>
 
                     {isActive && (
-                      <motion.div layoutId="mobileNavDot" className="absolute -bottom-1 w-1 h-1 rounded-full bg-[#6c5ce7]" />
+                      <motion.div layoutId="mobileNavDot" className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-[#6c5ce7]" />
                     )}
                   </motion.button>
                 );

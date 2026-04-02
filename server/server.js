@@ -277,7 +277,9 @@ let pgPool;
             );
 
             CREATE TABLE IF NOT EXISTS push_subscriptions (
-                username TEXT PRIMARY KEY,
+                id ${dbType==='postgres' ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${dbType==='postgres' ? '' : 'AUTOINCREMENT'},
+                username TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
                 subscription TEXT NOT NULL,
                 created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
@@ -463,8 +465,8 @@ async function nexoraMailProtocol(type, to, data) {
             '{{otp}}': data.otp || '',
             '{{APP_LOGO}}': APP_LOGO,
             '{{CLIENT_URL}}': process.env.CLIENT_URL || 'https://nexora31.vercel.app',
-            '{{YEAR}}': new Date().getFullYear().toString(),
-            '{{TIMESTAMP}}': new Date().toLocaleString(),
+            '{{YEAR}}': new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' }),
+            '{{TIMESTAMP}}': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         };
         for (const [key, val] of Object.entries(replacements)) {
             customSubject = customSubject.split(key).join(val);
@@ -684,7 +686,7 @@ async function nexoraMailProtocol(type, to, data) {
                       </tr>
                       <tr>
                         <td align="center" style="padding:45px; background:#fafbfc; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; line-height:1.8; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
-                          © ${new Date().getFullYear()} Nexora • Systems Security Protocol
+                          © ${new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' })} Nexora • Systems Security Protocol
                         </td>
                       </tr>
                     </table>
@@ -733,7 +735,7 @@ async function nexoraMailProtocol(type, to, data) {
                         <td align="center" style="padding:30px 45px;">
                           <div style="text-align:left; background:#f8fafc; border:1px solid #f1f5f9; border-radius:24px; padding:25px;">
                              <p style="margin:0 0 10px; font-size:14px; color:#64748b;"><strong>Node Identifier:</strong> <span style="color:#1a1a2e;">@${data.username}</span></p>
-                             <p style="margin:0 0 10px; font-size:14px; color:#64748b;"><strong>Timestamp:</strong> <span style="color:#1a1a2e;">${new Date().toLocaleString()}</span></p>
+                             <p style="margin:0 0 10px; font-size:14px; color:#64748b;"><strong>Timestamp:</strong> <span style="color:#1a1a2e;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span></p>
                              <p style="margin:0; font-size:14px; color:#64748b;"><strong>Integrity:</strong> <span style="color:#2ed573;">VERIFIED</span></p>
                           </div>
                         </td>
@@ -809,19 +811,33 @@ const offlineMessageQueue = new Map();
 async function sendPushNotification(username, payloadData) {
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
     try {
-        const row = await db.get('SELECT subscription FROM push_subscriptions WHERE LOWER(username) = ?', [username.toLowerCase()]);
-        if (row) {
-            const sub = JSON.parse(row.subscription);
-            const payload = JSON.stringify(payloadData);
-            webpush.sendNotification(sub, payload).catch(err => {
+        const normalized = username.toLowerCase();
+        // Fetch ALL registrations for this user to support multiple device push sync
+        const rows = await db.all('SELECT subscription FROM push_subscriptions WHERE LOWER(username) = ?', [normalized]);
+        
+        if (!rows || rows.length === 0) return;
+
+        const payload = JSON.stringify(payloadData);
+        const pushPromises = rows.map(async (row) => {
+            try {
+                const sub = JSON.parse(row.subscription);
+                if (!sub || !sub.endpoint) return;
+                await webpush.sendNotification(sub, payload);
+            } catch (err) {
+                // Remove expired or "Gone" subscriptions from the registry
                 if (err.statusCode === 410 || err.statusCode === 404) {
-                    db.run('DELETE FROM push_subscriptions WHERE LOWER(username) = ?', [username.toLowerCase()]).catch((..._args) => {});
+                    try {
+                        const subObj = JSON.parse(row.subscription);
+                        await db.run('DELETE FROM push_subscriptions WHERE LOWER(username) = ? AND endpoint = ?', [normalized, subObj.endpoint]);
+                    } catch (cleanupErr) {}
                 }
-                ((..._args) => {})('[PUSH] Notification delivery failed:', err.message);
-            });
-        }
+                ((..._args) => {})('[PUSH] Device relay failed:', err.message);
+            }
+        });
+
+        await Promise.allSettled(pushPromises);
     } catch (e) {
-        ((..._args) => {})('[PUSH] Persistence error:', e.message);
+        ((..._args) => {})('[PUSH] Global broadcast error:', e.message);
     }
 }
 
@@ -1168,6 +1184,12 @@ io.on('connection', (socket) => {
             // RESTRICTION: Official account nexora_31 cannot call or be called
             if (senderId === 'nexora_31' || targetId === 'nexora_31') {
                 io.to(senderId).emit('call:reject', { from: 'System', reason: 'Official Nexora account does not support calling.' });
+                return;
+            }
+
+            // RESTRICTION: Self-calling is prohibited
+            if (senderId === targetId) {
+                io.to(senderId).emit('call:reject', { from: 'System', reason: 'You cannot call yourself.' });
                 return;
             }
 
@@ -1679,7 +1701,7 @@ app.post('/api/admin/approve', async (req, res) => {
                                 </p>
                             </div>
                             <div class="copyright">
-                                &copy; ${new Date().getFullYear()} NEXORA CORE &bull; PRIVACY PROTOCOL
+                                &copy; ${new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' })} NEXORA CORE &bull; PRIVACY PROTOCOL
                             </div>
                         </div>
                     </div>
@@ -2084,10 +2106,13 @@ app.post('/api/push/subscribe', async (req, res) => {
     }
     try {
         const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
+        const subObj = typeof subscription === 'string' ? JSON.parse(subscription) : subscription;
+        const endpoint = subObj.endpoint || 'unknown';
+        const params = [username.toLowerCase(), endpoint, subStr];
         const sql = dbType === 'postgres' 
-            ? 'INSERT INTO push_subscriptions (username, subscription) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET subscription = $2'
-            : 'INSERT OR REPLACE INTO push_subscriptions (username, subscription) VALUES (?, ?)';
-        await db.run(sql, [username.toLowerCase(), subStr]);
+            ? 'INSERT INTO push_subscriptions (username, endpoint, subscription) VALUES ($1, $2, $3) ON CONFLICT (username, endpoint) DO UPDATE SET subscription = $3'
+            : 'INSERT OR REPLACE INTO push_subscriptions (username, endpoint, subscription) VALUES (?, ?, ?)';
+        await db.run(sql, params);
         ((..._args) => {})(`[PUSH] Subscription persisted for: ${username}`);
         res.json({ status: 'success', message: 'Push subscription registered.' });
     } catch (err) {

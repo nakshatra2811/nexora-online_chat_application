@@ -90,7 +90,12 @@ export interface Thread {
 
 function ChatsPageContent() {
   const router = useRouter();
-  const [threads, setThreads] = useState<Thread[]>([]);
+  const [threads, setThreads] = useState<Thread[]>(() => {
+    if (typeof window !== "undefined") {
+      return JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+    }
+    return [];
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
@@ -117,9 +122,17 @@ function ChatsPageContent() {
   const bumpThread = (username: string, updates: Partial<Thread>) => {
     setThreads(prev => {
       const thread = prev.find(t => t.username?.toLowerCase() === username?.toLowerCase());
-      if (!thread) return prev; // If not found, stay as is (fetchConnections will pick it up)
+      if (!thread) return prev; 
       const otherThreads = prev.filter(t => t.username?.toLowerCase() !== username?.toLowerCase());
-      return [{ ...thread, ...updates, lastMessageTime: Date.now() }, ...otherThreads];
+      const updated = { 
+        ...thread, 
+        ...updates, 
+        lastMessageTime: Date.now(),
+        preview: "Encrypted Message is here 🔐" // Privacy Preview
+      };
+      const next = [updated, ...otherThreads];
+      localStorage.setItem("nexora_secure_connections", JSON.stringify(next));
+      return next;
     });
   };
 
@@ -279,17 +292,32 @@ function ChatsPageContent() {
   const acceptIncomingCall = () => handleAccept();
   const endCall = () => handleEnd();
   const [showChatMenu, setShowChatMenu] = useState(false);
-  const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [nicknames, setNicknames] = useState<Record<string, string>>(() => {
+    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_nicknames") || "{}");
+    return {};
+  });
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [nicknameInput, setNicknameInput] = useState("");
   const [showDisappearSubmenu, setShowDisappearSubmenu] = useState(false);
-  const [disappearTimer, setDisappearTimer] = useState<"off" | "1h" | "24h" | "after_view">("off");
+  const [disappearTimer, setDisappearTimer] = useState<"off" | "1h" | "24h" | "after_view">(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("nexora_disappear_global_timer") as any) || "off";
+    return "off";
+  });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [imageViewer, setImageViewer] = useState<{ url: string; name: string } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [blockedThreads, setBlockedThreads] = useState<number[]>([]);
-  const [pinnedThreads, setPinnedThreads] = useState<number[]>([]);
-  const [mutedThreads, setMutedThreads] = useState<number[]>([]);
+  const [blockedThreads, setBlockedThreads] = useState<number[]>(() => {
+    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_blocked") || "[]");
+    return [];
+  });
+  const [pinnedThreads, setPinnedThreads] = useState<number[]>(() => {
+    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_pinned") || "[]");
+    return [];
+  });
+  const [mutedThreads, setMutedThreads] = useState<number[]>(() => {
+    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_muted") || "[]");
+    return [];
+  });
   const [threadContextMenu, setThreadContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -303,9 +331,15 @@ function ChatsPageContent() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [threadContextMenu]);
-  const [lockedChatsMap, setLockedChatsMap] = useState<Record<number, string>>({});
+  const [lockedChatsMap, setLockedChatsMap] = useState<Record<number, string>>(() => {
+    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_locked_chats_map") || "{}");
+    return {};
+  });
   const [unlockedSessionThreads, setUnlockedSessionThreads] = useState<number[]>([]);
-  const [hiddenThreads, setHiddenThreads] = useState<number[]>([]);
+  const [hiddenThreads, setHiddenThreads] = useState<number[]>(() => {
+    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_hidden") || "[]");
+    return [];
+  });
   const [chatLockEntry, setChatLockEntry] = useState<{ threadId: number; error: string; pin: string; showPin: boolean; forgotMode: boolean; forgotError: string } | null>(null);
   const [lockSetupEntry, setLockSetupEntry] = useState<{ threadId: number; step: "pin" | "confirm"; pin: string; confirmPin: string; error: string } | null>(null);
   const [globalChatLockEntry, setGlobalChatLockEntry] = useState<{ pin: string; error: string; showPin: boolean; forgotMode: boolean; forgotAnswer: string; forgotNewPin: string; forgotStep: "answer" | "newpin"; forgotError: string } | null>(null);
@@ -318,16 +352,7 @@ function ChatsPageContent() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMatches, setSyncMatches] = useState<any[]>([]);
 
-  // ═══ Restore Persistent Settings ═══
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setNicknames(JSON.parse(localStorage.getItem("nexora_nicknames") || "{}"));
-      setMutedThreads(JSON.parse(localStorage.getItem("nexora_muted") || "[]"));
-      setPinnedThreads(JSON.parse(localStorage.getItem("nexora_pinned") || "[]"));
-      setBlockedThreads(JSON.parse(localStorage.getItem("nexora_blocked") || "[]"));
-      setHiddenThreads(JSON.parse(localStorage.getItem("nexora_hidden") || "[]"));
-    }
-  }, []);
+  // ═══ Sync Settings to Local Storage (Only runs when state changes after init) ═══
 
   // ═══ Sync Settings to Local Storage ═══
   useEffect(() => { localStorage.setItem("nexora_nicknames", JSON.stringify(nicknames)); }, [nicknames]);
@@ -335,13 +360,39 @@ function ChatsPageContent() {
   useEffect(() => { localStorage.setItem("nexora_pinned", JSON.stringify(pinnedThreads)); }, [pinnedThreads]);
   useEffect(() => { localStorage.setItem("nexora_blocked", JSON.stringify(blockedThreads)); }, [blockedThreads]);
   useEffect(() => { localStorage.setItem("nexora_hidden", JSON.stringify(hiddenThreads)); }, [hiddenThreads]);
-  const [syncNonMatches, setSyncNonMatches] = useState<string[]>([]);
+  useEffect(() => { localStorage.setItem("nexora_disappear_global_timer", disappearTimer); }, [disappearTimer]);
   const [manualPhone, setManualPhone] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [syncNonMatches, setSyncNonMatches] = useState<string[]>([]);
+
+  // ═══ Global Persistence Watcher: Syncs state across layout and tabs ═══
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      try {
+        if (e.key === "nexora_secure_connections" && e.newValue) setThreads(JSON.parse(e.newValue));
+        if (e.key === "nexora_unread_counts" && e.newValue) setUnreadCounts(JSON.parse(e.newValue));
+        if (e.key === "nexora_pinned" && e.newValue) setPinnedThreads(JSON.parse(e.newValue));
+        if (e.key === "nexora_muted" && e.newValue) setMutedThreads(JSON.parse(e.newValue));
+        if (e.key === "nexora_blocked" && e.newValue) setBlockedThreads(JSON.parse(e.newValue));
+        if (e.key === "nexora_hidden" && e.newValue) setHiddenThreads(JSON.parse(e.newValue));
+        if (e.key === "nexora_nicknames" && e.newValue) setNicknames(JSON.parse(e.newValue));
+        if (e.key === "nexora_locked_chats_map" && e.newValue) setLockedChatsMap(JSON.parse(e.newValue));
+      } catch {}
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string; avatarUrl?: string }>({ name: "", username: "", color: "", avatarUrl: "" });
+  const [myProfile, setMyProfile] = useState<{ id: number; name: string; username: string; color: string; avatarUrl?: string }>({ 
+    id: 0,
+    name: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_name") || "" : "", 
+    username: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "", 
+    color: "from-purple-500 to-indigo-500", 
+    avatarUrl: typeof window !== "undefined" ? localStorage.getItem("nexora_avatar_url") || "" : "" 
+  });
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
@@ -430,6 +481,10 @@ function ChatsPageContent() {
 
   const handleStartCall = (type: "voice" | "video") => {
     if (!activeThread) return;
+    if (activeThread.username?.toLowerCase() === myUsernameRef.current?.toLowerCase()) {
+      alert("Nexora Protocol: Self-calling is not supported.");
+      return;
+    }
     initiateCall(activeThread.username, type, {
       name: activeThread.name,
       color: activeThread.color
@@ -445,7 +500,7 @@ function ChatsPageContent() {
     }
     setBlockedThreads(prev => {
       const next = prev.includes(threadId) ? prev : [...prev, threadId];
-      localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
+      localStorage.setItem("nexora_blocked", JSON.stringify(next));
       return next;
     });
     setSelectedProfileUser(null);
@@ -456,7 +511,7 @@ function ChatsPageContent() {
     if (!threadId) return;
     setBlockedThreads(prev => {
       const next = prev.filter(id => id !== threadId);
-      localStorage.setItem("nexora_blocked_threads", JSON.stringify(next));
+      localStorage.setItem("nexora_blocked", JSON.stringify(next));
       return next;
     });
     setSelectedProfileUser(null);
@@ -493,7 +548,7 @@ function ChatsPageContent() {
       const color = localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500";
       const avatarUrl = localStorage.getItem("nexora_avatar_url") || "";
 
-      setMyProfile({ name, username, color, avatarUrl });
+      setMyProfile({ id: 0, name, username, color, avatarUrl: avatarUrl || undefined });
 
       // Also fetch fresh from server in background to get latest avatar
       nexoraFetch(`/api/users/profile?username=${encodeURIComponent(username)}`).then((res: any) => {
@@ -519,10 +574,12 @@ function ChatsPageContent() {
 
         if (searchOpen) {
           setShowGlobalSearch(true);
-          // Silently clean up the search param
+          // Only clean if param actually exists to prevent Next.js loop
           const url = new URL(window.location.href);
-          url.searchParams.delete("search");
-          window.history.replaceState({ ...window.history.state }, "", url.toString());
+          if (url.searchParams.has("search")) {
+             url.searchParams.delete("search");
+             window.history.replaceState({ ...window.history.state }, "", url.toString());
+          }
         }
 
         setCurrentChatUser(u);
@@ -792,9 +849,9 @@ function ChatsPageContent() {
 
       if (savedTimer) {
         setDisappearTimer(savedTimer as any);
-      } else {
-        setDisappearTimer("off");
       }
+      // If no thread-specific timer, we KEEP the global disappearTimer state, 
+      // which is already initialized from localStorage. nexora_disappear_global_timer
     };
 
     loadMessages();
@@ -1241,6 +1298,7 @@ function ChatsPageContent() {
       const myName = localStorage.getItem("nexora_signup_name") || myUsername;
       myUsernameRef.current = myUsername; // 🛡️ Sync Ref for socket handlers
       setMyProfile({
+        id: 0,
         name: myName,
         username: myUsername,
         color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500",
@@ -1267,44 +1325,28 @@ function ChatsPageContent() {
         if (myUsername) {
           socket.emit("register", myUsername);
           socket.emit("join_tunnel", TUNNEL_ID);
+          ((..._args: any[]) => { })("[Protocol] Registering Identity on Nexora Bridge");
         }
       };
-      registerUser();
 
-      const fetchInitialData = async () => {
-        try {
-          const [notifs, reqs] = await Promise.all([
-            nexoraFetch(`/api/notifications?username=${myUsername}`),
-            nexoraFetch(`/api/connections/requests?username=${myUsername}`)
-          ]);
-          if (notifs?.notifications) setNotifications(notifs.notifications);
-          if (reqs?.requests) setPendingRequests(reqs.requests);
-        } catch (e) {
-          ((..._args: any[]) => { })("Initial activity fetch failed", e);
-        }
-      };
-      fetchInitialData();
-
-      // Re-register on reconnect
-      socket.on("connect", () => {
-        registerUser();
-        ((..._args: any[]) => { })("[Socket] Reconnected — re-registering identity");
-      });
+      (window as any)._nexoraRegisterUser = registerUser; // Expose for cleanup visibility
+      if (socket.connected) registerUser();
+      socket.on("connect", registerUser);
 
 
-      // 4. Handle incoming DIRECT messages (new per-user system)
-      socket.on("dm:message", async (data: any) => {
-        // NOTE: Server now sends 'dm:message' to sender's other devices for sync.
-        // We use msgId de-duplication to prevent local echoes if any.
+      // 4. Unified Incoming Handlers (Handles messages, media, polls, etc.)
+      const handleIncomingMessage = async (data: any) => {
         const senderUsername = data.from;
+        if (!senderUsername) return;
+        
         try {
           let decryptedText = "";
           if (data.fromStory || data.ciphertext === null || data.ciphertext === undefined) {
-            // Plaintext message — broadcast DMs from Nexora_31 or story interactions
-            decryptedText = data.text || "📷 Story Interaction";
+             decryptedText = data.text || (data.poll ? "🗳️ New Poll" : data.attachment ? (data.attachment.type === 'location' ? '📍 Shared Location' : '📎 Media') : "Secure Message");
           } else {
-            decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
+             decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
           }
+
           const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
           const newMsg: ChatMessage = {
             id: data.msgId || data.id || Math.random().toString(),
@@ -1315,107 +1357,60 @@ function ChatsPageContent() {
             isSelf: isFromSelf,
             status: "delivered",
             reactions: {},
+            attachment: data.attachment,
+            poll: data.poll,
+            contact: data.contact,
             replyTo: data.replyTo,
           };
 
           const currentThread = activeThreadRef.current;
+          let threads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+          let senderThread = threads.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+
+          // 🛡️ Proactive Discovery: If sender is unknown, fetch connections now
+          if (!senderThread) {
+             await fetchConnections();
+             threads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+             senderThread = threads.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+          }
+
           if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase() && currentThread !== null) {
-            // Active conversation — show immediately
             setMessages(prev => {
-              if (prev.find(m => m.id === newMsg.id)) return prev; // 🛡️ Prevent duplicates
+              if (prev.find(m => m.id === newMsg.id)) return prev; 
               return [...prev, newMsg];
             });
-            // Bump thread to top
-            bumpThread(senderUsername, { preview: decryptedText });
-            // Send seen receipt
+            bumpThread(senderUsername, { preview: "Encrypted Message is here 🔐" });
             socket.emit("dm:seen", { to: senderUsername, msgId: newMsg.id });
           } else {
-            // Different conversation — save to that thread's localStorage and increment unread
-            let connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-            let senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-
-            // ── If thread not found (e.g. first Nexora_31 broadcast) → refresh connections ──
-            if (!senderThread) {
-              await fetchConnections();
-              // Re-read from localStorage after refresh
-              connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-              senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-            }
-
-            if (senderThread) {
-              const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
-              if (!threadMsgs.find((m: any) => m.id === newMsg.id)) { // 🛡️ Prevent duplicates in storage
-                threadMsgs.push(newMsg);
-                localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
-              }
-            }
-            // Increment unread badge
             setUnreadCounts(prev => {
               const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
               localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
               return next;
             });
-            // Update thread preview + bump to top
-            bumpThread(senderUsername, { preview: decryptedText, unread: (senderThread?.unread || 0) + 1 });
-            pushService.showLocalNotification(
-              senderThread?.name || senderUsername,
-              'Encrypted Message is here 🔐',
-              { from: senderUsername }
-            );
-          }
-        } catch (e) { ((..._args: any[]) => { })("[!] Decryption failed:", e); }
-      });
 
-      // 4b. Handle incoming media DMs
-      socket.on("dm:media", (data: any) => {
-        const senderUsername = data.from;
-        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
-        const newMsg: ChatMessage = {
-          id: data.msgId || Math.random().toString(),
-          senderId: senderUsername,
-          text: data.caption || "",
-          timestamp: data.timestamp || formatToIndianTime(),
-          createdAt: Date.now(),
-          isSelf: isFromSelf,
-          status: "delivered",
-          reactions: {},
-          attachment: data.attachment,
-          replyTo: data.replyTo,
-        };
-        const currentThread = activeThreadRef.current;
-        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase() && currentThread !== null) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === newMsg.id)) return prev; // 🛡️ De-duplicate
-            return [...prev, newMsg];
-          });
-          // Bump thread to top
-          bumpThread(senderUsername, { preview: newMsg.text || "📎 Attachment" });
-        } else {
-          setUnreadCounts(prev => {
-            const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
-            localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
-            return next;
-          });
-          const senderThread = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]")
-            .find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-          if (senderThread) {
-            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
-            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
-              threadMsgs.push(newMsg);
-              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
+            if (senderThread) {
+              const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
+              if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
+                threadMsgs.push(newMsg);
+                localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
+              }
+            }
+            bumpThread(senderUsername, { preview: "Encrypted Message is here 🔐", unread: (senderThread?.unread || 0) + 1 });
+            
+            if (!isFromSelf) {
+              pushService.showLocalNotification(senderThread?.name || senderUsername, 'Encrypted Message is here 🔐', { from: senderUsername });
             }
           }
-          bumpThread(senderUsername, { preview: data.caption || "📎 Attachment", unread: (senderThread?.unread || 0) + 1 });
-          // Local push notification (when chat is not active)
-          if (!isFromSelf) {
-            pushService.showLocalNotification(
-              senderThread?.name || senderUsername,
-              'Encrypted Message is here 🔐',
-              { from: senderUsername }
-            );
-          }
+        } catch (e) {
+          ((..._args: any[]) => { })("[Protocol] Message processing failed", e);
         }
-      });
+      };
+
+      socket.on("dm:message", handleIncomingMessage);
+      socket.on("dm:media", handleIncomingMessage);
+      socket.on("dm:poll", handleIncomingMessage);
+      socket.on("dm:location", handleIncomingMessage);
+      socket.on("dm:contact", handleIncomingMessage);
 
       // 5. Real-time typing indicators
       socket.on("dm:typing", (data: { from: string; isTyping: boolean }) => {
@@ -1559,7 +1554,7 @@ function ChatsPageContent() {
       });
 
       socket.on("new_notification", (data: any) => {
-        setNotifications(prev => [{ id: Date.now(), is_read: 0, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), ...data }, ...prev]);
+        setNotifications(prev => [{ id: Date.now(), is_read: 0, time: formatToIndianTime(), ...data }, ...prev]);
         pushService.showLocalNotification(
           "Network Activity",
           data.message,
@@ -1577,7 +1572,7 @@ function ChatsPageContent() {
             from: data.from,
             fromName: data.fromName || data.from,
             fromColor: data.fromColor || 'from-purple-500 to-indigo-500',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: formatToIndianTime()
           }, ...prev];
         });
         // Show local notification
@@ -1640,98 +1635,8 @@ function ChatsPageContent() {
       });
 
       // ═══ INCOMING LOCATION ═══
-      socket.on("dm:location", (data: any) => {
-        const senderUsername = data.from;
-        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
-        const newMsg: ChatMessage = {
-          id: data.msgId || Math.random().toString(),
-          senderId: senderUsername,
-          text: "📍 Shared Live Location",
-          timestamp: data.timestamp || formatToIndianTime(),
-          createdAt: Date.now(),
-          isSelf: isFromSelf,
-          status: "delivered",
-          reactions: {},
-          attachment: { name: "Location", type: "location", url: `${data.lat},${data.lng}` },
-        };
-        const currentThread = activeThreadRef.current;
-        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase()) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        } else {
-          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-          const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-          if (senderThread) {
-            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
-            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
-              threadMsgs.push(newMsg);
-              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
-            }
-          }
-          if (!isFromSelf) {
-            setUnreadCounts(prev => {
-              const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
-              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
-              return next;
-            });
-            bumpThread(senderUsername, { preview: "📍 Location", unread: (senderThread?.unread || 0) + 1 });
-            pushService.showLocalNotification(
-              senderThread?.name || senderUsername,
-              'Encrypted Message is here 🔐',
-              { from: senderUsername }
-            );
-          }
-        }
-      });
 
       // ═══ INCOMING POLL ═══
-      socket.on("dm:poll", (data: any) => {
-        const senderUsername = data.from;
-        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
-        const newMsg: ChatMessage = {
-          id: data.msgId || Math.random().toString(),
-          senderId: senderUsername,
-          text: "",
-          timestamp: data.timestamp || formatToIndianTime(),
-          createdAt: Date.now(),
-          isSelf: isFromSelf,
-          status: "delivered",
-          reactions: {},
-          poll: { ...data.poll, votedOptions: [] },
-        };
-        const currentThread = activeThreadRef.current;
-        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase()) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        } else {
-          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-          const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-          if (senderThread) {
-            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
-            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
-              threadMsgs.push(newMsg);
-              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
-            }
-          }
-          if (!isFromSelf) {
-            setUnreadCounts(prev => {
-              const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
-              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
-              return next;
-            });
-            bumpThread(senderUsername, { preview: "📊 Poll", unread: (senderThread?.unread || 0) + 1 });
-            pushService.showLocalNotification(
-              senderThread?.name || senderUsername,
-              'Encrypted Message is here 🔐',
-              { from: senderUsername }
-            );
-          }
-        }
-      });
 
       // ═══ INCOMING POLL VOTE (Real-time vote sync) ═══
       socket.on("dm:poll_vote", (data: { from: string; msgId: string; optId: string; action: string }) => {
@@ -1765,62 +1670,13 @@ function ChatsPageContent() {
       });
 
       // ═══ INCOMING CONTACT ═══
-      socket.on("dm:contact", (data: any) => {
-        const senderUsername = data.from;
-        const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
-        const newMsg: ChatMessage = {
-          id: data.msgId || Math.random().toString(),
-          senderId: senderUsername,
-          text: "",
-          timestamp: data.timestamp || formatToIndianTime(),
-          createdAt: Date.now(),
-          isSelf: isFromSelf,
-          status: "delivered",
-          reactions: {},
-          contact: data.contact,
-        };
-        const currentThread = activeThreadRef.current;
-        if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase()) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        } else {
-          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-          const senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-          if (senderThread) {
-            const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
-            if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
-              threadMsgs.push(newMsg);
-              localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
-            }
-          }
-          if (!isFromSelf) {
-            setUnreadCounts(prev => {
-              const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
-              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
-              return next;
-            });
-            setThreads(prev => prev.map(t =>
-              t.username?.toLowerCase() === senderUsername?.toLowerCase()
-                ? { ...t, preview: "👤 Contact shared", unread: (t.unread || 0) + 1 }
-                : t
-            ));
-            pushService.showLocalNotification(
-              senderThread?.name || senderUsername,
-              'Encrypted Message is here 🔐',
-              { from: senderUsername }
-            );
-          }
-        }
-      });
     };
     initProtocol();
     // 🛡️ REMOVED: Global socket disconnect — Dashboard Layout needs it for notifications
     return () => {
       const socket = socketService.getSocket();
       if (socket) {
-        // Clean up common chat-related listeners only
+        socket.off("connect", (window as any)._nexoraRegisterUser);
         socket.off("dm:message");
         socket.off("dm:media");
         socket.off("dm:typing");
@@ -1837,6 +1693,9 @@ function ChatsPageContent() {
         socket.off("dm:poll");
         socket.off("dm:poll_vote");
         socket.off("dm:contact");
+        socket.off("connection_accepted");
+        socket.off("new_notification");
+        socket.off("connection_request");
       }
     };
   }, []);
@@ -1946,9 +1805,7 @@ function ChatsPageContent() {
       }
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: "delivered" } : m));
       // Update preview + bump thread to top
-      setThreads(prev => prev.map(t =>
-        t.username === activeThread.username ? { ...t, preview: text, lastMessageTime: Date.now() } : t
-      ));
+      bumpThread(activeThread.username, { preview: "Encrypted Message is here 🔐" });
     } catch (e) {
       ((..._args: any[]) => { })("[!] Encryption failed", e);
     } finally {
@@ -3743,9 +3600,12 @@ function ChatsPageContent() {
 
                           <div className="shrink-0 ml-2">
                             {alreadyConnected ? (
-                              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#2ed573]/10 flex items-center justify-center border border-[#2ed573]/20 shadow-sm" title="Already Connected">
-                                <Check className="w-5 h-5 sm:w-6 sm:h-6 text-[#2ed573]" />
-                              </div>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
+                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
+                              >
+                                <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
+                              </button>
                             ) : alreadyRequested ? (
                               <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 transition-all">
                                 <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
@@ -4418,55 +4278,71 @@ function ChatsPageContent() {
               }}
             >
               <div className="p-2 flex flex-col gap-1">
-                <button
-                  onClick={() => {
-                    const id = threadContextMenu.id;
-                    setPinnedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [id, ...prev]);
-                    setThreadContextMenu(null);
-                  }}
-                  className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-[#6c5ce7]/10 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3">
-                    <Pin className={`w-4 h-4 ${pinnedThreads.includes(threadContextMenu.id) ? "text-[#6c5ce7]" : "text-[var(--text-muted)]"} transition-colors`} />
-                    <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{pinnedThreads.includes(threadContextMenu.id) ? "Unpin Chat" : "Pin to Top"}</span>
-                  </div>
-                </button>
+                {(() => {
+                   const activeT = threads.find(t => t.id === threadContextMenu.id);
+                   const isNexoraAdmin = activeT?.username?.toLowerCase() === 'nexora_31';
+                   
+                   return (
+                      <>
+                        <button
+                          onClick={() => {
+                            const id = threadContextMenu.id;
+                            setPinnedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [id, ...prev]);
+                            setThreadContextMenu(null);
+                          }}
+                          className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-[#6c5ce7]/10 transition-all text-left group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Pin className={`w-4 h-4 ${pinnedThreads.includes(threadContextMenu.id) ? "text-[#6c5ce7]" : "text-[var(--text-muted)]"} transition-colors`} />
+                            <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{pinnedThreads.includes(threadContextMenu.id) ? "Unpin Chat" : "Pin to Top"}</span>
+                          </div>
+                        </button>
 
-                <button
-                  onClick={() => {
-                    const id = threadContextMenu.id;
-                    setMutedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-                    setThreadContextMenu(null);
-                  }}
-                  className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-orange-500/10 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3">
-                    {mutedThreads.includes(threadContextMenu.id) ? <Bell className="w-4 h-4 text-orange-500" /> : <BellOff className="w-4 h-4 text-[var(--text-muted)]" />}
-                    <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{mutedThreads.includes(threadContextMenu.id) ? "Unmute Alerts" : "Mute Notifications"}</span>
-                  </div>
-                </button>
+                        {!isNexoraAdmin && (
+                          <button
+                            onClick={() => {
+                              const id = threadContextMenu.id;
+                              setMutedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+                              setThreadContextMenu(null);
+                            }}
+                            className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-orange-500/10 transition-all text-left group"
+                          >
+                            <div className="flex items-center gap-3">
+                              {mutedThreads.includes(threadContextMenu.id) ? <Bell className="w-4 h-4 text-orange-500" /> : <BellOff className="w-4 h-4 text-[var(--text-muted)]" />}
+                              <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{mutedThreads.includes(threadContextMenu.id) ? "Unmute Alerts" : "Mute Notifications"}</span>
+                            </div>
+                          </button>
+                        )}
 
-                <div className="h-px bg-current opacity-[0.05] mx-4 my-1" />
+                        <div className="h-px bg-current opacity-[0.05] mx-4 my-1" />
 
-                <button
-                  onClick={() => {
-                    setHiddenThreads(prev => [...prev, threadContextMenu.id]);
-                    setThreadContextMenu(null);
-                  }}
-                  className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-rose-500/10 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3">
-                    <Trash2 className="w-4 h-4 text-rose-500/60 transition-colors" />
-                    <span className="text-xs font-bold text-rose-500/80">Delete Conversation</span>
-                  </div>
-                  <X className="w-3 h-3 text-rose-500/30 group-hover:text-rose-500" />
-                </button>
+                        {!isNexoraAdmin ? (
+                          <button
+                            onClick={() => {
+                              setHiddenThreads(prev => [...prev, threadContextMenu.id]);
+                              setThreadContextMenu(null);
+                            }}
+                            className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-rose-500/10 transition-all text-left group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Trash2 className="w-4 h-4 text-rose-500/60 transition-colors" />
+                              <span className="text-xs font-bold text-rose-500/80">Delete Conversation</span>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="px-3 py-3 rounded-2xl bg-indigo-500/5 flex items-center gap-3 opacity-60 cursor-not-allowed">
+                            <Lock className="w-4 h-4 text-indigo-400" />
+                            <span className="text-xs font-bold text-indigo-400">System Account (Restricted)</span>
+                          </div>
+                        )}
+                      </>
+                   );
+                })()}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </AnimatePresence>
-
     </div>
   );
 }
