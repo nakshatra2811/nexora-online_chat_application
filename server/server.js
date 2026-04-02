@@ -876,6 +876,7 @@ async function queueMessageForUser(username, msgData) {
         body: pushBody,
         icon: '/icon.png',
         badge: '/badge.png',
+        color: '#0066ff',
         data: {
             from: msgData.from,
             ciphertext: msgData.ciphertext,
@@ -1246,7 +1247,7 @@ io.on('connection', (socket) => {
     // Server ONLY relays — never inspects SDP or ICE data
     // ═══════════════════════════════════════════════
 
-    socket.on('call:offer', (data) => {
+    socket.on('call:offer', async (data) => {
         const senderId = socketToUser.get(socket.id);
         const targetId = data.to?.toLowerCase();
         if (senderId) {
@@ -1262,22 +1263,37 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            // Fetch caller avatar for the push notification preview
+            let callerAvatar = null;
+            try {
+                const user = await db.get('SELECT avatar_url FROM users WHERE LOWER(username) = ?', [senderId.toLowerCase()]);
+                if (user) callerAvatar = user.avatar_url;
+            } catch (e) { /* ignore fallback */ }
+
             io.to(targetId).emit('call:offer', {
                 from: senderId,
                 sdp: data.sdp,
                 callType: data.callType,
                 callerName: data.callerName,
                 callerColor: data.callerColor,
+                callerAvatar: callerAvatar || data.callerAvatar,
                 roomId: data.roomId // Pass along room ID if provided
             });
+
             // Push notification for incoming call (using privacy text)
             sendPushNotification(targetId, {
                 title: `Incoming Secret Call`,
-                body: `An encrypted call is incoming on Nexora 🔐`,
+                body: `${data.callerName || 'Someone'} is calling you on Nexora 🔐`,
                 icon: '/icon.png',
                 badge: '/badge.png',
+                color: '#0066ff',
                 urgency: 'high',
-                data: { type: 'call' }
+                data: { 
+                    type: 'call',
+                    callerName: data.callerName || senderId,
+                    callerAvatar: callerAvatar || data.callerAvatar,
+                    audio: '/ringtone.mp3'
+                }
             });
         }
     });

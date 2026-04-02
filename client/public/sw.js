@@ -102,22 +102,27 @@ self.addEventListener('push', (event) => {
        else if (msgData.isContact) body = '👤 Shared Contact';
     }
 
+    const isCall = msgData.type === 'call';
     const options = {
       body: body,
       icon: payload.icon || '/icon.png',
       badge: payload.badge || '/badge.png',
-      vibrate: msgData.type === 'call' ? [500, 110, 500, 110, 500, 110, 500, 110, 500] : [200, 100, 200],
+      color: payload.color || '#0066ff',  // Android tint color
+      image: isCall ? (msgData.callerAvatar || null) : null,
+      vibrate: isCall 
+        ? Array(20).fill([500, 500]).flat()
+        : [200, 100, 200],
       data: payload.data || {},
-      actions: msgData.type === 'call' ? [
+      actions: isCall ? [
         { action: 'view', title: 'Answer' },
         { action: 'dismiss', title: 'Decline' },
       ] : [
         { action: 'view', title: 'View' },
         { action: 'dismiss', title: 'Dismiss' },
       ],
-      tag: msgData.type === 'call' ? 'nexora-call' : 'nexora-notification',
+      tag: isCall ? 'nexora-call' : 'nexora-notification',
       renotify: true,
-      requireInteraction: msgData.type === 'call' ? true : false,
+      requireInteraction: isCall ? true : false,
     };
 
     return self.registration.showNotification(title, options);
