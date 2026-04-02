@@ -283,6 +283,13 @@ let pgPool;
                 subscription TEXT NOT NULL,
                 created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
+
+            CREATE TABLE IF NOT EXISTS offline_messages (
+                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                username TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+            );
         `);
 
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
@@ -805,7 +812,7 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     ((..._args) => {})('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
 }
 
-// In-memory offline message queue: username -> [{...msgData}]
+// In-memory fallback just in case, but mostly relying on DB
 const offlineMessageQueue = new Map();
 
 async function sendPushNotification(username, payloadData) {
@@ -831,24 +838,30 @@ async function sendPushNotification(username, payloadData) {
                         await db.run('DELETE FROM push_subscriptions WHERE LOWER(username) = ? AND endpoint = ?', [normalized, subObj.endpoint]);
                     } catch (cleanupErr) {}
                 }
-                ((..._args) => {})('[PUSH] Device relay failed:', err.message);
+                console.error('[PUSH] Device relay failed:', err.message);
             }
         });
 
         await Promise.allSettled(pushPromises);
     } catch (e) {
-        ((..._args) => {})('[PUSH] Global broadcast error:', e.message);
+        console.error('[PUSH] Global broadcast error:', e.message);
     }
 }
 
-function queueMessageForUser(username, msgData) {
-    if (!offlineMessageQueue.has(username)) {
-        offlineMessageQueue.set(username, []);
+async function queueMessageForUser(username, msgData) {
+    try {
+        if (!db) { throw new Error("DB not attached"); }
+        await db.run('INSERT INTO offline_messages (username, payload) VALUES (?, ?)', [username.toLowerCase(), JSON.stringify(msgData)]);
+    } catch(e) {
+        console.error("Failed to queue offline message to DB, falling back to memory:", e);
+        if (!offlineMessageQueue.has(username)) {
+            offlineMessageQueue.set(username, []);
+        }
+        const queue = offlineMessageQueue.get(username);
+        // Limit queue to 100 messages per user
+        if (queue.length >= 100) queue.shift();
+        queue.push(msgData);
     }
-    const queue = offlineMessageQueue.get(username);
-    // Limit queue to 100 messages per user
-    if (queue.length >= 100) queue.shift();
-    queue.push(msgData);
 
     // Proactive background push to all registered devices
     sendPushNotification(username, {
@@ -860,12 +873,34 @@ function queueMessageForUser(username, msgData) {
     });
 }
 
-function deliverQueuedMessages(username, socket) {
+async function deliverQueuedMessages(username, socket) {
+    try {
+        if (!db) return;
+        const rows = await db.all('SELECT * FROM offline_messages WHERE LOWER(username) = ? ORDER BY created_at ASC', [username.toLowerCase()]);
+        if (rows && rows.length > 0) {
+            console.log(`[QUEUE] Delivering ${rows.length} queued message(s) to ${username} from DB`);
+            for (const row of rows) {
+                try {
+                    const msg = JSON.parse(row.payload);
+                    const eventName = msg.isLocation ? 'dm:location' : msg.isPoll ? 'dm:poll' : msg.isContact ? 'dm:contact' : msg.isMedia ? 'dm:media' : 'dm:message';
+                    // Attach the offline DB ID so clients can ack it
+                    msg.offlineDbId = row.id; 
+                    socket.emit(eventName, msg);
+                } catch(e) {}
+            }
+        }
+    } catch(e) {
+        console.error("Error fetching offline messages from DB:", e);
+    }
+
     const queue = offlineMessageQueue.get(username);
     if (!queue || queue.length === 0) return;
-    ((..._args) => {})(`[QUEUE] Delivering ${queue.length} queued message(s) to ${username}`);
-    for (const msg of queue) {
+    console.log(`[QUEUE] Delivering ${queue.length} memory queued message(s) to ${username}`);
+    for (let i = 0; i < queue.length; i++) {
+        const msg = queue[i];
         const eventName = msg.isLocation ? 'dm:location' : msg.isPoll ? 'dm:poll' : msg.isContact ? 'dm:contact' : msg.isMedia ? 'dm:media' : 'dm:message';
+        // Mock offline ID for memory messages so they can be acked
+        msg.offlineDbId = `mem_${username}_${i}`;
         socket.emit(eventName, msg);
     }
     offlineMessageQueue.delete(username);
@@ -969,6 +1004,24 @@ io.on('connection', (socket) => {
     // Join an encrypted room tunnel
     socket.on('join_tunnel', (vaultId) => {
         socket.join(vaultId);
+    });
+
+    // ═══════════════════════════════════════════════
+    // OFFLINE MESSAGE ACKNOWLEDGEMENT
+    // ═══════════════════════════════════════════════
+    socket.on('dm:ack_offline', async (data) => {
+        const { offlineDbId } = data;
+        const senderId = socketToUser.get(socket.id);
+        if (senderId && offlineDbId) {
+            if (typeof offlineDbId === 'number' || !isNaN(Number(offlineDbId))) {
+                try {
+                    await db.run('DELETE FROM offline_messages WHERE id = ?', [offlineDbId]);
+                } catch(e) {
+                    console.error("Ack error:", e);
+                }
+            } 
+            // In case of memory mock ID, we don't need to do anything since memory queue is cleared on deliver.
+        }
     });
 
     // ═══════════════════════════════════════════════

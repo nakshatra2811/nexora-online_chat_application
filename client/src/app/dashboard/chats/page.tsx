@@ -128,7 +128,7 @@ function ChatsPageContent() {
         ...thread, 
         ...updates, 
         lastMessageTime: Date.now(),
-        preview: "Encrypted Message is here 🔐" // Privacy Preview
+        preview: updates.preview !== undefined ? updates.preview : thread.preview // Used passed preview if available
       };
       const next = [updated, ...otherThreads];
       localStorage.setItem("nexora_secure_connections", JSON.stringify(next));
@@ -1379,7 +1379,7 @@ function ChatsPageContent() {
               if (prev.find(m => m.id === newMsg.id)) return prev; 
               return [...prev, newMsg];
             });
-            bumpThread(senderUsername, { preview: "Encrypted Message is here 🔐" });
+            bumpThread(senderUsername, { preview: decryptedText });
             socket.emit("dm:seen", { to: senderUsername, msgId: newMsg.id });
           } else {
             setUnreadCounts(prev => {
@@ -1395,14 +1395,20 @@ function ChatsPageContent() {
                 localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
               }
             }
-            bumpThread(senderUsername, { preview: "Encrypted Message is here 🔐", unread: (senderThread?.unread || 0) + 1 });
+            bumpThread(senderUsername, { preview: decryptedText, unread: (senderThread?.unread || 0) + 1 });
             
             if (!isFromSelf) {
               pushService.showLocalNotification(senderThread?.name || senderUsername, 'Encrypted Message is here 🔐', { from: senderUsername });
             }
           }
+
+          // 🔥 Protocol Upgrade: Acknowledge receipt to clear from offline DB queue
+          if (data.offlineDbId) {
+            socket.emit('dm:ack_offline', { offlineDbId: data.offlineDbId });
+          }
+
         } catch (e) {
-          ((..._args: any[]) => { })("[Protocol] Message processing failed", e);
+          console.error("[Protocol] Message processing failed", e);
         }
       };
 
@@ -1805,7 +1811,7 @@ function ChatsPageContent() {
       }
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: "delivered" } : m));
       // Update preview + bump thread to top
-      bumpThread(activeThread.username, { preview: "Encrypted Message is here 🔐" });
+      bumpThread(activeThread.username, { preview: text });
     } catch (e) {
       ((..._args: any[]) => { })("[!] Encryption failed", e);
     } finally {
