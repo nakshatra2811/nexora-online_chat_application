@@ -99,7 +99,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const username = localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0];
       setGlobalProfile({ name, username, email: signupEmail, avatarUrl: localStorage.getItem("nexora_avatar_url") || "" });
     }
-    }
   }, []);
 
   // Account Status Monitor protocol
