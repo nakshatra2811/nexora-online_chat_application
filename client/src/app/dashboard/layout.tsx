@@ -167,16 +167,69 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }, ...prev]);
       };
 
+      // ═══ Global Message Listener (Handles background message reception) ═══
+      const handleGlobalMessage = async (data: any) => {
+        const sender = data.senderId || data.from;
+        if (!sender) return;
+
+        // 1. Update Unread Count in storage
+        const counts = JSON.parse(localStorage.getItem("nexora_unread_counts") || "{}");
+        const isCurrentlyViewingChat = pathname?.includes("/dashboard/chats"); 
+        
+        counts[sender] = (counts[sender] || 0) + 1;
+        localStorage.setItem("nexora_unread_counts", JSON.stringify(counts));
+
+        // 2. Update Thread Preview in storage
+        const threadsStr = localStorage.getItem("nexora_secure_connections") || "[]";
+        let threads = JSON.parse(threadsStr);
+        const threadIndex = threads.findIndex((t: any) => t.username?.toLowerCase() === sender.toLowerCase());
+        
+        if (threadIndex !== -1) {
+          threads[threadIndex] = { 
+            ...threads[threadIndex], 
+            preview: "Encrypted Message is here 🔐", 
+            lastMessageTime: Date.now(),
+            unread: counts[sender]
+          };
+          // Move to top
+          threads = [threads[threadIndex], ...threads.filter((_: any, i: number) => i !== threadIndex)];
+          localStorage.setItem("nexora_secure_connections", JSON.stringify(threads));
+        }
+
+        // 3. Trigger Toast if NOT on chats page and NOT muted
+        const muted = JSON.parse(localStorage.getItem("nexora_muted") || "[]");
+        const isMuted = muted.includes(threadIndex !== -1 ? threads[threadIndex].id : -1);
+
+        if (!isCurrentlyViewingChat && !isMuted) {
+          pushService.showLocalNotification(sender, 'Encrypted Message is here 🔐', { from: sender });
+          setGeneralNotifications(prev => [{
+            id: Date.now(),
+            type: 'message',
+            message: `New message from @${sender}`,
+            from_username: sender,
+            time: 'Just now'
+          }, ...prev]);
+        }
+
+        window.dispatchEvent(new Event("storage"));
+      };
+
       socket.on("connection_request", handleNewRequest);
       socket.on("connection_accepted", handleAccepted);
       socket.on("new_notification", handleNewNotification);
+      socket.on("dm:message", handleGlobalMessage);
+      socket.on("dm:media", handleGlobalMessage);
+      socket.on("dm:poll", handleGlobalMessage);
 
       return () => {
         socket.off("connection_request", handleNewRequest);
         socket.off("connection_accepted", handleAccepted);
         socket.off("new_notification", handleNewNotification);
+        socket.off("dm:message", handleGlobalMessage);
+        socket.off("dm:media", handleGlobalMessage);
+        socket.off("dm:poll", handleGlobalMessage);
       };
-  }, []);
+  }, [pathname]);
 
   // Close notif panel on outside click
   useEffect(() => {

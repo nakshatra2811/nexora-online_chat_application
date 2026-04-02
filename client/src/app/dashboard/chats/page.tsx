@@ -20,6 +20,7 @@ import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyP
 import { syntheticRingtone } from "@/lib/ringtone";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
+import { formatToIndianTime } from "@/lib/time";
 import { pushService } from "@/lib/push";
 import { useCall } from "@/components/Call/CallProvider";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
@@ -132,7 +133,7 @@ function ChatsPageContent() {
   const [showRequestsSlider, setShowRequestsSlider] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  
+
   // Stories state for top tray previews
   const [myStoryPreview, setMyStoryPreview] = useState<boolean>(false);
   const [myStories, setMyStories] = useState<any[]>([]);
@@ -143,6 +144,17 @@ function ChatsPageContent() {
   const [isRecording, setIsRecording] = useState(false);
   const [isRecordingPaused, setIsRecordingPaused] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+
+  // Sync threads to local storage whenever they are bumped or updated
+  useEffect(() => {
+    if (threads.length > 0) {
+      const current = localStorage.getItem("nexora_secure_connections");
+      const next = JSON.stringify(threads);
+      if (current !== next) {
+        localStorage.setItem("nexora_secure_connections", next);
+      }
+    }
+  }, [threads]);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -168,18 +180,18 @@ function ChatsPageContent() {
   const [msgMenu, setMsgMenu] = useState<string | null>(null);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const { 
-    startCall: initiateCall, 
-    acceptCall: handleAccept, 
-    declineCall: handleDecline, 
-    endCall: handleEnd, 
-    toggleMute, 
-    toggleVideo, 
-    maximize, 
-    minimize, 
-    callState: activeCallState 
+  const {
+    startCall: initiateCall,
+    acceptCall: handleAccept,
+    declineCall: handleDecline,
+    endCall: handleEnd,
+    toggleMute,
+    toggleVideo,
+    maximize,
+    minimize,
+    callState: activeCallState
   } = useCall();
-  
+
   // ─── RESTORED CALL STATES (Adjusted to sync with Global Provider) ───
   const [callState, setCallState] = useState<{
     isActive: boolean;
@@ -217,31 +229,51 @@ function ChatsPageContent() {
 
   // Sync local restored state with global CallProvider state
   useEffect(() => {
-    setCallState({
-      isActive: activeCallState.isActive,
-      status: activeCallState.status,
-      type: activeCallState.type,
-      remoteName: activeCallState.remoteUser?.name || "",
-      remoteColor: activeCallState.remoteUser?.color || "",
-      duration: activeCallState.duration,
-      isMuted: activeCallState.isMuted,
-      isVideoOff: activeCallState.isVideoOff,
-      isFullscreen: activeCallState.isFullscreen,
-      remoteStream: activeCallState.remoteStream,
-      localStream: activeCallState.localStream,
-    });
-    
-    if (activeCallState.isIncoming && !activeCallState.isActive) {
-      setIncomingCall({
-        from: activeCallState.remoteUser?.username || "",
-        fromName: activeCallState.remoteUser?.name || "",
-        fromColor: activeCallState.remoteUser?.color || "",
-        type: activeCallState.type
+    // Only update if something actually changed to prevent render loops
+    if (
+      callState.isActive !== activeCallState.isActive ||
+      callState.status !== activeCallState.status ||
+      callState.duration !== activeCallState.duration ||
+      callState.isMuted !== activeCallState.isMuted ||
+      callState.isVideoOff !== activeCallState.isVideoOff ||
+      callState.remoteStream !== activeCallState.remoteStream ||
+      callState.localStream !== activeCallState.localStream
+    ) {
+      setCallState({
+        isActive: activeCallState.isActive,
+        status: activeCallState.status,
+        type: activeCallState.type,
+        remoteName: activeCallState.remoteUser?.name || "",
+        remoteColor: activeCallState.remoteUser?.color || "",
+        duration: activeCallState.duration,
+        isMuted: activeCallState.isMuted,
+        isVideoOff: activeCallState.isVideoOff,
+        isFullscreen: activeCallState.isFullscreen,
+        remoteStream: activeCallState.remoteStream,
+        localStream: activeCallState.localStream,
       });
-    } else {
-      setIncomingCall(null);
+
+      if (activeCallState.isIncoming && !activeCallState.isActive) {
+        setIncomingCall({
+          from: activeCallState.remoteUser?.username || "",
+          fromName: activeCallState.remoteUser?.name || "",
+          fromColor: activeCallState.remoteUser?.color || "",
+          type: activeCallState.type
+        });
+      } else {
+        setIncomingCall(null);
+      }
     }
-  }, [activeCallState]);
+  }, [
+    activeCallState.isActive, 
+    activeCallState.status, 
+    activeCallState.isIncoming, 
+    activeCallState.duration, 
+    activeCallState.isMuted, 
+    activeCallState.isVideoOff, 
+    activeCallState.remoteStream, 
+    activeCallState.localStream
+  ]);
 
   // Original function names pointing to global context
   const acceptIncomingCall = () => handleAccept();
@@ -281,15 +313,32 @@ function ChatsPageContent() {
   const [vaultReady, setVaultReady] = useState(false);
   const [ecdhReady, setEcdhReady] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
-  
-  // ── Contact Sync & Search History States ──
+
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMatches, setSyncMatches] = useState<any[]>([]);
+
+  // ═══ Restore Persistent Settings ═══
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setNicknames(JSON.parse(localStorage.getItem("nexora_nicknames") || "{}"));
+      setMutedThreads(JSON.parse(localStorage.getItem("nexora_muted") || "[]"));
+      setPinnedThreads(JSON.parse(localStorage.getItem("nexora_pinned") || "[]"));
+      setBlockedThreads(JSON.parse(localStorage.getItem("nexora_blocked") || "[]"));
+      setHiddenThreads(JSON.parse(localStorage.getItem("nexora_hidden") || "[]"));
+    }
+  }, []);
+
+  // ═══ Sync Settings to Local Storage ═══
+  useEffect(() => { localStorage.setItem("nexora_nicknames", JSON.stringify(nicknames)); }, [nicknames]);
+  useEffect(() => { localStorage.setItem("nexora_muted", JSON.stringify(mutedThreads)); }, [mutedThreads]);
+  useEffect(() => { localStorage.setItem("nexora_pinned", JSON.stringify(pinnedThreads)); }, [pinnedThreads]);
+  useEffect(() => { localStorage.setItem("nexora_blocked", JSON.stringify(blockedThreads)); }, [blockedThreads]);
+  useEffect(() => { localStorage.setItem("nexora_hidden", JSON.stringify(hiddenThreads)); }, [hiddenThreads]);
   const [syncNonMatches, setSyncNonMatches] = useState<string[]>([]);
   const [manualPhone, setManualPhone] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  
+
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [myProfile, setMyProfile] = useState<{ name: string; username: string; color: string; avatarUrl?: string }>({ name: "", username: "", color: "", avatarUrl: "" });
@@ -319,15 +368,15 @@ function ChatsPageContent() {
         setSyncMatches([]);
       }
     } catch (e) {
-       ((..._args: any[]) => {})("Manual add failed:", e);
+      ((..._args: any[]) => { })("Manual add failed:", e);
     } finally {
-       setIsSyncing(false);
+      setIsSyncing(false);
     }
   };
 
   const handleNativeSync = async () => {
     setIsSyncing(true);
-    setManualPhone(""); 
+    setManualPhone("");
     setSyncMatches([]);
     setSyncNonMatches([]);
     try {
@@ -340,32 +389,32 @@ function ChatsPageContent() {
           const contacts = await (navigator as any).contacts.select(props, opts);
           numbers = contacts.flatMap((c: any) => c.tel || []);
         } catch (err) {
-          ((..._args: any[]) => {})("Contacts API failed/cancelled, using simulated baseline.");
+          ((..._args: any[]) => { })("Contacts API failed/cancelled, using simulated baseline.");
         }
       }
 
       // Cleanup numbers (keep digits only)
       const cleanNumbers = numbers.map(n => n.replace(/\D/g, '')).filter(n => n.length >= 10);
-      
+
       // If no contacts found (empty or denied), we use a notification or mock for dev feedback
       if (cleanNumbers.length === 0) {
-         // simulated contacts for development if real ones aren't available
-         ((..._args: any[]) => {})("No contacts selected/found. Syncing limited to manual entries.");
+        // simulated contacts for development if real ones aren't available
+        ((..._args: any[]) => { })("No contacts selected/found. Syncing limited to manual entries.");
       }
 
       // Send original numbers to server (server will hash them for PII protection during match)
       if (cleanNumbers.length > 0) {
         const res = await nexoraFetch("/api/users/sync-contacts", {
           method: "POST",
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             contacts: cleanNumbers,
-            me: myProfile.username 
+            me: myProfile.username
           })
         });
-        
+
         if (res && res.suggestions) {
           setSyncMatches(res.suggestions);
-          
+
           // Calculate non-matches (invite list)
           const registered = res.registeredPhones || [];
           const notOnNexora = cleanNumbers.filter(n => !registered.includes(n));
@@ -373,7 +422,7 @@ function ChatsPageContent() {
         }
       }
     } catch (e) {
-      ((..._args: any[]) => {})("Sync failed:", e);
+      ((..._args: any[]) => { })("Sync failed:", e);
     } finally {
       setIsSyncing(false);
     }
@@ -381,9 +430,9 @@ function ChatsPageContent() {
 
   const handleStartCall = (type: "voice" | "video") => {
     if (!activeThread) return;
-    initiateCall(activeThread.username, type, { 
-      name: activeThread.name, 
-      color: activeThread.color 
+    initiateCall(activeThread.username, type, {
+      name: activeThread.name,
+      color: activeThread.color
     });
   };
 
@@ -428,7 +477,7 @@ function ChatsPageContent() {
         if (res && res.user) {
           setProfileData(res.user);
         }
-      } catch (e) { ((..._args: any[]) => {})(e); }
+      } catch (e) { ((..._args: any[]) => { })(e); }
       finally { setLoadingProfile(false); }
     };
     fetchProfile();
@@ -443,7 +492,7 @@ function ChatsPageContent() {
       const username = localStorage.getItem("nexora_signup_username") || "me";
       const color = localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500";
       const avatarUrl = localStorage.getItem("nexora_avatar_url") || "";
-      
+
       setMyProfile({ name, username, color, avatarUrl });
 
       // Also fetch fresh from server in background to get latest avatar
@@ -452,7 +501,7 @@ function ChatsPageContent() {
           localStorage.setItem("nexora_avatar_url", res.user.avatarUrl);
           setMyProfile(prev => ({ ...prev, avatarUrl: res.user.avatarUrl }));
         }
-      }).catch((..._args: any[]) => {});
+      }).catch((..._args: any[]) => { });
     }
   }, []);
 
@@ -467,7 +516,7 @@ function ChatsPageContent() {
         const u = searchParams.get("u") || searchParams.get("username");
         const call = searchParams.get("call");
         const searchOpen = searchParams.get("search") === "true";
-        
+
         if (searchOpen) {
           setShowGlobalSearch(true);
           // Silently clean up the search param
@@ -483,7 +532,7 @@ function ChatsPageContent() {
           setCallInitiation(null);
         }
       } catch (e) {
-        ((..._args: any[]) => {})("[NAV] Manual URL sync failed", e);
+        ((..._args: any[]) => { })("[NAV] Manual URL sync failed", e);
       }
     };
 
@@ -506,9 +555,9 @@ function ChatsPageContent() {
 
           // Handle call initiation (One-time check against the callInitiation state)
           if (callInitiation && callInitiation.user === found.username) {
-            ((..._args: any[]) => {})(`[NAV] Triggering call: ${callInitiation.type} to ${found.username}`);
+            ((..._args: any[]) => { })(`[NAV] Triggering call: ${callInitiation.type} to ${found.username}`);
             initiateCall(found.username, callInitiation.type as any, { name: found.name, color: found.color });
-            
+
             // Clean up call param silently from URL without triggering a Next.js re-render loop
             const url = new URL(window.location.href);
             url.searchParams.delete("call");
@@ -525,7 +574,7 @@ function ChatsPageContent() {
         document.body.classList.remove("chat-active");
       }
     } catch (e) {
-      ((..._args: any[]) => {})("[NAV] Thread sync warning", e);
+      ((..._args: any[]) => { })("[NAV] Thread sync warning", e);
     }
   }, [currentChatUser, threads, callInitiation]);
 
@@ -549,23 +598,35 @@ function ChatsPageContent() {
     if (!myUsername) return;
     try {
       const data = await nexoraFetch(`/api/connections?username=${encodeURIComponent(myUsername)}`);
-      if (data && data.connections) {
-        setThreads(data.connections.map((c: any) => {
-          // Sync server-side wallpaper to local cache
+        const stored = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const mapped = data.connections.map((c: any) => {
           if (c.wallpaper) {
-             localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
+            localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
           }
-          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-          const existing = connections.find((ec: any) => ec.username === c.username);
+          const existing = stored.find((ec: any) => ec.username?.toLowerCase() === c.username?.toLowerCase());
           return {
             ...c,
-            // Use server online status OR existing socket-based status
             online: c.online || (existing?.online ?? false),
             lastMessageTime: existing?.lastMessageTime || c.lastMessageTime || 0,
+            preview: existing?.preview || c.preview || "Connected! Start chatting.",
           };
-        }).sort((a: any, b: any) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)));
-        localStorage.setItem("nexora_secure_connections", JSON.stringify(data.connections));
-      }
+        }).sort((a: any, b: any) => {
+          const pinned = JSON.parse(localStorage.getItem("nexora_pinned") || "[]");
+          const aPinned = pinned.includes(a.id);
+          const bPinned = pinned.includes(b.id);
+          if (aPinned && !bPinned) return -1;
+          if (!aPinned && bPinned) return 1;
+          return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
+        });
+        
+        const hidden = JSON.parse(localStorage.getItem("nexora_hidden") || "[]");
+        const filtered = mapped.filter((t: any) => !hidden.includes(t.id));
+        
+        const mappedStr = JSON.stringify(filtered);
+        if (JSON.stringify(threads) !== mappedStr) {
+           setThreads(filtered);
+           localStorage.setItem("nexora_secure_connections", mappedStr);
+        }
 
       // Fetch pending requests for Instagram-style sidebar
       const reqData = await nexoraFetch(`/api/connections/requests?username=${encodeURIComponent(myUsername)}`);
@@ -590,10 +651,10 @@ function ChatsPageContent() {
           setFriendsWithStories(Array.from(new Set(others)));
         }
       } catch (err) {
-        ((..._args: any[]) => {})("Story preview fetch failed", err);
+        ((..._args: any[]) => { })("Story preview fetch failed", err);
       }
     } catch (e) {
-      ((..._args: any[]) => {})("Failed to sync connections:", e);
+      ((..._args: any[]) => { })("Failed to sync connections:", e);
     }
   };
 
@@ -606,10 +667,10 @@ function ChatsPageContent() {
       if (res && (res.status === "accepted" || res.status === "declined")) {
         setPendingRequests(prev => prev.filter(r => r.id !== reqId));
         if (action === "accept") {
-           fetchConnections(); // Server returns threads with proper username fields
+          fetchConnections(); // Server returns threads with proper username fields
         }
       }
-    } catch (e) { ((..._args: any[]) => {})("Error responding to request", e); }
+    } catch (e) { ((..._args: any[]) => { })("Error responding to request", e); }
   };
 
 
@@ -622,9 +683,9 @@ function ChatsPageContent() {
         const newKey = await generateAESKey();
         await KeyStore.saveVaultKey(newKey);
         key = newKey;
-        ((..._args: any[]) => {})("[VAULT] New storage vault key generated and locked.");
+        ((..._args: any[]) => { })("[VAULT] New storage vault key generated and locked.");
       } else {
-        ((..._args: any[]) => {})("[VAULT] Storage vault key recovered.");
+        ((..._args: any[]) => { })("[VAULT] Storage vault key recovered.");
       }
       setVaultKey(key);
       setVaultReady(true);
@@ -653,12 +714,12 @@ function ChatsPageContent() {
       if (hidden) setHiddenThreads(JSON.parse(hidden));
       const history = localStorage.getItem("nexora_search_history");
       if (history) setSearchHistory(JSON.parse(history));
-      
+
       // Load unread counts
       const savedUnreads = localStorage.getItem("nexora_unread_counts");
       if (savedUnreads) setUnreadCounts(JSON.parse(savedUnreads));
     } catch (e) {
-      ((..._args: any[]) => {})("[CHATS] LocalStorage parse failed - clearing corrupt entries", e);
+      ((..._args: any[]) => { })("[CHATS] LocalStorage parse failed - clearing corrupt entries", e);
     }
   }, []);
 
@@ -666,18 +727,18 @@ function ChatsPageContent() {
   const prevThreadRef = useRef<Thread | null>(null);
   useEffect(() => {
     activeThreadRef.current = activeThread;
-    
+
     // Purge after_view messages
     if (prevThreadRef.current && activeThread?.id !== prevThreadRef.current.id) {
-        const oldId = prevThreadRef.current.id;
-        const oldTimer = localStorage.getItem(`nexora_disappear_${oldId}`);
-        if (oldTimer === "after_view" || oldTimer === "after") {
-           const currentMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${oldId}`) || "[]");
-           const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice); 
-           if (remaining.length !== currentMsgs.length) {
-               localStorage.setItem(`nexora_msgs_${oldId}`, JSON.stringify(remaining));
-           }
+      const oldId = prevThreadRef.current.id;
+      const oldTimer = localStorage.getItem(`nexora_disappear_${oldId}`);
+      if (oldTimer === "after_view" || oldTimer === "after") {
+        const currentMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${oldId}`) || "[]");
+        const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
+        if (remaining.length !== currentMsgs.length) {
+          localStorage.setItem(`nexora_msgs_${oldId}`, JSON.stringify(remaining));
         }
+      }
     }
     prevThreadRef.current = activeThread;
 
@@ -694,9 +755,9 @@ function ChatsPageContent() {
   useEffect(() => {
     const loadMessages = async () => {
       if (!activeThread || !vaultReady) return;
-      
+
       const savedMsgs = localStorage.getItem(`nexora_msgs_${activeThread.id}`);
-      
+
       if (savedMsgs) {
         try {
           let parsed: ChatMessage[] = [];
@@ -717,13 +778,13 @@ function ChatsPageContent() {
           );
           setMessages(unique);
         } catch (e) {
-          ((..._args: any[]) => {})("[!] Load failed", e);
+          ((..._args: any[]) => { })("[!] Load failed", e);
           setMessages([]);
         }
       } else {
         setMessages([]);
       }
-      
+
       // Strict Disappear Timer Sync
       let savedTimer = null;
       if (activeThread.username) savedTimer = localStorage.getItem(`nexora_disappear_by_username_${activeThread.username}`);
@@ -735,7 +796,7 @@ function ChatsPageContent() {
         setDisappearTimer("off");
       }
     };
-    
+
     loadMessages();
   }, [activeThread, vaultReady, vaultKey]);
 
@@ -924,27 +985,27 @@ function ChatsPageContent() {
       if (threadId) localStorage.removeItem(`nexora_wallpaper_${threadId}`);
       if (username) localStorage.removeItem(`nexora_wallpaper_${username}`);
     }
-    
+
     // Emit to other user
     const socket = socketService.getSocket();
     if (socket && username) {
       socket.emit("dm:wallpaper", { to: username, wallpaper: url });
-      
+
       // Notify locally
       const notifMsg: ChatMessage = {
-        id: Math.random().toString(), 
-        senderId: "system", 
-        text: `You changed the chat wallpaper`, 
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), 
-        createdAt: Date.now(), 
-        isSelf: true, 
-        status: "delivered", 
-        reactions: {}, 
-        isSystemNotice: true 
+        id: Math.random().toString(),
+        senderId: "system",
+        text: `You changed the chat wallpaper`,
+        timestamp: formatToIndianTime(),
+        createdAt: Date.now(),
+        isSelf: true,
+        status: "delivered",
+        reactions: {},
+        isSystemNotice: true
       };
       setMessages(prev => [...prev, notifMsg]);
     }
-    
+
     setShowWallpaperPicker(false);
   };
 
@@ -981,7 +1042,7 @@ function ChatsPageContent() {
         const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
         // Identify messages to delete (status is 'seen')
         const seenMsgIds = currentMsgs.filter((m: any) => m.status === "seen" && !m.isSystemNotice).map((m: any) => m.id);
-        
+
         if (seenMsgIds.length > 0) {
           const socket = socketService.getSocket();
           if (socket) {
@@ -989,7 +1050,7 @@ function ChatsPageContent() {
               socket.emit("dm:delete", { to: activeThread.username, msgId: id });
             });
           }
-          
+
           const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
           localStorage.setItem(key, JSON.stringify(remaining));
         }
@@ -1049,7 +1110,7 @@ function ChatsPageContent() {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setLocationCoords(coords);
         const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const timestamp = formatToIndianTime();
         const locMsg: ChatMessage = {
           id: msgId, senderId: myUsernameRef.current,
           text: "📍 Shared Live Location",
@@ -1179,11 +1240,11 @@ function ChatsPageContent() {
       const myUsername = localStorage.getItem("nexora_signup_username") || "";
       const myName = localStorage.getItem("nexora_signup_name") || myUsername;
       myUsernameRef.current = myUsername; // 🛡️ Sync Ref for socket handlers
-      setMyProfile({ 
-        name: myName, 
-        username: myUsername, 
-        color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500", 
-        avatarUrl: localStorage.getItem("nexora_signup_avatar") || undefined 
+      setMyProfile({
+        name: myName,
+        username: myUsername,
+        color: localStorage.getItem("nexora_signup_color") || "from-purple-500 to-indigo-500",
+        avatarUrl: localStorage.getItem("nexora_signup_avatar") || undefined
       });
 
       // 1. Derive symmetric key (backward compat)
@@ -1209,7 +1270,7 @@ function ChatsPageContent() {
         }
       };
       registerUser();
-      
+
       const fetchInitialData = async () => {
         try {
           const [notifs, reqs] = await Promise.all([
@@ -1219,7 +1280,7 @@ function ChatsPageContent() {
           if (notifs?.notifications) setNotifications(notifs.notifications);
           if (reqs?.requests) setPendingRequests(reqs.requests);
         } catch (e) {
-          ((..._args: any[]) => {})("Initial activity fetch failed", e);
+          ((..._args: any[]) => { })("Initial activity fetch failed", e);
         }
       };
       fetchInitialData();
@@ -1227,7 +1288,7 @@ function ChatsPageContent() {
       // Re-register on reconnect
       socket.on("connect", () => {
         registerUser();
-        ((..._args: any[]) => {})("[Socket] Reconnected — re-registering identity");
+        ((..._args: any[]) => { })("[Socket] Reconnected — re-registering identity");
       });
 
 
@@ -1239,17 +1300,17 @@ function ChatsPageContent() {
         try {
           let decryptedText = "";
           if (data.fromStory || data.ciphertext === null || data.ciphertext === undefined) {
-              // Plaintext message — broadcast DMs from Nexora_31 or story interactions
-              decryptedText = data.text || "📷 Story Interaction";
+            // Plaintext message — broadcast DMs from Nexora_31 or story interactions
+            decryptedText = data.text || "📷 Story Interaction";
           } else {
-              decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
+            decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
           }
           const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
           const newMsg: ChatMessage = {
             id: data.msgId || data.id || Math.random().toString(),
             senderId: senderUsername,
             text: decryptedText,
-            timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            timestamp: data.timestamp || formatToIndianTime(),
             createdAt: data.createdAt || Date.now(),
             isSelf: isFromSelf,
             status: "delivered",
@@ -1272,7 +1333,7 @@ function ChatsPageContent() {
             // Different conversation — save to that thread's localStorage and increment unread
             let connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
             let senderThread = connections.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
-            
+
             // ── If thread not found (e.g. first Nexora_31 broadcast) → refresh connections ──
             if (!senderThread) {
               await fetchConnections();
@@ -1302,7 +1363,7 @@ function ChatsPageContent() {
               { from: senderUsername }
             );
           }
-        } catch (e) { ((..._args: any[]) => {})("[!] Decryption failed:", e); }
+        } catch (e) { ((..._args: any[]) => { })("[!] Decryption failed:", e); }
       });
 
       // 4b. Handle incoming media DMs
@@ -1313,7 +1374,7 @@ function ChatsPageContent() {
           id: data.msgId || Math.random().toString(),
           senderId: senderUsername,
           text: data.caption || "",
-          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          timestamp: data.timestamp || formatToIndianTime(),
           createdAt: Date.now(),
           isSelf: isFromSelf,
           status: "delivered",
@@ -1377,8 +1438,8 @@ function ChatsPageContent() {
       // 7. Online/offline status
       socket.on("user_status", (data: { userId: string; status: 'online' | 'offline' }) => {
         setLiveOnlineUsers(prev => {
-           if (data.status === 'online') return Array.from(new Set([...prev, data.userId]));
-           return prev.filter(u => u !== data.userId);
+          if (data.status === 'online') return Array.from(new Set([...prev, data.userId]));
+          return prev.filter(u => u !== data.userId);
         });
         setThreads(prev => prev.map(t =>
           t.username === data.userId ? { ...t, online: data.status === 'online' } : t
@@ -1392,7 +1453,7 @@ function ChatsPageContent() {
           localStorage.setItem("nexora_secure_connections", JSON.stringify(updated));
           return updated;
         });
-        
+
         // Update currently active chat if it's the person who changed their DP
         if (activeThreadRef.current?.username === data.from) {
           setActiveThread(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
@@ -1417,7 +1478,7 @@ function ChatsPageContent() {
       socket.on("dm:delete", (data: { from: string; msgId: string }) => {
         // Remove from current UI
         setMessages(prev => prev.filter(m => m.id !== data.msgId));
-        
+
         // Also purge from localStorage for ALL threads (since we don't know which thread it's in by just msgId)
         // Optimization: Usually we only care about the sender's thread
         const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
@@ -1432,44 +1493,44 @@ function ChatsPageContent() {
       });
 
       socket.on("dm:reaction", (data: { from: string; msgId: string; emoji: string }) => {
-          // Update current UI
-          setMessages(prev => prev.map(m => {
-              if (m.id !== data.msgId) return m;
+        // Update current UI
+        setMessages(prev => prev.map(m => {
+          if (m.id !== data.msgId) return m;
+          const reactions = { ...(m.reactions || {}), [data.emoji]: ((m.reactions || {})[data.emoji] || 0) + 1 };
+          return { ...m, reactions };
+        }));
+
+        // Persist if it belongs to a stored thread
+        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        connections.forEach((conn: any) => {
+          const key = `nexora_msgs_${conn.id}`;
+          const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
+          let changed = false;
+          const updated = currentMsgs.map((m: any) => {
+            if (m.id === data.msgId) {
+              changed = true;
               const reactions = { ...(m.reactions || {}), [data.emoji]: ((m.reactions || {})[data.emoji] || 0) + 1 };
               return { ...m, reactions };
-          }));
-          
-          // Persist if it belongs to a stored thread
-          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-          connections.forEach((conn: any) => {
-              const key = `nexora_msgs_${conn.id}`;
-              const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
-              let changed = false;
-              const updated = currentMsgs.map((m: any) => {
-                  if (m.id === data.msgId) {
-                      changed = true;
-                      const reactions = { ...(m.reactions || {}), [data.emoji]: ((m.reactions || {})[data.emoji] || 0) + 1 };
-                      return { ...m, reactions };
-                  }
-                  return m;
-              });
-              if (changed) {
-                  localStorage.setItem(key, JSON.stringify(updated));
-              }
+            }
+            return m;
           });
+          if (changed) {
+            localStorage.setItem(key, JSON.stringify(updated));
+          }
+        });
       });
 
 
       // 9. ECDH public key exchange
       socket.on("dm:clear_chat", (data: { from: string }) => {
-          if (activeThreadRef.current?.username === data.from) {
-              setMessages([]);
-          }
-          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-          const conn = connections.find((c: any) => c.username === data.from);
-          if (conn) {
-              localStorage.setItem(`nexora_msgs_${conn.id}`, "[]");
-          }
+        if (activeThreadRef.current?.username === data.from) {
+          setMessages([]);
+        }
+        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const conn = connections.find((c: any) => c.username === data.from);
+        if (conn) {
+          localStorage.setItem(`nexora_msgs_${conn.id}`, "[]");
+        }
       });
 
       socket.on("key:exchange", async (data: { from: string; publicKey: string }) => {
@@ -1480,12 +1541,12 @@ function ChatsPageContent() {
           await KeyStore.saveSharedSecret(data.from, sharedSecret);
           const myPubKeyB64 = await exportPublicKey(keyPair.publicKey);
           socket.emit("key:exchange", { to: data.from, publicKey: myPubKeyB64 });
-        } catch (e) { ((..._args: any[]) => {})("[!] Key exchange failed:", e); }
+        } catch (e) { ((..._args: any[]) => { })("[!] Key exchange failed:", e); }
       });
 
       // 10. Connection updates
       socket.on("connection_accepted", (data: any) => {
-        ((..._args: any[]) => {})("[Protocol] Connection accepted by:", data.by);
+        ((..._args: any[]) => { })("[Protocol] Connection accepted by:", data.by);
         fetchConnections();
         // Remove from sent (sender side) and from pending (receiver side)
         setSentRequests(prev => prev.filter(req => req !== data.by));
@@ -1507,7 +1568,7 @@ function ChatsPageContent() {
       });
 
       socket.on("connection_request", (data: any) => {
-        ((..._args: any[]) => {})("[Protocol] Incoming request from:", data.from);
+        ((..._args: any[]) => { })("[Protocol] Incoming request from:", data.from);
         // Add real-time incoming request to sidebar
         setPendingRequests(prev => {
           if (prev.find(r => r.from === data.from)) return prev; // de-dup
@@ -1529,7 +1590,7 @@ function ChatsPageContent() {
 
       // 11. Setup Web Push (after socket is ready)
       if (myUsername) {
-        pushService.subscribe(myUsername).catch((..._args: any[]) => {});
+        pushService.subscribe(myUsername).catch((..._args: any[]) => { });
       }
 
       // 12. New feature syncs
@@ -1539,36 +1600,36 @@ function ChatsPageContent() {
         // If we're currently looking at this thread, update state
         if (activeThreadRef.current?.username?.toLowerCase() === data.from?.toLowerCase()) {
           setChatWallpaper(data.wallpaper);
-          
+
           // Show announcement in the chat
           const notifMsg: ChatMessage = {
-            id: Math.random().toString(), 
-            senderId: "system", 
-            text: `${data.from} changed the chat wallpaper`, 
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), 
-            createdAt: Date.now(), 
-            isSelf: false, 
-            status: "delivered", 
-            reactions: {}, 
+            id: Math.random().toString(),
+            senderId: "system",
+            text: `${data.from} changed the chat wallpaper`,
+            timestamp: formatToIndianTime(),
+            createdAt: Date.now(),
+            isSelf: false,
+            status: "delivered",
+            reactions: {},
             isSystemNotice: true
           };
           setMessages(prev => [...prev, notifMsg]);
         } else {
-           // Notify even if not in active thread by updating thread data locally
-           bumpThread(data.from, { wallpaper: data.wallpaper || undefined });
+          // Notify even if not in active thread by updating thread data locally
+          bumpThread(data.from, { wallpaper: data.wallpaper || undefined });
         }
       });
 
       socket.on("dm:disappear_setting", (data: { from: string; timer: string }) => {
         // Enforce the mutual setting by persisting it
         localStorage.setItem(`nexora_disappear_by_username_${data.from}`, data.timer);
-        
+
         if (activeThreadRef.current?.username === data.from) {
           setDisappearTimer(data.timer as any);
           localStorage.setItem(`nexora_disappear_${activeThreadRef.current.id}`, data.timer);
           // Show notification
           const notifMsg: ChatMessage = {
-            id: Math.random().toString(), senderId: "system", text: `${data.from} set disappearing messages to ${data.timer === "off" ? "Off" : data.timer === "1h" ? "1 Hour" : data.timer === "24h" ? "24 Hours" : "After View"}`, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), createdAt: Date.now(), isSelf: false, status: "delivered", reactions: {}, isSystemNotice: true
+            id: Math.random().toString(), senderId: "system", text: `${data.from} set disappearing messages to ${data.timer === "off" ? "Off" : data.timer === "1h" ? "1 Hour" : data.timer === "24h" ? "24 Hours" : "After View"}`, timestamp: formatToIndianTime(), createdAt: Date.now(), isSelf: false, status: "delivered", reactions: {}, isSystemNotice: true
           };
           setMessages(prev => [...prev, notifMsg]);
         }
@@ -1586,7 +1647,7 @@ function ChatsPageContent() {
           id: data.msgId || Math.random().toString(),
           senderId: senderUsername,
           text: "📍 Shared Live Location",
-          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          timestamp: data.timestamp || formatToIndianTime(),
           createdAt: Date.now(),
           isSelf: isFromSelf,
           status: "delivered",
@@ -1633,7 +1694,7 @@ function ChatsPageContent() {
           id: data.msgId || Math.random().toString(),
           senderId: senderUsername,
           text: "",
-          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          timestamp: data.timestamp || formatToIndianTime(),
           createdAt: Date.now(),
           isSelf: isFromSelf,
           status: "delivered",
@@ -1711,7 +1772,7 @@ function ChatsPageContent() {
           id: data.msgId || Math.random().toString(),
           senderId: senderUsername,
           text: "",
-          timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          timestamp: data.timestamp || formatToIndianTime(),
           createdAt: Date.now(),
           isSelf: isFromSelf,
           status: "delivered",
@@ -1787,31 +1848,31 @@ function ChatsPageContent() {
         setMessages(prev => {
           const remaining = prev.filter(m => m.status !== "seen" && !m.isSystemNotice);
           if (activeThreadRef.current?.id) {
-             encryptStorageData(remaining, vaultKey).then(encrypted => {
-               localStorage.setItem(`nexora_msgs_${activeThreadRef.current!.id}`, encrypted);
-             });
+            encryptStorageData(remaining, vaultKey).then(encrypted => {
+              localStorage.setItem(`nexora_msgs_${activeThreadRef.current!.id}`, encrypted);
+            });
           }
           return remaining;
         });
       }
     };
-    
-    const handleBeforeUnload = async () => {
-       if (disappearTimer === "after_view" && activeThreadRef.current?.id && vaultKey && vaultReady) {
-          const stored = localStorage.getItem(`nexora_msgs_${activeThreadRef.current.id}`);
-          if (!stored) return;
-          
-          let currentMsgs: any[] = [];
-          if (stored.startsWith("anc:")) {
-            currentMsgs = await decryptStorageData(stored, vaultKey) || [];
-          } else {
-            currentMsgs = JSON.parse(stored);
-          }
 
-          const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
-          const encrypted = await encryptStorageData(remaining, vaultKey);
-          localStorage.setItem(`nexora_msgs_${activeThreadRef.current.id}`, encrypted);
-       }
+    const handleBeforeUnload = async () => {
+      if (disappearTimer === "after_view" && activeThreadRef.current?.id && vaultKey && vaultReady) {
+        const stored = localStorage.getItem(`nexora_msgs_${activeThreadRef.current.id}`);
+        if (!stored) return;
+
+        let currentMsgs: any[] = [];
+        if (stored.startsWith("anc:")) {
+          currentMsgs = await decryptStorageData(stored, vaultKey) || [];
+        } else {
+          currentMsgs = JSON.parse(stored);
+        }
+
+        const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
+        const encrypted = await encryptStorageData(remaining, vaultKey);
+        localStorage.setItem(`nexora_msgs_${activeThreadRef.current.id}`, encrypted);
+      }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -1849,7 +1910,7 @@ function ChatsPageContent() {
     }
 
     const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timestamp = formatToIndianTime();
 
     const tempMsg: ChatMessage = {
       id: msgId, senderId: myUsernameRef.current, text,
@@ -1889,7 +1950,7 @@ function ChatsPageContent() {
         t.username === activeThread.username ? { ...t, preview: text, lastMessageTime: Date.now() } : t
       ));
     } catch (e) {
-      ((..._args: any[]) => {})("[!] Encryption failed", e);
+      ((..._args: any[]) => { })("[!] Encryption failed", e);
     } finally {
       isSendingRef.current = false; // 🔓 Unlock
     }
@@ -1913,49 +1974,49 @@ function ChatsPageContent() {
     const file = e.target.files?.[0];
     if (!file) return;
     setShowAttachMenu(false);
-    
+
     // Read file via FileReader to serialize over sockets and save locally
     const reader = new FileReader();
     reader.onload = () => {
-        const fileDataUrl = reader.result as string;
-        const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        const isImage = file.type.startsWith("image/");
-        
-        const attachment = { name: file.name, type: file.type, url: fileDataUrl, size: file.size };
-        
-        const currentReplyId = replyTo?.id;
-        setReplyTo(null);
-        
-        const msg: ChatMessage = {
-          id: msgId, senderId: myUsernameRef.current,
-          text: isImage ? "" : `📎 ${file.name}`,
-          timestamp, createdAt: Date.now(),
-          isSelf: true, status: "delivered", reactions: {},
-          attachment,
-          replyTo: currentReplyId,
-        };
-        
-        setMessages(prev => [...prev, msg]);
-        // Bump thread to top
-        if (activeThread) {
-          setThreads(prev => prev.map(t =>
-            t.username === activeThread.username ? { ...t, preview: msg.text, lastMessageTime: Date.now() } : t
-          ));
-        }
+      const fileDataUrl = reader.result as string;
+      const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const timestamp = formatToIndianTime();
+      const isImage = file.type.startsWith("image/");
 
-        // Send over Socket
-        const socket = socketService.getSocket();
-        if (socket && activeThread?.username) {
-            socket.emit("dm:media", {
-                to: activeThread.username,
-                from: myUsernameRef.current,
-                attachment,
-                msgId, timestamp,
-                caption: msg.text,
-                replyTo: currentReplyId
-            });
-        }
+      const attachment = { name: file.name, type: file.type, url: fileDataUrl, size: file.size };
+
+      const currentReplyId = replyTo?.id;
+      setReplyTo(null);
+
+      const msg: ChatMessage = {
+        id: msgId, senderId: myUsernameRef.current,
+        text: isImage ? "" : `📎 ${file.name}`,
+        timestamp, createdAt: Date.now(),
+        isSelf: true, status: "delivered", reactions: {},
+        attachment,
+        replyTo: currentReplyId,
+      };
+
+      setMessages(prev => [...prev, msg]);
+      // Bump thread to top
+      if (activeThread) {
+        setThreads(prev => prev.map(t =>
+          t.username === activeThread.username ? { ...t, preview: msg.text, lastMessageTime: Date.now() } : t
+        ));
+      }
+
+      // Send over Socket
+      const socket = socketService.getSocket();
+      if (socket && activeThread?.username) {
+        socket.emit("dm:media", {
+          to: activeThread.username,
+          from: myUsernameRef.current,
+          attachment,
+          msgId, timestamp,
+          caption: msg.text,
+          replyTo: currentReplyId
+        });
+      }
     };
     reader.readAsDataURL(file);
 
@@ -2005,13 +2066,13 @@ function ChatsPageContent() {
   const sendCapturedPhoto = () => {
     if (!cameraView.capturedUrl) return;
     const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    
+    const timestamp = formatToIndianTime();
+
     const attachment = { name: "capture.jpg", type: "image/jpeg", url: cameraView.capturedUrl };
-    
+
     const currentReplyId = replyTo?.id;
     setReplyTo(null);
-    
+
     const msg: ChatMessage = {
       id: msgId, senderId: myUsernameRef.current,
       text: "📷 View Once Photo",
@@ -2064,20 +2125,20 @@ function ChatsPageContent() {
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: "audio/webm" });
         stream.getTracks().forEach((t) => t.stop());
-        
+
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-            audioContextRef.current.close().catch(((..._args: any[]) => {}));
+          audioContextRef.current.close().catch(((..._args: any[]) => { }));
         }
         if (visualizerInterval.current) clearInterval(visualizerInterval.current);
-        
+
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = () => {
-            const base64data = reader.result;
-            setAudioPreviewUrl(base64data as string);
+          const base64data = reader.result;
+          setAudioPreviewUrl(base64data as string);
         }
       };
-      
+
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const analyser = audioCtx.createAnalyser();
       const source = audioCtx.createMediaStreamSource(stream);
@@ -2086,12 +2147,12 @@ function ChatsPageContent() {
       analyserRef.current = analyser;
       audioContextRef.current = audioCtx;
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      
+
       visualizerInterval.current = setInterval(() => {
         if (analyserRef.current && !isRecordingPausedRef.current) {
           analyserRef.current.getByteFrequencyData(dataArray);
           const newH = [];
-          for(let i=0; i<15; i++) newH.push(Math.max(4, (dataArray[i+2] || 0) / 4));
+          for (let i = 0; i < 15; i++) newH.push(Math.max(4, (dataArray[i + 2] || 0) / 4));
           setVisualizerData(newH);
         }
       }, 50);
@@ -2131,18 +2192,18 @@ function ChatsPageContent() {
     if (recordingInterval.current) clearInterval(recordingInterval.current);
     if (visualizerInterval.current) clearInterval(visualizerInterval.current);
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close().catch(((..._args: any[]) => {}));
+      audioContextRef.current.close().catch(((..._args: any[]) => { }));
     }
   };
 
   const sendAudioPreview = () => {
     if (!audioPreviewUrl) return;
     const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timestamp = formatToIndianTime();
     const attachment = { name: "voice.webm", type: "audio/webm", url: audioPreviewUrl };
     const currentReplyId = replyTo?.id;
     setReplyTo(null);
-    
+
     const msg: ChatMessage = {
       id: msgId, senderId: myUsernameRef.current,
       text: `🎙 Voice Message (${recordingTime}s)`,
@@ -2157,7 +2218,7 @@ function ChatsPageContent() {
     if (activeThread) {
       bumpThread(activeThread.username, { preview: "🎙 Voice Message" });
     }
-    
+
     const socket = socketService.getSocket();
     if (socket && activeThread?.username) {
       socket.emit("dm:media", {
@@ -2187,49 +2248,49 @@ function ChatsPageContent() {
       return { ...m, reactions };
     }));
     setReactionPickerFor(null);
-    
+
     // Emit to other user
     const socket = socketService.getSocket();
     if (socket && activeThread?.username) {
-        socket.emit("dm:reaction", { to: activeThread.username, msgId, emoji });
+      socket.emit("dm:reaction", { to: activeThread.username, msgId, emoji });
     }
-    
+
     // Persist locally
     if (activeThread && vaultKey && vaultReady) {
-        const key = `nexora_msgs_${activeThread.id}`;
-        const stored = localStorage.getItem(key);
-        (async () => {
-          let currentMsgs: any[] = [];
-          if (stored?.startsWith("anc:")) {
-            currentMsgs = await decryptStorageData(stored, vaultKey) || [];
-          } else if (stored) {
-            currentMsgs = JSON.parse(stored);
-          }
+      const key = `nexora_msgs_${activeThread.id}`;
+      const stored = localStorage.getItem(key);
+      (async () => {
+        let currentMsgs: any[] = [];
+        if (stored?.startsWith("anc:")) {
+          currentMsgs = await decryptStorageData(stored, vaultKey) || [];
+        } else if (stored) {
+          currentMsgs = JSON.parse(stored);
+        }
 
-          const updated = currentMsgs.map((m: any) => {
-              if (m.id === msgId) {
-                  const reactions = { ...(m.reactions || {}), [emoji]: ((m.reactions || {})[emoji] || 0) + 1 };
-                  return { ...m, reactions };
-              }
-              return m;
-          });
-          const encrypted = await encryptStorageData(updated, vaultKey);
-          localStorage.setItem(key, encrypted);
-        })();
+        const updated = currentMsgs.map((m: any) => {
+          if (m.id === msgId) {
+            const reactions = { ...(m.reactions || {}), [emoji]: ((m.reactions || {})[emoji] || 0) + 1 };
+            return { ...m, reactions };
+          }
+          return m;
+        });
+        const encrypted = await encryptStorageData(updated, vaultKey);
+        localStorage.setItem(key, encrypted);
+      })();
     }
   };
 
   const deleteMsg = async (msgId: string) => {
     setMessages(prev => {
-        const nextMsgs = prev.filter(m => m.id !== msgId);
-        // Persist to local storage immediately
-        if (activeThread && vaultKey && vaultReady) {
-          const key = `nexora_msgs_${activeThread.id}`;
-          encryptStorageData(nextMsgs, vaultKey).then(encrypted => {
-            localStorage.setItem(key, encrypted);
-          });
-        }
-        return nextMsgs;
+      const nextMsgs = prev.filter(m => m.id !== msgId);
+      // Persist to local storage immediately
+      if (activeThread && vaultKey && vaultReady) {
+        const key = `nexora_msgs_${activeThread.id}`;
+        encryptStorageData(nextMsgs, vaultKey).then(encrypted => {
+          localStorage.setItem(key, encrypted);
+        });
+      }
+      return nextMsgs;
     });
     setMsgMenu(null);
     const socket = socketService.getSocket();
@@ -2242,13 +2303,13 @@ function ChatsPageContent() {
     if (!confirm("Are you sure you want to clear this entire chat for everyone? This action cannot be undone.")) return;
     setMessages([]);
     if (activeThread && vaultKey && vaultReady) {
-        const key = `nexora_msgs_${activeThread.id}`;
-        const encrypted = await encryptStorageData([], vaultKey);
-        localStorage.setItem(key, encrypted);
-        const socket = socketService.getSocket();
-        if (socket && activeThread.username) {
-            socket.emit("dm:clear_chat", { to: activeThread.username });
-        }
+      const key = `nexora_msgs_${activeThread.id}`;
+      const encrypted = await encryptStorageData([], vaultKey);
+      localStorage.setItem(key, encrypted);
+      const socket = socketService.getSocket();
+      if (socket && activeThread.username) {
+        socket.emit("dm:clear_chat", { to: activeThread.username });
+      }
     }
     setShowChatMenu(false);
   };
@@ -2286,7 +2347,7 @@ function ChatsPageContent() {
     const validOptions = pollOptions.filter(o => o.trim());
     if (!pollQuestion.trim() || validOptions.length < 2) return;
     const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timestamp = formatToIndianTime();
     const pollData = {
       question: pollQuestion.trim(),
       options: validOptions.map((o, i) => ({ id: `opt_${i}`, text: o.trim(), votes: 0 })),
@@ -2374,7 +2435,7 @@ function ChatsPageContent() {
   // ─── CONTACT SHARING ───
   const handleShareContact = (contact: any) => {
     const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const timestamp = formatToIndianTime();
     const contactData = { name: contact.name, phone: contact.phone, email: contact.email, color: contact.color };
     const contactMsg: ChatMessage = {
       id: msgId,
@@ -2414,7 +2475,7 @@ function ChatsPageContent() {
       id: Math.random().toString(),
       senderId: myProfile.username,
       text: "",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: formatToIndianTime(),
       createdAt: Date.now(),
       isSelf: true, status: "delivered", reactions: {},
       connectRequest: { to: phone, via, status: "sent" },
@@ -2519,7 +2580,7 @@ function ChatsPageContent() {
         setSentRequests(prev => prev.filter(un => un !== user.username));
       }
     } catch (e) {
-      ((..._args: any[]) => {})("Request failed:", e);
+      ((..._args: any[]) => { })("Request failed:", e);
       setSentRequests(prev => prev.filter(un => (user?.username ? un !== user.username : true)));
     }
   }
@@ -2583,90 +2644,90 @@ function ChatsPageContent() {
           {/* Incoming Requests UI (Instagram Style) */}
           {pendingRequests.length > 0 && (
             <div className="mb-4">
-               <motion.button 
-                 whileTap={{scale:0.98}}
-                 onClick={() => setShowRequestsSlider(!showRequestsSlider)}
-                 className="w-full flex items-center justify-between p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-               >
-                 <div className="flex items-center gap-3">
-                   <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 relative">
-                     <UserPlus className="w-5 h-5" />
-                     <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[var(--bg-surface)]">
-                       {pendingRequests.length}
-                     </span>
-                   </div>
-                   <div className="text-left">
-                     <p className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-primary)" }}>Connection Requests</p>
-                     <p className="text-[10px] font-bold opacity-50" style={{ color: "var(--text-muted)" }}>{pendingRequests.length} nodes pending</p>
-                   </div>
-                 </div>
-                 <ChevronRight className={`w-4 h-4 transition-transform ${showRequestsSlider ? 'rotate-90' : ''}`} />
-               </motion.button>
-               
-               <AnimatePresence>
-                 {showRequestsSlider && (
-                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-2 space-y-2">
-                     {pendingRequests.map((req) => (
-                       <div key={req.id} className="p-3 rounded-xl border flex items-center justify-between gap-3" style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)" }}>
-                         <div className="flex items-center gap-2 min-w-0">
-                           <div className={`h-8 w-8 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-xs uppercase shadow-sm overflow-hidden`}>
-                             {req.avatarUrl ? <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" /> : (req.fromName?.[0] || "?").toUpperCase()}
-                           </div>
-                           <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
-                         </div>
-                         <div className="flex items-center gap-1.5 shrink-0">
-                           <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="p-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20"><X className="w-3.5 h-3.5" /></button>
-                           <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="p-1.5 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20"><Check className="w-3.5 h-3.5" /></button>
-                         </div>
-                       </div>
-                     ))}
-                   </motion.div>
-                 )}
-               </AnimatePresence>
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowRequestsSlider(!showRequestsSlider)}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 relative">
+                    <UserPlus className="w-5 h-5" />
+                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[var(--bg-surface)]">
+                      {pendingRequests.length}
+                    </span>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--text-primary)" }}>Connection Requests</p>
+                    <p className="text-[10px] font-bold opacity-50" style={{ color: "var(--text-muted)" }}>{pendingRequests.length} nodes pending</p>
+                  </div>
+                </div>
+                <ChevronRight className={`w-4 h-4 transition-transform ${showRequestsSlider ? 'rotate-90' : ''}`} />
+              </motion.button>
+
+              <AnimatePresence>
+                {showRequestsSlider && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-2 space-y-2">
+                    {pendingRequests.map((req) => (
+                      <div key={req.id} className="p-3 rounded-xl border flex items-center justify-between gap-3" style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)" }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`h-8 w-8 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-xs uppercase shadow-sm overflow-hidden`}>
+                            {req.avatarUrl ? <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" /> : (req.fromName?.[0] || "?").toUpperCase()}
+                          </div>
+                          <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="p-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20"><X className="w-3.5 h-3.5" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="p-1.5 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20"><Check className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
           {/* Activity/Notifications Tray */}
           {showNotifications && (
             <div className="mb-4">
-               {notifications.length > 0 && (
+              {notifications.length > 0 && (
                 <div className="flex items-center justify-between px-2 mb-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-500 opacity-60">Activity Stream</span>
-                  <button 
+                  <button
                     onClick={async () => {
                       const user = localStorage.getItem("nexora_signup_username");
                       if (user) await nexoraFetch(`/api/notifications/clear?username=${user}`, { method: 'POST' });
                       setNotifications([]);
-                    }} 
+                    }}
                     className="px-2 py-1 rounded-lg text-[9px] font-black text-purple-500 bg-purple-500/5 hover:bg-purple-500/10 transition-all uppercase tracking-widest"
                   >
                     Clear All
                   </button>
                 </div>
-               )}
-               
-               <AnimatePresence>
-                 <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} exit={{opacity:0, height:0}} className="space-y-1.5 px-1">
-                   {notifications.length === 0 ? (
-                     <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 text-center transition-all">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Quiet Protocol</p>
-                     </div>
-                   ) : (
-                     notifications.map(notif => (
-                      <motion.div 
-                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                         key={notif.id} 
-                         className="group flex flex-col gap-1.5 p-2.5 rounded-xl border relative transition-all" 
-                         style={{borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)"}}
+              )}
+
+              <AnimatePresence>
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-1.5 px-1">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 text-center transition-all">
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Quiet Protocol</p>
+                    </div>
+                  ) : (
+                    notifications.map(notif => (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        key={notif.id}
+                        className="group flex flex-col gap-1.5 p-2.5 rounded-xl border relative transition-all"
+                        style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)" }}
                       >
                         <div className="flex items-start gap-2.5" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
-                           <div className="mt-1">
-                              {notif.type === 'request_accepted' ? <UserCheck className="w-3.5 h-3.5 text-blue-400" /> : <Bell className="w-3.5 h-3.5 text-purple-500" />}
-                           </div>
-                           <div className="flex-1 min-w-0 pr-6 cursor-pointer">
-                              <p className="text-[11px] leading-tight font-medium" style={{ color: "var(--text-primary)" }}>{notif.message}</p>
-                              <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase">{notif.time}</p>
-                           </div>
+                          <div className="mt-1">
+                            {notif.type === 'request_accepted' ? <UserCheck className="w-3.5 h-3.5 text-blue-400" /> : <Bell className="w-3.5 h-3.5 text-purple-500" />}
+                          </div>
+                          <div className="flex-1 min-w-0 pr-6 cursor-pointer">
+                            <p className="text-[11px] leading-tight font-medium" style={{ color: "var(--text-primary)" }}>{notif.message}</p>
+                            <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase">{notif.time}</p>
+                          </div>
                         </div>
                         <button className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all"
                           onClick={() => {
@@ -2674,27 +2735,27 @@ function ChatsPageContent() {
                             nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
                           }}><X className="w-3 h-3" /></button>
                       </motion.div>
-                     ))
-                   )}
-                 </motion.div>
-               </AnimatePresence>
+                    ))
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
           )}
 
           {/* Online Users Horizontal Scroll */}
           <div className="flex gap-3 overflow-x-auto pb-4 pt-1 px-1 mb-2 no-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={() => { router.push('/dashboard/stories?user=me'); }}
-                className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
-                <div className="relative">
+              onClick={() => { router.push('/dashboard/stories?user=me'); }}
+              className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+              <div className="relative">
                 <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
-                     style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                    {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
+                  style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
+                  {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
                 </div>
                 <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center cursor-pointer"
-                    style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}
-                    onClick={(e) => { e.stopPropagation(); router.push('/dashboard/stories?action=camera'); }}>
-                    <Plus className="w-3 h-3 text-white font-bold" />
+                  style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}
+                  onClick={(e) => { e.stopPropagation(); router.push('/dashboard/stories?action=camera'); }}>
+                  <Plus className="w-3 h-3 text-white font-bold" />
                 </div>
                 {myStories.length > 0 && (
                   <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-bold text-white bg-black/80 backdrop-blur-md shadow-lg z-20 border border-white/10 whitespace-nowrap">
@@ -2703,40 +2764,40 @@ function ChatsPageContent() {
                     <Heart className="w-2.5 h-2.5 text-[#ff006e]" fill="#ff006e" /> {myStories.reduce((acc, s) => acc + (s.likes_count || 0), 0)}
                   </div>
                 )}
-                </div>
-                <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>Your Story</span>
+              </div>
+              <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>Your Story</span>
             </motion.div>
             {threads.filter(t => friendsWithStories.includes(t.username) || t.online || liveOnlineUsers.includes(t.username))
               .filter(t => !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id))
               .sort((a, b) => {
-                 const aHas = friendsWithStories.includes(a.username) ? 1 : 0;
-                 const bHas = friendsWithStories.includes(b.username) ? 1 : 0;
-                 return bHas - aHas;
+                const aHas = friendsWithStories.includes(a.username) ? 1 : 0;
+                const bHas = friendsWithStories.includes(b.username) ? 1 : 0;
+                return bHas - aHas;
               })
               .map((user) => {
-              const L = lockedChatsMap[user.id] && !unlockedSessionThreads.includes(user.id);
-              if (L) return null;
-              const isUserOnline = user.online || liveOnlineUsers.includes(user.username);
-              const hasStory = friendsWithStories.includes(user.username);
-              
-              return (
-                <motion.div key={user.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
-                  className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
-                  <div className="relative">
-                    <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
-                         style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                      {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[user.username]?.[0] || user.name?.[0] || user.username?.[0] || "?").toUpperCase()}
+                const L = lockedChatsMap[user.id] && !unlockedSessionThreads.includes(user.id);
+                if (L) return null;
+                const isUserOnline = user.online || liveOnlineUsers.includes(user.username);
+                const hasStory = friendsWithStories.includes(user.username);
+
+                return (
+                  <motion.div key={user.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
+                    className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                    <div className="relative">
+                      <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
+                        style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
+                        {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[user.username]?.[0] || user.name?.[0] || user.username?.[0] || "?").toUpperCase()}
+                      </div>
+                      {isUserOnline && !hasStory && (
+                        <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
+                          style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
+                      )}
                     </div>
-                    {isUserOnline && !hasStory && (
-                      <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
-                        style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
-                    )}
-                  </div>
-                  <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>{(nicknames[user.username] || user.name || user.username || "").split(" ")[0]}</span>
-                </motion.div>
-              );
-            })}
+                    <span className="text-[10px] font-bold truncate w-14 text-center" style={{ color: "var(--text-secondary)" }}>{(nicknames[user.username] || user.name || user.username || "").split(" ")[0]}</span>
+                  </motion.div>
+                );
+              })}
           </div>
           <div className="h-px w-full mb-3" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} />
 
@@ -2784,16 +2845,16 @@ function ChatsPageContent() {
                       onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
                       {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[thread.username]?.[0] || thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
                     </div>
-                      {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
-                        <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
-                          style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
-                      )}
-                      {mutedThreads.includes(thread.id) && (
-                        <div className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20">
-                          <BellOff className="w-2.5 h-2.5 text-orange-400" />
-                        </div>
-                      )}
-                    </div>
+                    {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
+                      <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
+                        style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
+                    )}
+                    {mutedThreads.includes(thread.id) && (
+                      <div className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20">
+                        <BellOff className="w-2.5 h-2.5 text-orange-400" />
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -2819,32 +2880,32 @@ function ChatsPageContent() {
 
         {/* ═══ SELF PROFILE FOOTER ═══ */}
         <div className="mt-auto p-4 md:pb-4 pb-24 border-t shrink-0 backdrop-blur-md" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", background: isDark ? "rgba(18,18,28,0.4)" : "rgba(255,255,255,0.5)" }}>
-           <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <div className="relative">
-                    <div className={`h-10 w-10 rounded-full ${myProfile.color?.includes('from-') ? 'bg-gradient-to-tr ' + myProfile.color : "bg-gradient-to-tr from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/10 uppercase overflow-hidden`}>
-                       {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
-                    </div>
-                    <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573] z-10 animate-pulse" 
-                         style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
-                 </div>
-                 <div className="min-w-0">
-                    <p className="font-extrabold text-[13px] truncate" style={{ color: "var(--text-primary)" }}>{myProfile.name}</p>
-                    <p className="text-[10px] font-bold opacity-50 truncate" style={{ color: "var(--text-muted)" }}>@{myProfile.username}</p>
-                 </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className={`h-10 w-10 rounded-full ${myProfile.color?.includes('from-') ? 'bg-gradient-to-tr ' + myProfile.color : "bg-gradient-to-tr from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/10 uppercase overflow-hidden`}>
+                  {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
+                </div>
+                <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573] z-10 animate-pulse"
+                  style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
               </div>
-              <button 
-                onClick={() => {
-                  if(confirm("Logout from current session?")) {
-                    localStorage.clear();
-                    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
-                    router.push("/auth");
-                  }
-                }}
-                className="w-8 h-8 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">
-                 <Lock className="w-4 h-4" />
-              </button>
-           </div>
+              <div className="min-w-0">
+                <p className="font-extrabold text-[13px] truncate" style={{ color: "var(--text-primary)" }}>{myProfile.name}</p>
+                <p className="text-[10px] font-bold opacity-50 truncate" style={{ color: "var(--text-muted)" }}>@{myProfile.username}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (confirm("Logout from current session?")) {
+                  localStorage.clear();
+                  document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
+                  router.push("/auth");
+                }
+              }}
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">
+              <Lock className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -2870,7 +2931,7 @@ function ChatsPageContent() {
                   </motion.button>
                   <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
                     <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm md:text-base shadow-xl border border-white/10 cursor-pointer shrink-0 transition-transform active:scale-90 uppercase overflow-hidden`}
-                         onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}>
+                      onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}>
                       {activeThread.avatarUrl ? <img src={activeThread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[activeThread.username]?.[0] || activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
                     </div>
                     {activeThread.online || liveOnlineUsers.includes(activeThread.username) ? (
@@ -2958,27 +3019,27 @@ function ChatsPageContent() {
                           { label: "🕐 24 Hours", value: "24h" as const },
                           { label: "🔕 Off", value: "off" as const },
                         ]).map(opt => (
-                            <button key={opt.value}
-                              onClick={() => {
-                                setDisappearTimer(opt.value as any);
-                                if (activeThread) {
-                                  localStorage.setItem(`nexora_disappear_${activeThread.id}`, opt.value);
-                                  localStorage.setItem(`nexora_disappear_by_username_${activeThread.username}`, opt.value);
-                                }
-                                socketService.getSocket()?.emit("dm:disappear_setting", { to: activeThread?.username, timer: opt.value });
-                                const notifMsg: ChatMessage = {
-                                  id: Math.random().toString(), senderId: "system", text: `You set disappearing messages to ${opt.value === "off" ? "Off" : opt.value === "1h" ? "1 Hour" : opt.value === "24h" ? "24 Hours" : "After View"}`, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), createdAt: Date.now(), isSelf: true, status: "delivered", reactions: {}, isSystemNotice: true
-                                };
-                                setMessages(prev => [...prev, notifMsg]);
-                                setShowDisappearSubmenu(false);
-                                setShowChatMenu(false);
-                              }}
-                              className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-left"
-                              style={{ color: disappearTimer === opt.value ? "#fb923c" : "var(--text-primary)" }}
-                            >
-                              {opt.label}
-                              {disappearTimer === opt.value && <Check className="w-3 h-3 ml-auto text-orange-400" />}
-                            </button>
+                          <button key={opt.value}
+                            onClick={() => {
+                              setDisappearTimer(opt.value as any);
+                              if (activeThread) {
+                                localStorage.setItem(`nexora_disappear_${activeThread.id}`, opt.value);
+                                localStorage.setItem(`nexora_disappear_by_username_${activeThread.username}`, opt.value);
+                              }
+                              socketService.getSocket()?.emit("dm:disappear_setting", { to: activeThread?.username, timer: opt.value });
+                              const notifMsg: ChatMessage = {
+                                id: Math.random().toString(), senderId: "system", text: `You set disappearing messages to ${opt.value === "off" ? "Off" : opt.value === "1h" ? "1 Hour" : opt.value === "24h" ? "24 Hours" : "After View"}`, timestamp: formatToIndianTime(), createdAt: Date.now(), isSelf: true, status: "delivered", reactions: {}, isSystemNotice: true
+                              };
+                              setMessages(prev => [...prev, notifMsg]);
+                              setShowDisappearSubmenu(false);
+                              setShowChatMenu(false);
+                            }}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-left"
+                            style={{ color: disappearTimer === opt.value ? "#fb923c" : "var(--text-primary)" }}
+                          >
+                            {opt.label}
+                            {disappearTimer === opt.value && <Check className="w-3 h-3 ml-auto text-orange-400" />}
+                          </button>
                         ))}
                       </motion.div>
                     )}
@@ -3071,8 +3132,8 @@ function ChatsPageContent() {
                         onTouchStart={() => {
                           longPressTimerRef.current = setTimeout(() => setMsgMenu(m.id), 600);
                         }}
-                        onTouchEnd={() => { if(longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
-                        onTouchMove={() => { if(longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
+                        onTouchEnd={() => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
+                        onTouchMove={() => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
                         className={`p-4 rounded-[1.5rem] text-sm relative z-20 shadow-sm ${m.isSelf
                           ? "bg-gradient-to-br from-[#6c5ce7] to-[#8275f0] text-white rounded-tr-none neon-glow"
                           : "glass-panel rounded-tl-none"
@@ -3085,8 +3146,8 @@ function ChatsPageContent() {
                         {/* REPLY CONTEXT */}
                         {m.replyTo && (
                           <div className={`mb-2 p-2.5 rounded-xl border-l-[3px] text-[11px] font-bold leading-tight flex flex-col gap-0.5 ${m.isSelf ? 'bg-white/10 border-white/30 text-white/90' : 'bg-black/5 border-[#6c5ce7]/40 text-[var(--text-secondary)]'}`}>
-                             <span className="text-[9px] uppercase tracking-widest opacity-60">Replying to msg</span>
-                             <p className="truncate italic">"{messages.find(msg => msg.id === m.replyTo)?.text || "Media Attachment"}"</p>
+                            <span className="text-[9px] uppercase tracking-widest opacity-60">Replying to msg</span>
+                            <p className="truncate italic">"{messages.find(msg => msg.id === m.replyTo)?.text || "Media Attachment"}"</p>
                           </div>
                         )}
 
@@ -3148,13 +3209,13 @@ function ChatsPageContent() {
                                     <EyeOff className="w-4 h-4 mr-2" /> Photo Viewed
                                   </div>
                                 ) : (
-                                  <div 
+                                  <div
                                     className="relative max-w-full h-[150px] bg-black/20 overflow-hidden flex items-center justify-center group/vo"
                                     onClick={() => {
                                       // Tell other user it was viewed
                                       const socket = socketService.getSocket();
                                       if (socket && activeThread?.username && !m.isSelf) {
-                                          socket.emit("dm:view_once_ack", { to: activeThread.username, msgId: m.id });
+                                        socket.emit("dm:view_once_ack", { to: activeThread.username, msgId: m.id });
                                       }
                                       setImageViewer({ url: m.attachment!.url, name: m.attachment!.name });
                                       // Remove attachment from state entirely after view
@@ -3184,11 +3245,11 @@ function ChatsPageContent() {
                             </div>
                             <div className="flex-1 min-w-0 pr-2">
                               {/* Native audio player with tailored filters to look in-line */}
-                              <audio 
-                                src={m.attachment!.url} 
-                                controls 
+                              <audio
+                                src={m.attachment!.url}
+                                controls
                                 controlsList="nodownload"
-                                className={`w-full h-8 opacity-90 target-audio-player`} 
+                                className={`w-full h-8 opacity-90 target-audio-player`}
                                 style={{
                                   filter: m.isSelf ? 'invert(1) grayscale(1) contrast(1.5)' : 'contrast(1.2) saturate(1.5) hue-rotate(-20deg) brightness(1.2)'
                                 }}
@@ -3246,11 +3307,11 @@ function ChatsPageContent() {
                 );
               })
             )}
-            
+
             {/* ─── IN-CHAT REAL-TIME TYPING INDICATOR ─── */}
             <AnimatePresence>
               {peerTyping[activeThread.username] && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.9 }}
@@ -3258,13 +3319,13 @@ function ChatsPageContent() {
                 >
                   <div className="flex flex-col gap-1 items-start max-w-[85%]">
                     <div className="flex items-center gap-2 mb-1 pl-2">
-                       <span className="text-[10px] uppercase font-black tracking-widest text-[#2ed573] flex items-center gap-1.5 drop-shadow-sm">
-                         <div className="w-1.5 h-1.5 rounded-full bg-[#2ed573] animate-pulse" />
-                         {nicknames[activeThread.username] || activeThread.name || activeThread.username} is typing
-                       </span>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-[#2ed573] flex items-center gap-1.5 drop-shadow-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#2ed573] animate-pulse" />
+                        {nicknames[activeThread.username] || activeThread.name || activeThread.username} is typing
+                      </span>
                     </div>
                     <div className="p-5 py-4 rounded-[2rem] rounded-bl-none shadow-lg border flex items-center gap-2"
-                         style={{ background: isDark ? "rgba(26,26,46,0.8)" : "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)", borderColor: "var(--border-subtle)" }}>
+                      style={{ background: isDark ? "rgba(26,26,46,0.8)" : "rgba(255,255,255,0.9)", backdropFilter: "blur(12px)", borderColor: "var(--border-subtle)" }}>
                       <span className="w-[5px] h-[5px] rounded-full bg-[#6c5ce7] animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-[5px] h-[5px] rounded-full bg-[#00d4ff] animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-[5px] h-[5px] rounded-full bg-[#6c5ce7] animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -3284,7 +3345,7 @@ function ChatsPageContent() {
             {/* REPLY PREVIEW */}
             <AnimatePresence>
               {replyTo && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }}
                   className="mb-3 p-3 rounded-[1.5rem] bg-black/5 dark:bg-white/5 border border-dashed border-[#6c5ce7]/30 flex items-center justify-between gap-4"
                 >
@@ -3528,7 +3589,7 @@ function ChatsPageContent() {
             </div>
             <h1 className="text-5xl font-black mb-4 tracking-tighter" style={{ background: "linear-gradient(to right, #6c5ce7, #00d4ff)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Welcome to Nexora</h1>
             <p className="text-base max-w-md mb-8 leading-relaxed font-medium" style={{ color: "var(--text-muted)" }}>
-              The deeply encrypted, privacy-first communication protocol. 
+              The deeply encrypted, privacy-first communication protocol.
               Select a conversation from the sidebar to establish a secure tunnel.
             </p>
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
@@ -3545,20 +3606,20 @@ function ChatsPageContent() {
       <AnimatePresence>
         {showGlobalSearch && (
           <motion.div
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[300] flex flex-col sm:items-center sm:justify-start"
-            style={{ 
-              background: isDark ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.7)", 
+            style={{
+              background: isDark ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.7)",
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)"
             }}
             onClick={() => setShowGlobalSearch(false)}
           >
             <motion.div
-              initial={{ y: "100%", opacity: 0 }} 
-              animate={{ y: 0, opacity: 1 }} 
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ type: "spring", damping: 32, stiffness: 350, mass: 0.8 }}
               className="w-full h-full sm:h-auto sm:max-h-[85vh] sm:max-w-xl sm:mx-auto sm:mt-16 sm:rounded-[2.5rem] overflow-hidden shadow-[0_32px_120px_rgba(0,0,0,0.5)] relative flex flex-col"
@@ -3570,8 +3631,8 @@ function ChatsPageContent() {
               onClick={e => e.stopPropagation()}
             >
               {/* Search Header */}
-              <div className="flex items-center gap-3 px-4 py-5 sm:px-6 border-b sticky top-0 z-20 backdrop-blur-3xl" 
-                   style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", background: isDark ? "rgba(18, 18, 30, 0.5)" : "rgba(255, 255, 255, 0.5)" }}>
+              <div className="flex items-center gap-3 px-4 py-5 sm:px-6 border-b sticky top-0 z-20 backdrop-blur-3xl"
+                style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", background: isDark ? "rgba(18, 18, 30, 0.5)" : "rgba(255, 255, 255, 0.5)" }}>
                 <button onClick={() => setShowGlobalSearch(false)} className="sm:hidden p-2 -ml-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
                   <ArrowLeft className="w-6 h-6" />
                 </button>
@@ -3602,9 +3663,9 @@ function ChatsPageContent() {
                 {globalSearchLoading ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-6">
                     <div className="relative">
-                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                         className="w-12 h-12 border-4 border-[#6c5ce7]/10 border-t-[#6c5ce7] rounded-full" />
-                       <div className="absolute inset-0 blur-xl bg-[#6c5ce7]/20 animate-pulse rounded-full" />
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        className="w-12 h-12 border-4 border-[#6c5ce7]/10 border-t-[#6c5ce7] rounded-full" />
+                      <div className="absolute inset-0 blur-xl bg-[#6c5ce7]/20 animate-pulse rounded-full" />
                     </div>
                     <div className="flex flex-col items-center gap-1">
                       <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: "#6c5ce7" }}>Syncing Protocol</span>
@@ -3614,25 +3675,25 @@ function ChatsPageContent() {
                 ) : globalSearchQuery.length < 2 ? (
                   <div className="flex flex-col items-center justify-center py-20 px-8 gap-8">
                     <div className="relative">
-                       <div className="w-24 h-24 rounded-[2.5rem] flex items-center justify-center rotate-12 shadow-[0_20px_50px_rgba(108,92,231,0.3)] relative z-10 overflow-hidden" 
-                            style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}>
-                         <UserPlus className="w-10 h-10 text-white" />
-                         <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
-                       </div>
-                       <div className="absolute -inset-6 bg-purple-500/20 blur-3xl rounded-full animate-pulse" />
-                       <div className="absolute top-0 right-0 w-8 h-8 rounded-full bg-[#00d4ff] blur-xl opacity-50 animate-bounce" />
+                      <div className="w-24 h-24 rounded-[2.5rem] flex items-center justify-center rotate-12 shadow-[0_20px_50px_rgba(108,92,231,0.3)] relative z-10 overflow-hidden"
+                        style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}>
+                        <UserPlus className="w-10 h-10 text-white" />
+                        <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
+                      </div>
+                      <div className="absolute -inset-6 bg-purple-500/20 blur-3xl rounded-full animate-pulse" />
+                      <div className="absolute top-0 right-0 w-8 h-8 rounded-full bg-[#00d4ff] blur-xl opacity-50 animate-bounce" />
                     </div>
                     <div className="text-center max-w-xs">
-                       <h2 className="text-2xl font-black tracking-tight mb-3" style={{ color: "var(--text-primary)" }}>Connect Globally</h2>
-                       <p className="text-sm font-bold leading-relaxed opacity-50" style={{ color: "var(--text-muted)" }}>
-                         Enter a handle or name to discover users on the Nexora network. All connections are secured via AES-256 protocol.
-                       </p>
+                      <h2 className="text-2xl font-black tracking-tight mb-3" style={{ color: "var(--text-primary)" }}>Connect Globally</h2>
+                      <p className="text-sm font-bold leading-relaxed opacity-50" style={{ color: "var(--text-muted)" }}>
+                        Enter a handle or name to discover users on the Nexora network. All connections are secured via AES-256 protocol.
+                      </p>
                     </div>
                   </div>
                 ) : globalSearchResults.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-24 px-10 gap-4 opacity-60">
                     <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-2">
-                       <ShieldOff className="w-8 h-8 text-[var(--text-muted)]" />
+                      <ShieldOff className="w-8 h-8 text-[var(--text-muted)]" />
                     </div>
                     <div className="text-center">
                       <p className="text-lg font-black tracking-tight" style={{ color: "var(--text-primary)" }}>No Nodes Active</p>
@@ -3649,8 +3710,8 @@ function ChatsPageContent() {
                       const alreadyConnected = threads.some((t: any) => t.username === user.username);
                       return (
                         <motion.div key={user.username}
-                          initial={{ opacity: 0, x: -10 }} 
-                          animate={{ opacity: 1, x: 0 }} 
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: idx * 0.04, ease: "easeOut" }}
                           onClick={() => setSelectedProfileUser(user)}
                           className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98]"
@@ -3664,12 +3725,12 @@ function ChatsPageContent() {
                               )}
                             </div>
                             <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--bg-surface)] flex items-center justify-center shadow-lg border-[3px] border-[var(--bg-surface)]">
-                               <div className="w-full h-full flex items-center justify-center">
-                                  <div className="w-3.5 h-3.5 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573]" />
-                               </div>
+                              <div className="w-full h-full flex items-center justify-center">
+                                <div className="w-3.5 h-3.5 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573]" />
+                              </div>
                             </div>
                           </div>
-                          
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                               <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
@@ -3690,8 +3751,8 @@ function ChatsPageContent() {
                                 <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
                               </div>
                             ) : (
-                              <motion.button 
-                                whileHover={{ scale: 1.05, y: -2 }} 
+                              <motion.button
+                                whileHover={{ scale: 1.05, y: -2 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
                                 className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
@@ -3824,7 +3885,7 @@ function ChatsPageContent() {
 
             {/* Bottom controls */}
             <div className="absolute bottom-0 left-0 right-0 z-20 pb-10 pt-6 px-8 bg-gradient-to-t from-black/80 to-transparent flex flex-col items-center gap-6">
-              
+
 
 
               <div className="flex items-center justify-center gap-8 w-full">
@@ -3934,7 +3995,7 @@ function ChatsPageContent() {
       <AnimatePresence>
         {deleteConfirmId && (
           <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur" onClick={() => setDeleteConfirmId(null)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-[320px] p-6 rounded-[2rem] shadow-2xl relative text-center border overflow-hidden" 
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-[320px] p-6 rounded-[2rem] shadow-2xl relative text-center border overflow-hidden"
               style={{ background: isDark ? "#161622" : "#ffffff", borderColor: "var(--border-subtle)" }} onClick={e => e.stopPropagation()}>
               <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4 border border-red-500/20">
                 <Trash2 className="w-8 h-8 text-red-500" />
@@ -3953,12 +4014,12 @@ function ChatsPageContent() {
       {/* ═══ PREMIUM USER PROFILE MODAL ═══ */}
       <AnimatePresence>
         {selectedProfileUser && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 backdrop-blur-3xl bg-black/50"
             onClick={() => setSelectedProfileUser(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 40, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, y: 40, opacity: 0 }}
               className="w-full max-w-[440px] overflow-hidden rounded-[40px] shadow-[0_32px_80px_rgba(0,0,0,0.5)] relative border border-white/10"
               style={{ background: isDark ? "rgba(18, 18, 30, 0.95)" : "rgba(255, 255, 255, 0.98)" }}
@@ -3966,7 +4027,7 @@ function ChatsPageContent() {
             >
               <div className={`h-36 w-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} relative`}>
                 <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
-                <button 
+                <button
                   onClick={() => setSelectedProfileUser(null)}
                   className="absolute top-5 right-5 w-12 h-12 rounded-2xl bg-black/50 hover:bg-black/70 text-white transition-all backdrop-blur-xl active:scale-95 z-[50] flex items-center justify-center border border-white/20 shadow-2xl"
                 >
@@ -3985,9 +4046,9 @@ function ChatsPageContent() {
                       </span>
                     )}
                     {(selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)) && (
-                      <motion.div 
+                      <motion.div
                         initial={{ scale: 0 }} animate={{ scale: 1 }}
-                        className="absolute top-2 right-2 h-7 w-7 rounded-full bg-[#2ed573] border-[5px] border-inherit shadow-lg" 
+                        className="absolute top-2 right-2 h-7 w-7 rounded-full bg-[#2ed573] border-[5px] border-inherit shadow-lg"
                       />
                     )}
                   </div>
@@ -4004,7 +4065,7 @@ function ChatsPageContent() {
                     <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
                       @{selectedProfileUser.username}
                     </p>
-                    
+
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
                       <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/10'} shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis`}>
                         {selectedProfileUser.username === 'nexora_31' ? 'System Authority' : 'Nexora User'}
@@ -4016,14 +4077,14 @@ function ChatsPageContent() {
                   </div>
 
                   <div className="w-full mb-8 p-6 rounded-[32px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 backdrop-blur-md">
-                     <div className="flex items-center gap-2 mb-3 opacity-50">
-                        <span className="text-base">📝</span>
-                        <h4 className="text-[11px] uppercase font-black tracking-[0.15em]" style={{ color: "var(--text-primary)" }}>About Me</h4>
-                     </div>
-                     <div className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                    <div className="flex items-center gap-2 mb-3 opacity-50">
+                      <span className="text-base">📝</span>
+                      <h4 className="text-[11px] uppercase font-black tracking-[0.15em]" style={{ color: "var(--text-primary)" }}>About Me</h4>
+                    </div>
+                    <div className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                       {loadingProfile ? (
                         <div className="py-2">
-                           <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Loading..." />
+                          <LoadingAnimation variant="pulse" size="sm" color="var(--color-primary)" text="Loading..." />
                         </div>
                       ) : (selectedProfileUser.username === 'nexora_31' ? 'The Private Chat Protocol' : (profileData?.bio ? profileData.bio : <span className="opacity-50 italic">No bio yet.</span>))}
                     </div>
@@ -4031,9 +4092,9 @@ function ChatsPageContent() {
 
                   {/* Actions */}
                   <div className="flex gap-3 w-full">
-                    <motion.button 
+                    <motion.button
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                      onClick={() => { 
+                      onClick={() => {
                         const thread = threads.find(t => t.username === selectedProfileUser.username);
                         if (thread) { handleOpenThread(thread); setSelectedProfileUser(null); }
                       }}
@@ -4042,18 +4103,18 @@ function ChatsPageContent() {
                     >
                       Message
                     </motion.button>
-                    
+
                     {selectedProfileUser.username.toLowerCase() === 'nexora_31' ? (
-                       <div className="flex-1 py-4 rounded-[28px] bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
-                          <span className="text-[9px] font-black text-[#00d4ff] uppercase tracking-widest">Protocol Channel</span>
-                       </div>
+                      <div className="flex-1 py-4 rounded-[28px] bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
+                        <span className="text-[9px] font-black text-[#00d4ff] uppercase tracking-widest">Protocol Channel</span>
+                      </div>
                     ) : selectedProfileUser.username.toLowerCase() === myProfile.username.toLowerCase() ? (
                       <div className="flex-1 py-4 rounded-[28px] bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-                         <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest">Personal Profile</span>
+                        <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest">Personal Profile</span>
                       </div>
                     ) : (
                       blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
-                        <motion.button 
+                        <motion.button
                           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
                           onClick={() => handleUnblockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
                           className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
@@ -4061,7 +4122,7 @@ function ChatsPageContent() {
                           Unblock
                         </motion.button>
                       ) : (
-                        <motion.button 
+                        <motion.button
                           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
                           onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
                           className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
@@ -4081,7 +4142,7 @@ function ChatsPageContent() {
       {/* ─── RESTORED INCOMING CALL OVERLAY (Synced) ─── */}
       <AnimatePresence>
         {incomingCall && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[2000] flex items-center justify-center p-6 backdrop-blur-2xl bg-black/60">
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
               className="glass-panel w-full max-w-sm rounded-[3rem] p-8 flex flex-col items-center text-center shadow-2xl border-white/10">
@@ -4090,13 +4151,13 @@ function ChatsPageContent() {
               </div>
               <h2 className="text-2xl font-black mb-1 gradient-text">{incomingCall.fromName}</h2>
               <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 mb-8">Incoming {incomingCall.type} Call</p>
-              
+
               <div className="flex gap-6 w-full">
-                <button onClick={handleDecline} 
+                <button onClick={handleDecline}
                   className="flex-1 py-4.5 rounded-[2rem] bg-red-500/10 text-red-500 font-extrabold uppercase text-[10px] tracking-widest border border-red-500/20 hover:bg-red-500/20 transition-all">
                   Decline
                 </button>
-                <button onClick={handleAccept} 
+                <button onClick={handleAccept}
                   className="flex-1 py-4.5 rounded-[2rem] bg-[#2ed573] text-white font-extrabold uppercase text-[10px] tracking-widest shadow-[0_10px_30px_rgba(46,213,115,0.3)] hover:scale-105 transition-all">
                   Accept
                 </button>
@@ -4110,64 +4171,63 @@ function ChatsPageContent() {
       <AnimatePresence>
         {callState.isActive && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className={`fixed z-[1500] bg-[#0c0c14] text-white flex flex-col items-center justify-center overflow-hidden transition-all duration-700 shadow-2xl ${
-              callState.isFullscreen ? "inset-0" : "bottom-6 right-6 w-72 h-44 rounded-[2.5rem] border border-white/20"
-            }`}>
-            
+            className={`fixed z-[1500] bg-[#0c0c14] text-white flex flex-col items-center justify-center overflow-hidden transition-all duration-700 shadow-2xl ${callState.isFullscreen ? "inset-0" : "bottom-6 right-6 w-72 h-44 rounded-[2.5rem] border border-white/20"
+              }`}>
+
             {/* Call Header */}
             <div className="absolute top-8 left-0 right-0 z-50 flex items-center justify-between px-10 pointer-events-none">
-               <button onClick={maximize} className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white pointer-events-auto hover:bg-white/20 transition-all">
-                  <Maximize2 className="w-5 h-5" />
-               </button>
-               <div className="flex items-center gap-2 bg-black/50 backdrop-blur-2xl px-5 py-2.5 rounded-full border border-white/10 shadow-2xl">
-                  <Lock className="w-3.5 h-3.5 text-[#2ed573]" />
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#2ed573]">E2E Tunnel Active</span>
-               </div>
+              <button onClick={maximize} className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white pointer-events-auto hover:bg-white/20 transition-all">
+                <Maximize2 className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2 bg-black/50 backdrop-blur-2xl px-5 py-2.5 rounded-full border border-white/10 shadow-2xl">
+                <Lock className="w-3.5 h-3.5 text-[#2ed573]" />
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#2ed573]">E2E Tunnel Active</span>
+              </div>
             </div>
 
             {/* Main Content Area */}
             <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden">
-               {/* Ambient Gradients */}
-               <div className={`absolute top-0 right-0 w-[80vw] h-[80vw] bg-gradient-to-br ${callState.remoteColor || "from-[#6c5ce7] to-[#00d4ff]"} opacity-10 rounded-full blur-[120px] animate-pulse`} />
-               
-               {/* Video Streams */}
-               {callState.type === "video" && (
-                 <div className="absolute inset-0 z-0">
-                    {callState.remoteStream && (
-                      <video autoPlay playsInline ref={v => { if(v) v.srcObject = callState.remoteStream }} className="w-full h-full object-cover" />
-                    )}
-                    {callState.localStream && (
-                      <div className="absolute top-24 right-8 w-32 h-44 rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl z-20">
-                         <video autoPlay playsInline muted ref={v => { if(v) v.srcObject = callState.localStream }} className="w-full h-full object-cover scale-x-[-1]" />
-                      </div>
-                    )}
-                 </div>
-               )}
+              {/* Ambient Gradients */}
+              <div className={`absolute top-0 right-0 w-[80vw] h-[80vw] bg-gradient-to-br ${callState.remoteColor || "from-[#6c5ce7] to-[#00d4ff]"} opacity-10 rounded-full blur-[120px] animate-pulse`} />
 
-               <div className="relative z-10 flex flex-col items-center">
-                  <div className={`w-32 h-32 md:w-48 md:h-48 rounded-full flex items-center justify-center shadow-2xl z-10 bg-gradient-to-tr ${callState.remoteColor || "from-[#6c5ce7] to-[#00d4ff]"} border-[10px] border-[#0c0c14] mb-8`}>
-                     <span className="text-6xl font-black text-white uppercase">{callState.remoteName?.[0] || "?"}</span>
-                  </div>
-                  <h2 className="text-4xl md:text-6xl font-black mb-4 tracking-tight drop-shadow-2xl">{callState.remoteName}</h2>
-                  <div className="bg-black/40 backdrop-blur-3xl px-8 py-3 rounded-full border border-white/10 font-mono text-xl md:text-2xl font-black text-[#2ed573] shadow-2xl tracking-widest">
-                     {callState.status === "ringing" ? "ESTABLISHING..." : callState.duration}
-                  </div>
-               </div>
+              {/* Video Streams */}
+              {callState.type === "video" && (
+                <div className="absolute inset-0 z-0">
+                  {callState.remoteStream && (
+                    <video autoPlay playsInline ref={v => { if (v) v.srcObject = callState.remoteStream }} className="w-full h-full object-cover" />
+                  )}
+                  {callState.localStream && (
+                    <div className="absolute top-24 right-8 w-32 h-44 rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl z-20">
+                      <video autoPlay playsInline muted ref={v => { if (v) v.srcObject = callState.localStream }} className="w-full h-full object-cover scale-x-[-1]" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className={`w-32 h-32 md:w-48 md:h-48 rounded-full flex items-center justify-center shadow-2xl z-10 bg-gradient-to-tr ${callState.remoteColor || "from-[#6c5ce7] to-[#00d4ff]"} border-[10px] border-[#0c0c14] mb-8`}>
+                  <span className="text-6xl font-black text-white uppercase">{callState.remoteName?.[0] || "?"}</span>
+                </div>
+                <h2 className="text-4xl md:text-6xl font-black mb-4 tracking-tight drop-shadow-2xl">{callState.remoteName}</h2>
+                <div className="bg-black/40 backdrop-blur-3xl px-8 py-3 rounded-full border border-white/10 font-mono text-xl md:text-2xl font-black text-[#2ed573] shadow-2xl tracking-widest">
+                  {callState.status === "ringing" ? "ESTABLISHING..." : callState.duration}
+                </div>
+              </div>
             </div>
 
             {/* Interaction Bar */}
             <div className="absolute bottom-12 left-0 right-0 flex items-center justify-center gap-8 z-50">
-               <motion.button onClick={toggleMute} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${callState.isMuted ? "bg-white text-black" : "bg-white/10 backdrop-blur-xl border border-white/10"}`}>
-                  {callState.isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-               </motion.button>
-               
-               <motion.button onClick={() => handleEnd()} whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} className="w-24 h-24 rounded-full bg-red-500 flex items-center justify-center text-white shadow-[0_0_60px_rgba(239,68,68,0.5)]">
-                  <PhoneOff className="w-10 h-10" />
-               </motion.button>
+              <motion.button onClick={toggleMute} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${callState.isMuted ? "bg-white text-black" : "bg-white/10 backdrop-blur-xl border border-white/10"}`}>
+                {callState.isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              </motion.button>
 
-               <motion.button onClick={toggleVideo} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${callState.isVideoOff ? "bg-white text-black" : "bg-white/10 backdrop-blur-xl border border-white/10"}`}>
-                  {callState.isVideoOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
-               </motion.button>
+              <motion.button onClick={() => handleEnd()} whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} className="w-24 h-24 rounded-full bg-red-500 flex items-center justify-center text-white shadow-[0_0_60px_rgba(239,68,68,0.5)]">
+                <PhoneOff className="w-10 h-10" />
+              </motion.button>
+
+              <motion.button onClick={toggleVideo} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${callState.isVideoOff ? "bg-white text-black" : "bg-white/10 backdrop-blur-xl border border-white/10"}`}>
+                {callState.isVideoOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
+              </motion.button>
             </div>
           </motion.div>
         )}
@@ -4182,11 +4242,11 @@ function ChatsPageContent() {
               <div className="flex gap-4 w-full">
                 <button onClick={() => setShowNicknameModal(false)} className="flex-1 py-3 rounded-xl bg-black/10 dark:bg-white/10 font-bold uppercase text-[10px] tracking-widest hover:opacity-80" style={{ color: "var(--text-primary)" }}>Cancel</button>
                 <button onClick={() => {
-                   if (!activeThread?.username) return;
-                   const updated = { ...nicknames, [activeThread.username]: nicknameInput || activeThread.name };
-                   setNicknames(updated);
-                   localStorage.setItem("nexora_nicknames", JSON.stringify(updated));
-                   setShowNicknameModal(false);
+                  if (!activeThread?.username) return;
+                  const updated = { ...nicknames, [activeThread.username]: nicknameInput || activeThread.name };
+                  setNicknames(updated);
+                  localStorage.setItem("nexora_nicknames", JSON.stringify(updated));
+                  setShowNicknameModal(false);
                 }} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#6c5ce7] to-[#00d4ff] text-white font-bold uppercase text-[10px] tracking-widest hover:opacity-90 shadow-[0_10px_20px_rgba(108,92,231,0.3)]">Save</button>
               </div>
             </motion.div>
@@ -4202,8 +4262,8 @@ function ChatsPageContent() {
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative w-full max-w-md max-h-[85vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border border-white/10" style={{ background: "var(--bg-surface-solid)" }}>
               <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
                 <div>
-                   <h3 className="text-xl font-black uppercase tracking-widest text-primary">Find Friends</h3>
-                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">Snap-Style Contact Sync</p>
+                  <h3 className="text-xl font-black uppercase tracking-widest text-primary">Find Friends</h3>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">Snap-Style Contact Sync</p>
                 </div>
                 <button onClick={() => setShowSyncModal(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors"><X className="w-5 h-5" /></button>
               </div>
@@ -4217,11 +4277,11 @@ function ChatsPageContent() {
                       <span className="text-[10px] font-black uppercase tracking-widest">Recent Activity</span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                       {searchHistory.map(h => (
-                         <motion.button key={h} whileHover={{scale:1.05}} whileTap={{scale:0.95}} onClick={() => { setShowSyncModal(false); setShowGlobalSearch(true); setGlobalSearchQuery(h); }} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-primary hover:bg-white/10 transition-all">
-                           @{h}
-                         </motion.button>
-                       ))}
+                      {searchHistory.map(h => (
+                        <motion.button key={h} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { setShowSyncModal(false); setShowGlobalSearch(true); setGlobalSearchQuery(h); }} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-primary hover:bg-white/10 transition-all">
+                          @{h}
+                        </motion.button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -4290,41 +4350,41 @@ function ChatsPageContent() {
                       <Mail className="w-3.5 h-3.5" /> Not on Nexora
                     </h4>
                     <div className="space-y-3">
-                       {syncNonMatches.map(phone => (
-                         <div key={phone} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-pink-500/30 transition-all">
-                            <div className="flex items-center gap-3">
-                               <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/40 font-bold text-xs uppercase">
-                                  {phone.slice(-2)}
-                               </div>
-                               <div>
-                                  <p className="text-sm font-bold truncate leading-tight">{phone}</p>
-                                  <p className="text-[10px] text-muted-foreground font-medium opacity-50">Contact Sync Match</p>
-                               </div>
+                      {syncNonMatches.map(phone => (
+                        <div key={phone} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-pink-500/30 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/40 font-bold text-xs uppercase">
+                              {phone.slice(-2)}
                             </div>
-                            <button onClick={() => {
-                               setSharePhone(phone);
-                               setShowShareModal(true);
-                            }} className="px-4 py-1.5 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase hover:bg-pink-500 transition-all">
-                               Invite
-                            </button>
-                         </div>
-                       ))}
+                            <div>
+                              <p className="text-sm font-bold truncate leading-tight">{phone}</p>
+                              <p className="text-[10px] text-muted-foreground font-medium opacity-50">Contact Sync Match</p>
+                            </div>
+                          </div>
+                          <button onClick={() => {
+                            setSharePhone(phone);
+                            setShowShareModal(true);
+                          }} className="px-4 py-1.5 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase hover:bg-pink-500 transition-all">
+                            Invite
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
                 {/* Not Found / Invite Section */}
                 {syncMatches.length === 0 && manualPhone.length > 5 && !isSyncing && (
-                   <div className="p-5 rounded-2xl bg-pink-500/5 border border-pink-500/10 text-center animate-in fade-in slide-in-from-bottom-2">
-                      <Mail className="w-8 h-8 text-pink-400 mx-auto mb-3" />
-                      <p className="text-sm font-bold mb-4 italic opactiy-80">This person hasn't joined Nexora yet!</p>
-                      <button onClick={() => {
-                        setSharePhone(manualPhone);
-                        setShowShareModal(true);
-                      }} className="w-full py-3 rounded-xl bg-pink-500 text-white text-sm font-bold shadow-lg shadow-pink-500/30 hover:brightness-110 active:scale-95 transition-all">
-                        Invite to joining
-                      </button>
-                   </div>
+                  <div className="p-5 rounded-2xl bg-pink-500/5 border border-pink-500/10 text-center animate-in fade-in slide-in-from-bottom-2">
+                    <Mail className="w-8 h-8 text-pink-400 mx-auto mb-3" />
+                    <p className="text-sm font-bold mb-4 italic opactiy-80">This person hasn't joined Nexora yet!</p>
+                    <button onClick={() => {
+                      setSharePhone(manualPhone);
+                      setShowShareModal(true);
+                    }} className="w-full py-3 rounded-xl bg-pink-500 text-white text-sm font-bold shadow-lg shadow-pink-500/30 hover:brightness-110 active:scale-95 transition-all">
+                      Invite to joining
+                    </button>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -4334,10 +4394,10 @@ function ChatsPageContent() {
 
       <AnimatePresence>
         {showShareModal && (
-          <ShareProfileModal 
-            profile={myProfile} 
-            onClose={() => setShowShareModal(false)} 
-            isDark={isDark} 
+          <ShareProfileModal
+            profile={myProfile}
+            onClose={() => setShowShareModal(false)}
+            isDark={isDark}
           />
         )}
         {/* Global Thread Context Menu */}
@@ -4350,11 +4410,11 @@ function ChatsPageContent() {
               exit={{ opacity: 0, scale: 0.9, y: 10 }}
               className="fixed z-[500] w-52 rounded-3xl overflow-hidden shadow-2xl glass-panel border"
               style={{
-                 left: Math.min(threadContextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1000) - 220),
-                 top: Math.min(threadContextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 1000) - 180),
-                 background: isDark ? "rgba(16,16,24,0.95)" : "rgba(255,255,255,0.95)",
-                 border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)"}`,
-                 backdropFilter: "blur(24px) saturate(1.8)"
+                left: Math.min(threadContextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1000) - 220),
+                top: Math.min(threadContextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 1000) - 180),
+                background: isDark ? "rgba(16,16,24,0.95)" : "rgba(255,255,255,0.95)",
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)"}`,
+                backdropFilter: "blur(24px) saturate(1.8)"
               }}
             >
               <div className="p-2 flex flex-col gap-1">
@@ -4420,5 +4480,5 @@ export default function ChatsPage() {
 }
 
 function UserProfileModal({ isOpen, onClose, user, onConnect, alreadyRequested, alreadyConnected }: any) {
-    return null; // Deprecated - Integrated into ChatsPage for high performance
+  return null; // Deprecated - Integrated into ChatsPage for high performance
 }

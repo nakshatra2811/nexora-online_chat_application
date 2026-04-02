@@ -1,3 +1,4 @@
+process.env.TZ = "Asia/Kolkata";
 require('dotenv').config();
 const Sentry = require("@sentry/node");
 const { nodeProfilingIntegration } = require("@sentry/profiling-node");
