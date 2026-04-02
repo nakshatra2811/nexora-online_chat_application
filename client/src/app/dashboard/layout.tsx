@@ -180,7 +180,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const sender = data.from || data.senderId;
         if (!sender) return;
 
-        // Skip global handling if we are on the chats page (the page itself handles the UI)
+        // Skip global handling ONLY if the specific chat page is active, otherwise process it
+        // so that messages are saved in background and notifications are shown.
         const isCurrentlyViewingChat = typeof window !== "undefined" && window.location.pathname?.includes("/dashboard/chats"); 
         if (isCurrentlyViewingChat) return;
 
@@ -250,8 +251,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const isMuted = muted.includes(threadId2);
 
         if (!isMuted) {
-          // For plaintext (broadcast/story) messages, show real text in notification
-          const notifBody = data.fromStory ? (data.text || "New Message") : 'Encrypted Message is here 🔐';
+          // For plaintext (broadcast/story/unencrypted) messages, show real text in notification
+          // For encrypted, show the privacy placeholder.
+          const notifBody = (data.fromStory || !data.ciphertext) ? (data.text || "New Message") : 'Encrypted Message is here 🔐';
           pushService.showLocalNotification(sender, notifBody, { from: sender });
           
           setGeneralNotifications(prev => {

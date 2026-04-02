@@ -863,10 +863,17 @@ async function queueMessageForUser(username, msgData) {
         queue.push(msgData);
     }
 
+    let pushTitle = msgData.from || 'New Message';
+    let pushBody = 'Encrypted Message is here 🔐';
+
+    if (msgData.fromStory || !msgData.ciphertext) {
+        pushBody = msgData.text || (msgData.isMedia ? '📎 Media' : (msgData.isLocation ? '📍 Location' : (msgData.isPoll ? '🗳️ Poll' : (msgData.isContact ? '👤 Contact' : 'New Message'))));
+    }
+
     // Proactive background push to all registered devices
     sendPushNotification(username, {
-        title: msgData.from || 'New Message',
-        body: 'Encrypted Message is here 🔐',
+        title: pushTitle,
+        body: pushBody,
         icon: '/icon.svg',
         badge: '/icon.svg',
         data: {
@@ -1046,7 +1053,7 @@ io.on('connection', (socket) => {
         // 1. Relay to target user's devices
         io.to(targetId).emit('dm:message', enriched);
         
-        // 2. Always attempt background push to ensure delivery if tab is closed/background
+        // 2. Always queue for background/offline delivery & push notification
         queueMessageForUser(targetId, enriched);
 
         // 2. Sync to sender's OTHER devices
@@ -1064,7 +1071,7 @@ io.on('connection', (socket) => {
         // 1. Relay to target user's devices
         io.to(targetId).emit('dm:media', enriched);
         
-        // 2. Always attempt background push
+        // 2. Always queue for background/offline delivery & push notification
         queueMessageForUser(targetId, enriched);
 
         // Sync to sender's OTHER devices

@@ -11,12 +11,17 @@ self.addEventListener('activate', (event) => {
 
 // Crypto utilities for Service Worker
 function base64ToBuffer(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  if (!base64 || typeof base64 !== 'string') return new ArrayBuffer(0);
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+  } catch (e) {
+    return new ArrayBuffer(0);
   }
-  return bytes.buffer;
 }
 
 async function deriveKey() {
@@ -77,19 +82,24 @@ self.addEventListener('push', (event) => {
     const title = payload.title || 'Nexora';
     let body = payload.body || 'Encrypted Message is here 🔐';
     
+    const msgData = payload.data || {};
+
     // Attempt decryption if ciphertext is provided
-    if (payload.data && payload.data.ciphertext && payload.data.iv) {
-      const decrypted = await decryptText(payload.data.ciphertext, payload.data.iv);
+    if (msgData.ciphertext && msgData.iv) {
+      const decrypted = await decryptText(msgData.ciphertext, msgData.iv);
       if (decrypted) {
         body = decrypted;
       }
-    } else if (payload.data && payload.data.text && !payload.data.ciphertext) {
-      body = payload.data.text;
-    } else if (payload.data) {
-       if (payload.data.isMedia) body = '📎 Media Message';
-       else if (payload.data.isLocation) body = '📍 Shared Location';
-       else if (payload.data.isPoll) body = '🗳️ New Poll';
-       else if (payload.data.isContact) body = '👤 Shared Contact';
+    } else if (msgData.text) {
+      body = msgData.text;
+    } 
+    
+    // Fallback placeholders for specific types if body is still placeholder/empty
+    if (body === 'Encrypted Message is here 🔐' || !body) {
+       if (msgData.isMedia) body = '📎 Media Message';
+       else if (msgData.isLocation) body = '📍 Shared Location';
+       else if (msgData.isPoll) body = '🗳️ New Poll';
+       else if (msgData.isContact) body = '👤 Shared Contact';
     }
 
     const options = {
