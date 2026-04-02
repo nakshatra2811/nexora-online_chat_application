@@ -825,8 +825,20 @@ function ChatsPageContent() {
               parsed = decrypted || [];
             }
           } else {
-            // Legacy plain text format - Migration path
+            // Legacy plain text / background-saved format
             parsed = JSON.parse(savedMsgs);
+            // 🔥 Decrypt any messages saved by the background handler while user was away
+            parsed = await Promise.all(parsed.map(async (m: any) => {
+              if (m._needsDecrypt && m.ciphertext && m.iv && cryptoKey) {
+                try {
+                  const decryptedText = await decryptMessage(cryptoKey, m.ciphertext, m.iv);
+                  return { ...m, text: decryptedText, _needsDecrypt: false };
+                } catch {
+                  return { ...m, text: "🔐 Encrypted Message", _needsDecrypt: false };
+                }
+              }
+              return m;
+            }));
           }
 
           // 🛡️ De-duplicate by ID to prevent "Non-unique key" console errors
@@ -855,7 +867,7 @@ function ChatsPageContent() {
     };
 
     loadMessages();
-  }, [activeThread, vaultReady, vaultKey]);
+  }, [activeThread, vaultReady, vaultKey, cryptoKey]);
 
   // Persist messages whenever they change (Encrypted)
   useEffect(() => {

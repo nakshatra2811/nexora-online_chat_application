@@ -177,7 +177,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       // ═══ Global Message Listener (Handles background message reception) ═══
       const handleGlobalMessage = (data: any) => {
-        const sender = data.senderId || data.from;
+        const sender = data.from || data.senderId;
         if (!sender) return;
 
         // Skip global handling if we are on the chats page (the page itself handles the UI)
@@ -203,19 +203,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           };
           threads = [threads[threadIndex], ...threads.filter((_: any, i: number) => i !== threadIndex)];
           localStorage.setItem("nexora_secure_connections", JSON.stringify(threads));
+
+          // ✅ CRITICAL FIX: Save the actual message to the thread's message list
+          // so it appears when user opens the chat - WhatsApp/Instagram style
+          const threadId = threads[0]?.id;
+          if (threadId) {
+            try {
+              const msgKey = `nexora_msgs_${threadId}`;
+              const storedMsgs = localStorage.getItem(msgKey);
+              let existingMsgs: any[] = [];
+              // Only process if not encrypted storage (plain JSON)
+              if (storedMsgs && !storedMsgs.startsWith("anc:")) {
+                existingMsgs = JSON.parse(storedMsgs || "[]");
+              }
+              const msgId = data.msgId || data.id || `bg_${Date.now()}`;
+              // Avoid duplicates
+              if (!existingMsgs.find((m: any) => m.id === msgId)) {
+                const newMsg = {
+                  id: msgId,
+                  senderId: sender,
+                  text: data.fromStory ? (data.text || "Secure Message") : (data.ciphertext ? "[Encrypted]" : (data.text || "Secure Message")),
+                  ciphertext: data.ciphertext,
+                  iv: data.iv,
+                  timestamp: data.timestamp || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }),
+                  createdAt: data.createdAt || Date.now(),
+                  isSelf: false,
+                  status: "delivered",
+                  reactions: {},
+                  attachment: data.attachment,
+                  poll: data.poll,
+                  contact: data.contact,
+                  replyTo: data.replyTo,
+                  fromStory: data.fromStory,
+                  _needsDecrypt: !data.fromStory && !!data.ciphertext,
+                };
+                existingMsgs.push(newMsg);
+                localStorage.setItem(msgKey, JSON.stringify(existingMsgs));
+              }
+            } catch (e) {}
+          }
         }
 
         // 2. Trigger Toast if NOT muted
         const muted = JSON.parse(localStorage.getItem("nexora_muted") || "[]");
-        const threadId = threadIndex !== -1 ? (threads[0]?.id || -1) : -1;
-        const isMuted = muted.includes(threadId);
+        const threadId2 = threadIndex !== -1 ? (threads[0]?.id || -1) : -1;
+        const isMuted = muted.includes(threadId2);
 
         if (!isMuted) {
-          pushService.showLocalNotification(sender, 'Encrypted Message is here 🔐', { from: sender });
+          // For plaintext (broadcast/story) messages, show real text in notification
+          const notifBody = data.fromStory ? (data.text || "New Message") : 'Encrypted Message is here 🔐';
+          pushService.showLocalNotification(sender, notifBody, { from: sender });
           
           setGeneralNotifications(prev => {
              if (prev.some(n => n.from_username === sender && n.type === 'message')) return prev;
-             return [{ id: Date.now() + Math.random(), type: 'message', message: `Encrypted Message is here 🔐`, from_username: sender, time: formatToIndianTime() }, ...prev].slice(0, 20);
+             return [{ id: Date.now() + Math.random(), type: 'message', message: notifBody, from_username: sender, time: formatToIndianTime() }, ...prev].slice(0, 20);
           });
         }
 

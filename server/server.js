@@ -865,11 +865,20 @@ async function queueMessageForUser(username, msgData) {
 
     // Proactive background push to all registered devices
     sendPushNotification(username, {
-        title: `New Message`,
+        title: msgData.from || 'New Message',
         body: 'Encrypted Message is here 🔐',
         icon: '/icon.svg',
         badge: '/icon.svg',
-        data: { from: msgData.from },
+        data: {
+            from: msgData.from,
+            ciphertext: msgData.ciphertext,
+            iv: msgData.iv,
+            text: msgData.text,
+            isMedia: msgData.isMedia || !!msgData.attachment,
+            isLocation: msgData.isLocation,
+            isPoll: msgData.isPoll,
+            isContact: msgData.isContact
+        },
     });
 }
 
