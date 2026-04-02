@@ -122,11 +122,11 @@ function ChatsPageContent() {
   const bumpThread = (username: string, updates: Partial<Thread>) => {
     setThreads(prev => {
       const thread = prev.find(t => t.username?.toLowerCase() === username?.toLowerCase());
-      if (!thread) return prev; 
+      if (!thread) return prev;
       const otherThreads = prev.filter(t => t.username?.toLowerCase() !== username?.toLowerCase());
-      const updated = { 
-        ...thread, 
-        ...updates, 
+      const updated = {
+        ...thread,
+        ...updates,
         lastMessageTime: Date.now(),
         preview: updates.preview !== undefined ? updates.preview : thread.preview // Used passed preview if available
       };
@@ -278,13 +278,13 @@ function ChatsPageContent() {
       }
     }
   }, [
-    activeCallState.isActive, 
-    activeCallState.status, 
-    activeCallState.isIncoming, 
-    activeCallState.duration, 
-    activeCallState.isMuted, 
-    activeCallState.isVideoOff, 
-    activeCallState.remoteStream, 
+    activeCallState.isActive,
+    activeCallState.status,
+    activeCallState.isIncoming,
+    activeCallState.duration,
+    activeCallState.isMuted,
+    activeCallState.isVideoOff,
+    activeCallState.remoteStream,
     activeCallState.localStream
   ]);
 
@@ -378,7 +378,7 @@ function ChatsPageContent() {
         if (e.key === "nexora_hidden" && e.newValue) setHiddenThreads(JSON.parse(e.newValue));
         if (e.key === "nexora_nicknames" && e.newValue) setNicknames(JSON.parse(e.newValue));
         if (e.key === "nexora_locked_chats_map" && e.newValue) setLockedChatsMap(JSON.parse(e.newValue));
-      } catch {}
+      } catch { }
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
@@ -386,12 +386,12 @@ function ChatsPageContent() {
 
   const [profileData, setProfileData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [myProfile, setMyProfile] = useState<{ id: number; name: string; username: string; color: string; avatarUrl?: string }>({ 
+  const [myProfile, setMyProfile] = useState<{ id: number; name: string; username: string; color: string; avatarUrl?: string }>({
     id: 0,
-    name: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_name") || "" : "", 
-    username: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "", 
-    color: "from-purple-500 to-indigo-500", 
-    avatarUrl: typeof window !== "undefined" ? localStorage.getItem("nexora_avatar_url") || "" : "" 
+    name: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_name") || "" : "",
+    username: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "",
+    color: "from-purple-500 to-indigo-500",
+    avatarUrl: typeof window !== "undefined" ? localStorage.getItem("nexora_avatar_url") || "" : ""
   });
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
@@ -577,8 +577,8 @@ function ChatsPageContent() {
           // Only clean if param actually exists to prevent Next.js loop
           const url = new URL(window.location.href);
           if (url.searchParams.has("search")) {
-             url.searchParams.delete("search");
-             window.history.replaceState({ ...window.history.state }, "", url.toString());
+            url.searchParams.delete("search");
+            window.history.replaceState({ ...window.history.state }, "", url.toString());
           }
         }
 
@@ -655,35 +655,35 @@ function ChatsPageContent() {
     if (!myUsername) return;
     try {
       const data = await nexoraFetch(`/api/connections?username=${encodeURIComponent(myUsername)}`);
-        const stored = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-        const mapped = data.connections.map((c: any) => {
-          if (c.wallpaper) {
-            localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
-          }
-          const existing = stored.find((ec: any) => ec.username?.toLowerCase() === c.username?.toLowerCase());
-          return {
-            ...c,
-            online: c.online || (existing?.online ?? false),
-            lastMessageTime: existing?.lastMessageTime || c.lastMessageTime || 0,
-            preview: existing?.preview || c.preview || "Connected! Start chatting.",
-          };
-        }).sort((a: any, b: any) => {
-          const pinned = JSON.parse(localStorage.getItem("nexora_pinned") || "[]");
-          const aPinned = pinned.includes(a.id);
-          const bPinned = pinned.includes(b.id);
-          if (aPinned && !bPinned) return -1;
-          if (!aPinned && bPinned) return 1;
-          return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
-        });
-        
-        const hidden = JSON.parse(localStorage.getItem("nexora_hidden") || "[]");
-        const filtered = mapped.filter((t: any) => !hidden.includes(t.id));
-        
-        const mappedStr = JSON.stringify(filtered);
-        if (JSON.stringify(threads) !== mappedStr) {
-           setThreads(filtered);
-           localStorage.setItem("nexora_secure_connections", mappedStr);
+      const stored = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+      const mapped = data.connections.map((c: any) => {
+        if (c.wallpaper) {
+          localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
         }
+        const existing = stored.find((ec: any) => ec.username?.toLowerCase() === c.username?.toLowerCase());
+        return {
+          ...c,
+          online: c.online || (existing?.online ?? false),
+          lastMessageTime: existing?.lastMessageTime || c.lastMessageTime || 0,
+          preview: existing?.preview || c.preview || "Connected! Start chatting.",
+        };
+      }).sort((a: any, b: any) => {
+        const pinned = JSON.parse(localStorage.getItem("nexora_pinned") || "[]");
+        const aPinned = pinned.includes(a.id);
+        const bPinned = pinned.includes(b.id);
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+        return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
+      });
+
+      const hidden = JSON.parse(localStorage.getItem("nexora_hidden") || "[]");
+      const filtered = mapped.filter((t: any) => !hidden.includes(t.id));
+
+      const mappedStr = JSON.stringify(filtered);
+      if (JSON.stringify(threads) !== mappedStr) {
+        setThreads(filtered);
+        localStorage.setItem("nexora_secure_connections", mappedStr);
+      }
 
       // Fetch pending requests for Instagram-style sidebar
       const reqData = await nexoraFetch(`/api/connections/requests?username=${encodeURIComponent(myUsername)}`);
@@ -1350,13 +1350,13 @@ function ChatsPageContent() {
       const handleIncomingMessage = async (data: any) => {
         const senderUsername = data.from;
         if (!senderUsername) return;
-        
+
         try {
           let decryptedText = "";
           if (data.fromStory || data.ciphertext === null || data.ciphertext === undefined) {
-             decryptedText = data.text || (data.poll ? "🗳️ New Poll" : data.attachment ? (data.attachment.type === 'location' ? '📍 Shared Location' : '📎 Media') : "Secure Message");
+            decryptedText = data.text || (data.poll ? "🗳️ New Poll" : data.attachment ? (data.attachment.type === 'location' ? '📍 Shared Location' : '📎 Media') : "Secure Message");
           } else {
-             decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
+            decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
           }
 
           const isFromSelf = senderUsername?.toLowerCase() === myUsernameRef.current?.toLowerCase();
@@ -1381,14 +1381,14 @@ function ChatsPageContent() {
 
           // 🛡️ Proactive Discovery: If sender is unknown, fetch connections now
           if (!senderThread) {
-             await fetchConnections();
-             threads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-             senderThread = threads.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
+            await fetchConnections();
+            threads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+            senderThread = threads.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
           }
 
           if (currentThread?.username?.toLowerCase() === senderUsername?.toLowerCase() && currentThread !== null) {
             setMessages(prev => {
-              if (prev.find(m => m.id === newMsg.id)) return prev; 
+              if (prev.find(m => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
             });
             bumpThread(senderUsername, { preview: decryptedText });
@@ -1408,7 +1408,7 @@ function ChatsPageContent() {
               }
             }
             bumpThread(senderUsername, { preview: decryptedText, unread: (senderThread?.unread || 0) + 1 });
-            
+
             if (!isFromSelf) {
               pushService.showLocalNotification(senderThread?.name || senderUsername, 'Encrypted Message is here 🔐', { from: senderUsername });
             }
@@ -2482,7 +2482,15 @@ function ChatsPageContent() {
       >
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Messages</h2>
+            <div className="flex items-center gap-3">
+              <motion.button whileTap={{ scale: 0.9 }}
+                onClick={() => router.push('/dashboard')}
+                className="p-2 -ml-2 rounded-xl sm:hidden transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
+                style={{ color: "var(--text-primary)" }}>
+                <ArrowLeft className="w-5 h-5" />
+              </motion.button>
+              <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Messages</h2>
+            </div>
             <div className="flex items-center gap-2">
               <motion.button
                 whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}
@@ -2799,7 +2807,15 @@ function ChatsPageContent() {
               {activeThread ? (
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
-                    onClick={() => window.history.length > 2 ? router.back() : router.replace("/dashboard/chats", { scroll: false })}
+                    onClick={() => {
+                        // Priority 1: Clear search params to close chat while staying in dashboard
+                        if (window.location.search.includes('u=') || window.location.search.includes('username=')) {
+                            router.replace('/dashboard/chats', { scroll: false });
+                        } else {
+                            // Priority 2: Standard back navigation
+                            router.back();
+                        }
+                    }}
                     className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
@@ -3618,7 +3634,7 @@ function ChatsPageContent() {
 
                           <div className="shrink-0 ml-2">
                             {alreadyConnected ? (
-                              <button 
+                              <button
                                 onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
                                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
                               >
@@ -4297,64 +4313,64 @@ function ChatsPageContent() {
             >
               <div className="p-2 flex flex-col gap-1">
                 {(() => {
-                   const activeT = threads.find(t => t.id === threadContextMenu.id);
-                   const isNexoraAdmin = activeT?.username?.toLowerCase() === 'nexora_31';
-                   
-                   return (
-                      <>
+                  const activeT = threads.find(t => t.id === threadContextMenu.id);
+                  const isNexoraAdmin = activeT?.username?.toLowerCase() === 'nexora_31';
+
+                  return (
+                    <>
+                      <button
+                        onClick={() => {
+                          const id = threadContextMenu.id;
+                          setPinnedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [id, ...prev]);
+                          setThreadContextMenu(null);
+                        }}
+                        className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-[#6c5ce7]/10 transition-all text-left group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Pin className={`w-4 h-4 ${pinnedThreads.includes(threadContextMenu.id) ? "text-[#6c5ce7]" : "text-[var(--text-muted)]"} transition-colors`} />
+                          <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{pinnedThreads.includes(threadContextMenu.id) ? "Unpin Chat" : "Pin to Top"}</span>
+                        </div>
+                      </button>
+
+                      {!isNexoraAdmin && (
                         <button
                           onClick={() => {
                             const id = threadContextMenu.id;
-                            setPinnedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [id, ...prev]);
+                            setMutedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
                             setThreadContextMenu(null);
                           }}
-                          className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-[#6c5ce7]/10 transition-all text-left group"
+                          className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-orange-500/10 transition-all text-left group"
                         >
                           <div className="flex items-center gap-3">
-                            <Pin className={`w-4 h-4 ${pinnedThreads.includes(threadContextMenu.id) ? "text-[#6c5ce7]" : "text-[var(--text-muted)]"} transition-colors`} />
-                            <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{pinnedThreads.includes(threadContextMenu.id) ? "Unpin Chat" : "Pin to Top"}</span>
+                            {mutedThreads.includes(threadContextMenu.id) ? <Bell className="w-4 h-4 text-orange-500" /> : <BellOff className="w-4 h-4 text-[var(--text-muted)]" />}
+                            <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{mutedThreads.includes(threadContextMenu.id) ? "Unmute Alerts" : "Mute Notifications"}</span>
                           </div>
                         </button>
+                      )}
 
-                        {!isNexoraAdmin && (
-                          <button
-                            onClick={() => {
-                              const id = threadContextMenu.id;
-                              setMutedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-                              setThreadContextMenu(null);
-                            }}
-                            className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-orange-500/10 transition-all text-left group"
-                          >
-                            <div className="flex items-center gap-3">
-                              {mutedThreads.includes(threadContextMenu.id) ? <Bell className="w-4 h-4 text-orange-500" /> : <BellOff className="w-4 h-4 text-[var(--text-muted)]" />}
-                              <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{mutedThreads.includes(threadContextMenu.id) ? "Unmute Alerts" : "Mute Notifications"}</span>
-                            </div>
-                          </button>
-                        )}
+                      <div className="h-px bg-current opacity-[0.05] mx-4 my-1" />
 
-                        <div className="h-px bg-current opacity-[0.05] mx-4 my-1" />
-
-                        {!isNexoraAdmin ? (
-                          <button
-                            onClick={() => {
-                              setHiddenThreads(prev => [...prev, threadContextMenu.id]);
-                              setThreadContextMenu(null);
-                            }}
-                            className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-rose-500/10 transition-all text-left group"
-                          >
-                            <div className="flex items-center gap-3">
-                              <Trash2 className="w-4 h-4 text-rose-500/60 transition-colors" />
-                              <span className="text-xs font-bold text-rose-500/80">Delete Conversation</span>
-                            </div>
-                          </button>
-                        ) : (
-                          <div className="px-3 py-3 rounded-2xl bg-indigo-500/5 flex items-center gap-3 opacity-60 cursor-not-allowed">
-                            <Lock className="w-4 h-4 text-indigo-400" />
-                            <span className="text-xs font-bold text-indigo-400">System Account (Restricted)</span>
+                      {!isNexoraAdmin ? (
+                        <button
+                          onClick={() => {
+                            setHiddenThreads(prev => [...prev, threadContextMenu.id]);
+                            setThreadContextMenu(null);
+                          }}
+                          className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-rose-500/10 transition-all text-left group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Trash2 className="w-4 h-4 text-rose-500/60 transition-colors" />
+                            <span className="text-xs font-bold text-rose-500/80">Delete Conversation</span>
                           </div>
-                        )}
-                      </>
-                   );
+                        </button>
+                      ) : (
+                        <div className="px-3 py-3 rounded-2xl bg-indigo-500/5 flex items-center gap-3 opacity-60 cursor-not-allowed">
+                          <Lock className="w-4 h-4 text-indigo-400" />
+                          <span className="text-xs font-bold text-indigo-400">System Account (Restricted)</span>
+                        </div>
+                      )}
+                    </>
+                  );
                 })()}
               </div>
             </motion.div>

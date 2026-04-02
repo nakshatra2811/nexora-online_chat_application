@@ -104,17 +104,20 @@ self.addEventListener('push', (event) => {
 
     const options = {
       body: body,
-      icon: payload.icon || '/icon.svg',
-      badge: payload.badge || '/icon.svg',
-      vibrate: [200, 100, 200],
+      icon: payload.icon || '/icon.png',
+      badge: payload.badge || '/badge.png',
+      vibrate: msgData.type === 'call' ? [500, 110, 500, 110, 500, 110, 500, 110, 500] : [200, 100, 200],
       data: payload.data || {},
-      actions: [
+      actions: msgData.type === 'call' ? [
+        { action: 'view', title: 'Answer' },
+        { action: 'dismiss', title: 'Decline' },
+      ] : [
         { action: 'view', title: 'View' },
         { action: 'dismiss', title: 'Dismiss' },
       ],
-      tag: 'nexora-notification',
+      tag: msgData.type === 'call' ? 'nexora-call' : 'nexora-notification',
       renotify: true,
-      requireInteraction: false,
+      requireInteraction: msgData.type === 'call' ? true : false,
     };
 
     return self.registration.showNotification(title, options);

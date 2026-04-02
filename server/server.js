@@ -4,11 +4,11 @@ const Sentry = require("@sentry/node");
 const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  integrations: [
-    nodeProfilingIntegration(),
-  ],
-  tracesSampleRate: 1.0,
+    dsn: process.env.SENTRY_DSN,
+    integrations: [
+        nodeProfilingIntegration(),
+    ],
+    tracesSampleRate: 1.0,
 });
 const express = require('express');
 const http = require('http');
@@ -72,8 +72,8 @@ const app = express();
 const server = http.createServer(app);
 
 app.get('/', (req, res) => {
-    res.json({ 
-        status: "operational", 
+    res.json({
+        status: "operational",
         platform: "Nexora Core",
         version: "1.3.1-ANTI",
         security: "Zero-Knowledge Active"
@@ -92,9 +92,9 @@ let pgPool;
         const databaseUrl = process.env.DATABASE_URL;
 
         if (databaseUrl) {
-            ((..._args) => {})("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
+            ((..._args) => { })("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
             dbType = 'postgres';
-            
+
             // Clean database URL to avoid SSL alias warnings
             const cleanUrl = databaseUrl.split('?')[0];
 
@@ -102,7 +102,7 @@ let pgPool;
                 connectionString: cleanUrl,
                 ssl: { rejectUnauthorized: false }
             });
-            
+
             // Mock sqlite methods for pg
             db = {
                 exec: async (sql) => {
@@ -119,7 +119,7 @@ let pgPool;
                         let count = (s.slice(0, i).match(/\?/g) || []).length + 1;
                         return '$' + count;
                     }).replace(/datetime\('now',\s*'-(\d+)\s+day'\)/gi, "NOW() - INTERVAL '$1 day'")
-                      .replace(/datetime\('now'\)/gi, "NOW()");
+                        .replace(/datetime\('now'\)/gi, "NOW()");
 
                     // Handle INSERT OR IGNORE and REPLACE (basic regex)
                     pgSql = pgSql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO').replace(/INSERT OR REPLACE INTO/gi, 'INSERT INTO');
@@ -131,7 +131,7 @@ let pgPool;
                         let count = (s.slice(0, i).match(/\?/g) || []).length + 1;
                         return '$' + count;
                     }).replace(/datetime\('now',\s*'-(\d+)\s+day'\)/gi, "NOW() - INTERVAL '$1 day'")
-                      .replace(/datetime\('now'\)/gi, "NOW()");
+                        .replace(/datetime\('now'\)/gi, "NOW()");
 
                     const res = await pgPool.query(pgSql, params);
                     return res.rows;
@@ -141,24 +141,24 @@ let pgPool;
                         let count = (s.slice(0, i).match(/\?/g) || []).length + 1;
                         return '$' + count;
                     }).replace(/datetime\('now',\s*'-(\d+)\s+day'\)/gi, "NOW() - INTERVAL '$1 day'")
-                      .replace(/datetime\('now'\)/gi, "NOW()");
-                    
+                        .replace(/datetime\('now'\)/gi, "NOW()");
+
                     if (pgSql.toLowerCase().includes('insert or ignore')) {
                         pgSql = pgSql.replace(/insert or ignore into/gi, 'INSERT INTO') + ' ON CONFLICT DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert or replace')) {
                         // Very basic replace handling
-                        pgSql = pgSql.replace(/insert or replace into/gi, 'INSERT INTO') + ' ON CONFLICT (id) DO UPDATE SET id=EXCLUDED.id'; 
+                        pgSql = pgSql.replace(/insert or replace into/gi, 'INSERT INTO') + ' ON CONFLICT (id) DO UPDATE SET id=EXCLUDED.id';
                     } else if (pgSql.toLowerCase().includes('insert into story_views')) {
-                         pgSql = pgSql + ' ON CONFLICT (story_id, viewer_username) DO NOTHING';
+                        pgSql = pgSql + ' ON CONFLICT (story_id, viewer_username) DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert into story_likes')) {
-                         pgSql = pgSql + ' ON CONFLICT (story_id, liker_username) DO NOTHING';
+                        pgSql = pgSql + ' ON CONFLICT (story_id, liker_username) DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert into connections')) {
-                         pgSql = pgSql + ' ON CONFLICT (user_a, user_b) DO NOTHING';
+                        pgSql = pgSql + ' ON CONFLICT (user_a, user_b) DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert into connection_requests')) {
-                         // Fallback for pending requests if they conflict
-                         pgSql = pgSql + ' ON CONFLICT DO NOTHING';
+                        // Fallback for pending requests if they conflict
+                        pgSql = pgSql + ' ON CONFLICT DO NOTHING';
                     } else if (pgSql.toLowerCase().includes('insert into users')) {
-                         pgSql = pgSql + ' ON CONFLICT DO NOTHING';
+                        pgSql = pgSql + ' ON CONFLICT DO NOTHING';
                     }
 
                     const res = await pgPool.query(pgSql, params);
@@ -166,12 +166,12 @@ let pgPool;
                 }
             };
         } else {
-            ((..._args) => {})("[DATABASE] Mode: Local SQLite");
+            ((..._args) => { })("[DATABASE] Mode: Local SQLite");
             dbType = 'sqlite';
             const dbPath = process.env.DATABASE_PATH || './database.sqlite';
             const dbDir = path.dirname(dbPath);
             if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
-            
+
             db = await open({
                 filename: dbPath,
                 driver: sqlite3.Database
@@ -180,7 +180,7 @@ let pgPool;
 
         await db.exec(`
             CREATE TABLE IF NOT EXISTS users (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 full_name TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 username TEXT UNIQUE NOT NULL,
@@ -188,67 +188,67 @@ let pgPool;
                 role TEXT DEFAULT 'Standard',
                 status TEXT DEFAULT 'Active',
                 color TEXT NOT NULL,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 phone_number TEXT DEFAULT 'Not Set',
                 phone_hash TEXT
             );
 
             CREATE TABLE IF NOT EXISTS connection_requests (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 from_username TEXT NOT NULL,
                 to_username TEXT NOT NULL,
                 from_name TEXT NOT NULL,
                 from_color TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS connections (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 user_a TEXT NOT NULL,
                 user_b TEXT NOT NULL,
                 wallpaper TEXT,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(user_a, user_b)
             );
 
             CREATE TABLE IF NOT EXISTS notifications (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 owner_username TEXT NOT NULL,
                 from_username TEXT NOT NULL,
                 type TEXT NOT NULL,
                 message TEXT NOT NULL,
-                is_read ${dbType==='postgres' ? 'BOOLEAN DEFAULT FALSE' : 'BOOLEAN DEFAULT 0'},
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                is_read ${dbType === 'postgres' ? 'BOOLEAN DEFAULT FALSE' : 'BOOLEAN DEFAULT 0'},
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS stories (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 username TEXT NOT NULL,
                 media_url TEXT NOT NULL,
                 media_type TEXT DEFAULT 'image',
                 caption TEXT,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS story_views (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 story_id INTEGER NOT NULL,
                 viewer_username TEXT NOT NULL,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(story_id, viewer_username)
             );
 
             CREATE TABLE IF NOT EXISTS story_likes (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 story_id INTEGER NOT NULL,
                 liker_username TEXT NOT NULL,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 UNIQUE(story_id, liker_username)
             );
 
             CREATE TABLE IF NOT EXISTS blogs (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 title TEXT,
                 excerpt TEXT,
                 status TEXT DEFAULT 'Draft',
@@ -259,36 +259,36 @@ let pgPool;
             );
 
             CREATE TABLE IF NOT EXISTS audit_logs (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 action TEXT NOT NULL,
                 target TEXT,
                 admin_username TEXT NOT NULL,
                 details TEXT,
-                timestamp ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                timestamp ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS media_assets (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 url TEXT NOT NULL,
                 name TEXT NOT NULL,
                 size TEXT,
                 type TEXT,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS push_subscriptions (
-                id ${dbType==='postgres' ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${dbType==='postgres' ? '' : 'AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL' : 'INTEGER'} PRIMARY KEY ${dbType === 'postgres' ? '' : 'AUTOINCREMENT'},
                 username TEXT NOT NULL,
                 endpoint TEXT NOT NULL,
                 subscription TEXT NOT NULL,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
 
             CREATE TABLE IF NOT EXISTS offline_messages (
-                id ${dbType==='postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
                 username TEXT NOT NULL,
                 payload TEXT NOT NULL,
-                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
         `);
 
@@ -312,7 +312,7 @@ let pgPool;
                     await db.run("UPDATE users SET phone_hash = ? WHERE id = ?", [newHash, u.id]);
                 }
             }
-        } catch (e) { ((..._args) => {})("[MIGRATION] Phone re-hash failed:", e); }
+        } catch (e) { ((..._args) => { })("[MIGRATION] Phone re-hash failed:", e); }
 
         // SEED DATA
         const seedUsers = [
@@ -333,7 +333,7 @@ let pgPool;
                     const saltRounds = 10;
                     const hashed = await bcrypt.hash(user[3], saltRounds);
                     await db.run(
-                        'INSERT INTO users (full_name, email, username, password, color, role, phone_number, phone_hash, bio, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+                        'INSERT INTO users (full_name, email, username, password, color, role, phone_number, phone_hash, bio, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         [encryptField(user[0]), user[1], user[2], hashed, user[4], user[5], encryptField(user[6] || 'Not Set'), hashPhone(user[6]), 'The Private Chat Protocol', APP_LOGO_URL]
                     );
                 } else if (user[2] === 'Nexora_31') {
@@ -361,7 +361,7 @@ let pgPool;
             } catch (e) { /* already exists */ }
         }
 
-        ((..._args) => {})(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
+        ((..._args) => { })(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
     } catch (e) {
     }
 })();
@@ -425,9 +425,9 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
                     : undefined,
             })
         });
-        ((..._args) => {})("[FIREBASE] Admin SDK connected successfully.");
+        ((..._args) => { })("[FIREBASE] Admin SDK connected successfully.");
     } catch (e) {
-        ((..._args) => {})("[FIREBASE] Initialization error:", e.message);
+        ((..._args) => { })("[FIREBASE] Initialization error:", e.message);
     }
 }
 
@@ -443,9 +443,9 @@ const emailTransporter = nodemailer.createTransport({
 
 emailTransporter.verify((error, success) => {
     if (error) {
-        ((..._args) => {})("[SMTP] Core Communication Relay Failure:", error);
+        ((..._args) => { })("[SMTP] Core Communication Relay Failure:", error);
     } else {
-        ((..._args) => {})("[SMTP] Secure Mail Protocol Initialized.");
+        ((..._args) => { })("[SMTP] Secure Mail Protocol Initialized.");
     }
 });
 
@@ -487,10 +487,10 @@ async function nexoraMailProtocol(type, to, data) {
                 text: `Nexora Notice: Your request was processed.`,
                 html: customHtml
             });
-            ((..._args) => {})(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
+            ((..._args) => { })(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
             return true;
         } catch (err) {
-            ((..._args) => {})(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
+            ((..._args) => { })(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
             return false;
         }
     }
@@ -779,10 +779,10 @@ async function nexoraMailProtocol(type, to, data) {
             text: `Nexora Notice: Your request was processed. Please view the HTML version of this email to see your secure payload.`,
             html: html
         });
-        ((..._args) => {})(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
+        ((..._args) => { })(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
         return true;
     } catch (err) {
-        ((..._args) => {})(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
+        ((..._args) => { })(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
         return false;
     }
 }
@@ -807,9 +807,9 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
         VAPID_PUBLIC_KEY,
         VAPID_PRIVATE_KEY
     );
-    ((..._args) => {})('[PUSH] Web Push VAPID configured.');
+    ((..._args) => { })('[PUSH] Web Push VAPID configured.');
 } else {
-    ((..._args) => {})('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
+    ((..._args) => { })('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
 }
 
 // In-memory fallback just in case, but mostly relying on DB
@@ -821,7 +821,7 @@ async function sendPushNotification(username, payloadData) {
         const normalized = username.toLowerCase();
         // Fetch ALL registrations for this user to support multiple device push sync
         const rows = await db.all('SELECT subscription FROM push_subscriptions WHERE LOWER(username) = ?', [normalized]);
-        
+
         if (!rows || rows.length === 0) return;
 
         const payload = JSON.stringify(payloadData);
@@ -836,7 +836,7 @@ async function sendPushNotification(username, payloadData) {
                     try {
                         const subObj = JSON.parse(row.subscription);
                         await db.run('DELETE FROM push_subscriptions WHERE LOWER(username) = ? AND endpoint = ?', [normalized, subObj.endpoint]);
-                    } catch (cleanupErr) {}
+                    } catch (cleanupErr) { }
                 }
                 console.error('[PUSH] Device relay failed:', err.message);
             }
@@ -852,7 +852,7 @@ async function queueMessageForUser(username, msgData) {
     try {
         if (!db) { throw new Error("DB not attached"); }
         await db.run('INSERT INTO offline_messages (username, payload) VALUES (?, ?)', [username.toLowerCase(), JSON.stringify(msgData)]);
-    } catch(e) {
+    } catch (e) {
         console.error("Failed to queue offline message to DB, falling back to memory:", e);
         if (!offlineMessageQueue.has(username)) {
             offlineMessageQueue.set(username, []);
@@ -874,8 +874,8 @@ async function queueMessageForUser(username, msgData) {
     sendPushNotification(username, {
         title: pushTitle,
         body: pushBody,
-        icon: '/icon.svg',
-        badge: '/icon.svg',
+        icon: '/icon.png',
+        badge: '/badge.png',
         data: {
             from: msgData.from,
             ciphertext: msgData.ciphertext,
@@ -900,12 +900,12 @@ async function deliverQueuedMessages(username, socket) {
                     const msg = JSON.parse(row.payload);
                     const eventName = msg.isLocation ? 'dm:location' : msg.isPoll ? 'dm:poll' : msg.isContact ? 'dm:contact' : msg.isMedia ? 'dm:media' : 'dm:message';
                     // Attach the offline DB ID so clients can ack it
-                    msg.offlineDbId = row.id; 
+                    msg.offlineDbId = row.id;
                     socket.emit(eventName, msg);
-                } catch(e) {}
+                } catch (e) { }
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.error("Error fetching offline messages from DB:", e);
     }
 
@@ -947,7 +947,7 @@ let broadcastState = {
 async function sendNextBroadcastMessage(users, index, message) {
     if (!broadcastState.isRunning || index >= users.length) {
         broadcastState.isRunning = false;
-        ((..._args) => {})(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
+        ((..._args) => { })(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
         return;
     }
 
@@ -989,7 +989,7 @@ async function sendNextBroadcastMessage(users, index, message) {
         queueMessageForUser(targetId, payload);
         broadcastState.sent++;
     } catch (e) {
-        ((..._args) => {})(`[BROADCAST] Failed for ${targetId}:`, e.message);
+        ((..._args) => { })(`[BROADCAST] Failed for ${targetId}:`, e.message);
         broadcastState.failed++;
     }
 
@@ -998,17 +998,17 @@ async function sendNextBroadcastMessage(users, index, message) {
 }
 
 io.on('connection', (socket) => {
-    ((..._args) => {})(`[+] Node Connected: ${socket.id}`);
+    ((..._args) => { })(`[+] Node Connected: ${socket.id}`);
 
     // User registers their identity — Joins a private room for cross-device sync
     socket.on('register', (userId) => {
         if (!userId) return;
         const normalizedId = userId.toLowerCase();
         socketToUser.set(socket.id, normalizedId);
-        
+
         // Joining a room named after the userId allows us to emit to all of their devices
         socket.join(normalizedId);
-        ((..._args) => {})(`[+] Registered: ${normalizedId} → Channel Sync Active`);
+        ((..._args) => { })(`[+] Registered: ${normalizedId} → Channel Sync Active`);
 
         // 1. Broadcast online status to others
         socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
@@ -1032,10 +1032,10 @@ io.on('connection', (socket) => {
             if (typeof offlineDbId === 'number' || !isNaN(Number(offlineDbId))) {
                 try {
                     await db.run('DELETE FROM offline_messages WHERE id = ?', [offlineDbId]);
-                } catch(e) {
+                } catch (e) {
                     console.error("Ack error:", e);
                 }
-            } 
+            }
             // In case of memory mock ID, we don't need to do anything since memory queue is cleared on deliver.
         }
     });
@@ -1052,7 +1052,7 @@ io.on('connection', (socket) => {
 
         // 1. Relay to target user's devices
         io.to(targetId).emit('dm:message', enriched);
-        
+
         // 2. Always queue for background/offline delivery & push notification
         queueMessageForUser(targetId, enriched);
 
@@ -1070,7 +1070,7 @@ io.on('connection', (socket) => {
 
         // 1. Relay to target user's devices
         io.to(targetId).emit('dm:media', enriched);
-        
+
         // 2. Always queue for background/offline delivery & push notification
         queueMessageForUser(targetId, enriched);
 
@@ -1109,10 +1109,10 @@ io.on('connection', (socket) => {
             const u1 = senderId.toLowerCase();
             const u2 = data.to.toLowerCase();
             const [first, second] = [u1, u2].sort();
-            
+
             try {
                 await db.run('UPDATE connections SET wallpaper = ? WHERE user_a = ? AND user_b = ?', [data.wallpaper, first, second]);
-            } catch (e) { ((..._args) => {})("Wallpaper save error:", e); }
+            } catch (e) { ((..._args) => { })("Wallpaper save error:", e); }
 
             io.to(u2).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
             socket.to(senderId).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
@@ -1274,8 +1274,10 @@ io.on('connection', (socket) => {
             sendPushNotification(targetId, {
                 title: `Incoming Secret Call`,
                 body: `An encrypted call is incoming on Nexora 🔐`,
-                icon: '/icon.svg',
-                badge: '/icon.svg',
+                icon: '/icon.png',
+                badge: '/badge.png',
+                urgency: 'high',
+                data: { type: 'call' }
             });
         }
     });
@@ -1299,7 +1301,7 @@ io.on('connection', (socket) => {
     socket.on('create-room', ({ roomId, offer }) => {
         const senderId = socketToUser.get(socket.id);
         socket.join(roomId);
-        ((..._args) => {})(`[Call] Room Created: ${roomId} by ${senderId}`);
+        ((..._args) => { })(`[Call] Room Created: ${roomId} by ${senderId}`);
         // For direct calls, the 'to' is usually the user we are calling.
         // If roomId is used for signaling, we broadcast 'offer-received' to the other peer(s).
         // Since Nexora usually calls 1-on-1, 'roomId' is typically shared via another channel or known ID.
@@ -1309,7 +1311,7 @@ io.on('connection', (socket) => {
     socket.on('join-room', ({ roomId }) => {
         const senderId = socketToUser.get(socket.id);
         socket.join(roomId);
-        ((..._args) => {})(`[Call] Peer Joined: ${roomId} (${senderId})`);
+        ((..._args) => { })(`[Call] Peer Joined: ${roomId} (${senderId})`);
     });
 
     socket.on('send-answer', ({ roomId, answer }) => {
@@ -1336,9 +1338,9 @@ io.on('connection', (socket) => {
     socket.on('call:state-update', (data) => {
         const senderId = socketToUser.get(socket.id);
         if (senderId && data.to) {
-            io.to(data.to.toLowerCase()).emit('call:state-update', { 
-                from: senderId, 
-                state: data.state 
+            io.to(data.to.toLowerCase()).emit('call:state-update', {
+                from: senderId,
+                state: data.state
             });
         }
     });
@@ -1380,15 +1382,15 @@ io.on('connection', (socket) => {
         const userId = socketToUser.get(socket.id);
         if (userId) {
             socketToUser.delete(socket.id);
-            
+
             // Check if this was the last device for this user
             const userRoom = io.sockets.adapter.rooms.get(userId);
             if (!userRoom || userRoom.size === 0) {
-                 io.emit('user_status', { userId, status: 'offline' });
-                 ((..._args) => {})(`[-] Registered Identity Fully Logged Off: ${userId}`);
+                io.emit('user_status', { userId, status: 'offline' });
+                ((..._args) => { })(`[-] Registered Identity Fully Logged Off: ${userId}`);
             }
         }
-        ((..._args) => {})(`[-] Node Disconnected: ${socket.id}`);
+        ((..._args) => { })(`[-] Node Disconnected: ${socket.id}`);
     });
 });
 
@@ -1400,7 +1402,7 @@ app.get('/api/users/public/:username', async (req, res) => {
         const sql = dbType === 'postgres' ? 'SELECT * FROM users WHERE username = (CASE WHEN $1 LIKE \'%@%\' THEN (SELECT username FROM users WHERE email = $1) ELSE $1 END)' : 'SELECT * FROM users WHERE username = ? OR email = ?';
         const params = dbType === 'postgres' ? [username] : [username, username];
         const user = await db.get(sql, params);
-        
+
         if (!user) {
             return res.status(200).json({ error: "Node not found." }); // Return 200 with error to handle gracefully on UI
         }
@@ -1436,15 +1438,15 @@ app.post('/api/users/sync-contacts', async (req, res) => {
         const phoneToHash = {};
         const hashedContacts = [];
         for (const c of contacts) {
-             const h = hashPhone(c);
-             if (h) {
-                 hashedContacts.push(h);
-                 phoneToHash[h] = c;
-             }
+            const h = hashPhone(c);
+            if (h) {
+                hashedContacts.push(h);
+                phoneToHash[h] = c;
+            }
         }
 
         if (hashedContacts.length === 0) {
-             return res.json({ suggestions: [], registeredPhones: [] });
+            return res.json({ suggestions: [], registeredPhones: [] });
         }
 
         // 2. Fetch matched identities
@@ -1465,7 +1467,7 @@ app.post('/api/users/sync-contacts', async (req, res) => {
 
         res.json({ suggestions, registeredPhones });
     } catch (e) {
-        ((..._args) => {})("Contact Sync Protocol Error:", e);
+        ((..._args) => { })("Contact Sync Protocol Error:", e);
         res.status(500).json({ error: "Server sync failure." });
     }
 });
@@ -1486,23 +1488,23 @@ app.post('/api/auth/login', async (req, res) => {
 
             if (isMatch) {
                 // Send Login Alert (Non-blocking)
-                nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch((..._args) => {});
+                nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch((..._args) => { });
 
-                return res.json({ 
-                    status: "success", 
-                    role: user.role, 
-                    fullName: decryptField(user.full_name), 
-                    email: user.email, 
-                    username: user.username, 
-                    phoneNumber: decryptField(user.phone_number), 
-                    color: user.color, 
-                    message: "Identity recognized. Protocol access granted." 
+                return res.json({
+                    status: "success",
+                    role: user.role,
+                    fullName: decryptField(user.full_name),
+                    email: user.email,
+                    username: user.username,
+                    phoneNumber: decryptField(user.phone_number),
+                    color: user.color,
+                    message: "Identity recognized. Protocol access granted."
                 });
             }
         }
         res.status(401).json({ status: "error", message: "Authentication failed. Invalid identity." });
     } catch (err) {
-        ((..._args) => {})("Login Error:", err);
+        ((..._args) => { })("Login Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -1562,7 +1564,7 @@ app.post('/api/auth/recovery', async (req, res) => {
         await nexoraMailProtocol('otp', email, { otp: otp });
         res.json({ status: "success", message: "Recovery code transmitted to your email." });
     } catch (err) {
-        ((..._args) => {})("Recovery mail error:", err);
+        ((..._args) => { })("Recovery mail error:", err);
         res.status(500).json({ error: "Failed to transmit recovery code." });
     }
 });
@@ -1608,7 +1610,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
         otpStore.delete(email.toLowerCase()); // Clear OTP after use
         res.json({ status: "success", message: "Password reset successfully. Your identity is now secured." });
     } catch (err) {
-        ((..._args) => {})("Reset password error:", err);
+        ((..._args) => { })("Reset password error:", err);
         res.status(500).json({ error: "Failed to reset password." });
     }
 });
@@ -1627,11 +1629,11 @@ const COLORS = [
 
 app.post('/api/auth/signup', async (req, res) => {
     const { username, email, fullName, password, isAuthorized, phoneNumber } = req.body;
-    ((..._args) => {})(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
-    
+    ((..._args) => { })(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
+
     try {
         if (!db) {
-            ((..._args) => {})("[SIGNUP] Database Reference Missing Error: DB not ready");
+            ((..._args) => { })("[SIGNUP] Database Reference Missing Error: DB not ready");
             return res.status(500).json({ status: "error", error: "Database not ready" });
         }
 
@@ -1640,13 +1642,13 @@ app.post('/api/auth/signup', async (req, res) => {
 
         // 1. Check if username or email exists
         const existing = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [finalUsername.toLowerCase(), finalEmail]);
-        
+
         if (existing) {
             // If account exists, auto-login IF password matches
             const isMatch = await bcrypt.compare(password, existing.password).catch(() => password === existing.password);
-            
+
             if (isMatch) {
-                return res.json({ 
+                return res.json({
                     status: "success",
                     user: {
                         username: existing.username,
@@ -1669,7 +1671,7 @@ app.post('/api/auth/signup', async (req, res) => {
         const COLORS = ['#6c5ce7', '#a29bfe', '#00cec9', '#fab1a0', '#ff7675', '#fd79a8', '#fdcb6e'];
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
         const role = isAuthorized ? 'PendingAuthorized' : 'Standard';
-        
+
         await db.run(
             'INSERT INTO users (full_name, email, username, password, role, color, phone_number, phone_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [encryptField(fullName), finalEmail, finalUsername, hashedPassword, role, color, encryptField(phoneNumber || 'Not Set'), hashPhone(phoneNumber)]
@@ -1685,15 +1687,15 @@ app.post('/api/auth/signup', async (req, res) => {
         };
 
         // Attempt to send welcome email to ALL new users (Non-blocking)
-        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch((..._args) => {});
+        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch((..._args) => { });
 
-        res.status(201).json({ 
-            status: "success", 
+        res.status(201).json({
+            status: "success",
             user: newUser,
-            message: "User identity initialized." 
+            message: "User identity initialized."
         });
     } catch (err) {
-        ((..._args) => {})("Signup error details:", err);
+        ((..._args) => { })("Signup error details:", err);
         res.status(500).json({ status: "error", error: "Server Error: Failed to process signup." });
     }
 });
@@ -1788,7 +1790,7 @@ app.post('/api/admin/approve', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "User approved and welcome protocol deployed." });
     } catch (err) {
-        ((..._args) => {})("Approval error:", err);
+        ((..._args) => { })("Approval error:", err);
         res.status(500).json({ error: "Failed to process approval." });
     }
 });
@@ -1816,7 +1818,7 @@ app.post('/api/admin/test-mail', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "Test protocol transmitted successfully." });
     } catch (err) {
-        ((..._args) => {})("SMTP Test Error:", err);
+        ((..._args) => { })("SMTP Test Error:", err);
         res.status(500).json({ error: "SMTP Protocol Failure. Check node console for logs." });
     }
 });
@@ -1832,14 +1834,14 @@ app.post('/api/profile/request-email-change', async (req, res) => {
 
     try {
         if (!db) return res.status(500).json({ error: "Database not ready." });
-        
+
         // Check if new email is already taken
         const existing = await db.get('SELECT * FROM users WHERE LOWER(email) = ?', [newEmail.toLowerCase()]);
         if (existing) return res.status(400).json({ error: "This email is already linked to another account." });
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiry = Date.now() + 10 * 60 * 1000;
-        
+
         // Use a specialized context key so password reset and email change don't clash,
         // or just use newEmail as the key and store the context.
         otpStore.set(newEmail.toLowerCase() + "_change", { otp, expiry, verified: false, username });
@@ -1907,7 +1909,7 @@ app.post('/api/profile/request-email-change', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "OTP sent to new email." });
     } catch (err) {
-        ((..._args) => {})("Email update request error:", err);
+        ((..._args) => { })("Email update request error:", err);
         res.status(500).json({ error: "Failed to send OTP." });
     }
 });
@@ -1919,7 +1921,7 @@ app.post('/api/profile/verify-email-change', async (req, res) => {
 
     const key = newEmail.toLowerCase() + "_change";
     const record = otpStore.get(key);
-    
+
     if (!record || record.username !== username) {
         return res.status(400).json({ error: "Invalid request. Please request a new OTP." });
     }
@@ -1937,7 +1939,7 @@ app.post('/api/profile/verify-email-change', async (req, res) => {
         otpStore.delete(key);
         res.json({ status: "success", message: "Email updated successfully. Identity graph resynced." });
     } catch (err) {
-        ((..._args) => {})("Email update error:", err);
+        ((..._args) => { })("Email update error:", err);
         res.status(500).json({ error: "Failed to update email." });
     }
 });
@@ -1962,10 +1964,10 @@ app.post('/api/admin/config', async (req, res) => {
             const seoPath = path.join(__dirname, '../client/src/config/seo.json');
             // Read existing config and deep-merge so we never lose fields
             let existing = {};
-            try { existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8')); } catch {}
+            try { existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8')); } catch { }
             const merged = { ...existing, ...seo };
             fs.writeFileSync(seoPath, JSON.stringify(merged, null, 2), 'utf-8');
-            ((..._args) => {})('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
+            ((..._args) => { })('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
         }
         if (logoBase64) {
             const b64Data = logoBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -1977,7 +1979,7 @@ app.post('/api/admin/config', async (req, res) => {
         }
         res.json({ status: "success", message: "Configuration protocols deployed." });
     } catch (err) {
-        ((..._args) => {})('[ADMIN] Config error:', err);
+        ((..._args) => { })('[ADMIN] Config error:', err);
         res.status(500).json({ error: "Failed to deploy dynamic settings." });
     }
 });
@@ -1988,27 +1990,27 @@ app.post('/api/admin/config', async (req, res) => {
 app.post('/api/admin/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Missing identity credentials." });
-    
+
     try {
         if (!db) return res.status(500).json({ error: "Database not ready." });
         const adminUser = await db.get("SELECT * FROM users WHERE LOWER(email) = ? AND role = 'Admin'", [email.toLowerCase()]);
-        
+
         if (!adminUser) return res.status(401).json({ error: "Unrecognized administrative identity." });
-        
+
         const isMatch = await bcrypt.compare(password, adminUser.password);
         if (!isMatch) return res.status(401).json({ error: "Invalid access credentials." });
-        
+
         // Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiry = Date.now() + 10 * 60 * 1000;
         otpStore.set("admin_login_otp", { otp, expiry, email: email.toLowerCase() });
-        
+
         // Send OTP via SMTP
         await nexoraMailProtocol('otp', email, { otp });
-        
+
         return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP sent." });
     } catch (err) {
-        ((..._args) => {})("Admin Login Error:", err);
+        ((..._args) => { })("Admin Login Error:", err);
         res.status(500).json({ error: "Internal Authentication Failure." });
     }
 });
@@ -2016,7 +2018,7 @@ app.post('/api/admin/login', async (req, res) => {
 app.post('/api/admin/verify-login', async (req, res) => {
     const { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ error: "Missing verification payload." });
-    
+
     const record = otpStore.get("admin_login_otp");
     if (!record || record.email !== email.toLowerCase()) {
         return res.status(400).json({ error: "Invalid session. Please authenticate again." });
@@ -2028,7 +2030,7 @@ app.post('/api/admin/verify-login', async (req, res) => {
     if (record.otp !== otp.toString().trim()) {
         return res.status(400).json({ error: "Invalid verification segment." });
     }
-    
+
     otpStore.delete("admin_login_otp");
     res.json({ status: "success", message: "Admin authenticated." });
 });
@@ -2036,19 +2038,19 @@ app.post('/api/admin/verify-login', async (req, res) => {
 app.post('/api/admin/update-credentials', async (req, res) => {
     const { newEmail, newPassword } = req.body;
     if (!newEmail && !newPassword) return res.status(400).json({ error: "No update payload provided." });
-    
+
     try {
         if (!db) return res.status(500).json({ error: "Database not ready." });
-        
+
         // Ensure email isn't used by a non-admin
         if (newEmail) {
             const existing = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND role != 'Admin'", [newEmail.toLowerCase()]);
             if (existing) return res.status(400).json({ error: "Email is bound to a standard user account." });
         }
-        
+
         let querySegments = [];
         let params = [];
-        
+
         if (newEmail) {
             querySegments.push("email = ?");
             params.push(newEmail.toLowerCase());
@@ -2059,13 +2061,13 @@ app.post('/api/admin/update-credentials', async (req, res) => {
             querySegments.push("password = ?");
             params.push(hashedPassword);
         }
-        
+
         if (querySegments.length === 0) return res.json({ status: "success" });
-        
+
         await db.run(`UPDATE users SET ${querySegments.join(", ")} WHERE role = 'Admin'`, params);
         res.json({ status: "success", message: "Security credentials updated." });
     } catch (err) {
-        ((..._args) => {})("Admin Security Update Error:", err);
+        ((..._args) => { })("Admin Security Update Error:", err);
         res.status(500).json({ error: "Failed to deploy new security context." });
     }
 });
@@ -2139,7 +2141,7 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
             message: "Encrypted media stored securely."
         });
     } catch (err) {
-        ((..._args) => {})("Media upload error:", err);
+        ((..._args) => { })("Media upload error:", err);
         res.status(500).json({ error: "Failed to upload encrypted media." });
     }
 });
@@ -2178,11 +2180,11 @@ app.post('/api/push/subscribe', async (req, res) => {
         const subObj = typeof subscription === 'string' ? JSON.parse(subscription) : subscription;
         const endpoint = subObj.endpoint || 'unknown';
         const params = [username.toLowerCase(), endpoint, subStr];
-        const sql = dbType === 'postgres' 
+        const sql = dbType === 'postgres'
             ? 'INSERT INTO push_subscriptions (username, endpoint, subscription) VALUES ($1, $2, $3) ON CONFLICT (username, endpoint) DO UPDATE SET subscription = $3'
             : 'INSERT OR REPLACE INTO push_subscriptions (username, endpoint, subscription) VALUES (?, ?, ?)';
         await db.run(sql, params);
-        ((..._args) => {})(`[PUSH] Subscription persisted for: ${username}`);
+        ((..._args) => { })(`[PUSH] Subscription persisted for: ${username}`);
         res.json({ status: 'success', message: 'Push subscription registered.' });
     } catch (err) {
         res.status(500).json({ error: 'Database error while subscribing' });
@@ -2215,7 +2217,7 @@ app.get('/api/users/search', async (req, res) => {
 
     try {
         if (!db) return res.json({ users: [] });
-        ((..._args) => {})(`[SEARCH] Query: "${q}" by User: "${me}"`);
+        ((..._args) => { })(`[SEARCH] Query: "${q}" by User: "${me}"`);
         const users = await db.all(`
             SELECT username, full_name AS fullName, color, avatar_url AS avatarUrl
             FROM users 
@@ -2224,23 +2226,23 @@ app.get('/api/users/search', async (req, res) => {
             LIMIT 20
         `, [`%${q}%`, `%${q}%`, me]);
 
-        const mappedUsers = users.map(u => ({ 
-            ...u, 
+        const mappedUsers = users.map(u => ({
+            ...u,
             fullName: decryptField(u.fullName),
-            online: true 
+            online: true
         }));
         res.json({ users: mappedUsers });
     } catch (err) {
-        ((..._args) => {})("Search error:", err);
+        ((..._args) => { })("Search error:", err);
         res.status(500).json({ users: [] });
     }
 });
 
 // NEW: Zero-Knowledge Contact Sync (using pre-hashed phone numbers from client)
 app.post('/api/connections/sync', async (req, res) => {
-    const { hashes, username: me } = req.body; 
+    const { hashes, username: me } = req.body;
     if (!hashes || !Array.isArray(hashes)) return res.json({ matches: [] });
-    
+
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         if (hashes.length === 0) return res.json({ matches: [] });
@@ -2275,7 +2277,7 @@ app.post('/api/connections/sync', async (req, res) => {
 
         res.json({ matches: result });
     } catch (err) {
-        ((..._args) => {})("Connection Sync Error:", err);
+        ((..._args) => { })("Connection Sync Error:", err);
         res.status(500).json({ matches: [] });
     }
 });
@@ -2287,12 +2289,12 @@ app.get('/api/users/profile', async (req, res) => {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
         const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: "User not found" });
-        
+
         // Decrypt sensitive info for the client
         user.fullName = decryptField(user.fullName);
         user.phoneNumber = decryptField(user.phoneNumber);
         user.avatarUrl = decryptField(user.avatarUrl); // Decrypt avatar URL for UI
-        
+
         res.json({ user });
     } catch (err) {
         res.status(500).json({ error: "Server error" });
@@ -2308,7 +2310,7 @@ app.patch('/api/users/bio', async (req, res) => {
         await db.run('UPDATE users SET bio = ? WHERE LOWER(username) = LOWER(?)', [bio || null, username]);
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => {})("Bio update error:", err);
+        ((..._args) => { })("Bio update error:", err);
         res.status(500).json({ error: "Failed to update bio" });
     }
 });
@@ -2319,11 +2321,11 @@ app.post('/api/users/avatar', async (req, res) => {
     if (!username || !avatarBase64) return res.status(400).json({ error: "username and avatarBase64 required" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        
+
         // Encrypt profile picture URL/Base64 in database
         const encryptedAvatar = encryptField(avatarBase64);
         await db.run('UPDATE users SET avatar_url = ? WHERE LOWER(username) = LOWER(?)', [encryptedAvatar, username]);
-        
+
         // Broadcast the avatar update to all connected friends
         const connections = await db.all('SELECT user_a, user_b FROM connections WHERE user_a = LOWER(?) OR user_b = LOWER(?)', [username, username]);
         const friends = connections.map(c => c.user_a === username.toLowerCase() ? c.user_b : c.user_a);
@@ -2333,7 +2335,7 @@ app.post('/api/users/avatar', async (req, res) => {
 
         res.json({ status: "success", message: "Profile picture updated." });
     } catch (err) {
-        ((..._args) => {})("Avatar update error:", err);
+        ((..._args) => { })("Avatar update error:", err);
         res.status(500).json({ error: "Failed to update avatar." });
     }
 });
@@ -2410,7 +2412,7 @@ app.post('/api/connections/request', async (req, res) => {
         io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor });
         res.json({ status: 'sent' });
     } catch (err) {
-        ((..._args) => {})("Connection Request Error:", err);
+        ((..._args) => { })("Connection Request Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2427,10 +2429,10 @@ app.get('/api/connections/requests', async (req, res) => {
             LEFT JOIN users u ON LOWER(u.username) = LOWER(cr.from_username)
             WHERE LOWER(cr.to_username) = LOWER(?) AND cr.status = 'pending'
         `, [username]);
-        
+
         // Decrypt sender names if they were encrypted (older requests might be raw)
         const decryptedReqs = reqs.map(r => ({ ...r, fromName: decryptField(r.fromName) }));
-        
+
         // Format time
         const formatted = decryptedReqs.map(r => ({
             ...r,
@@ -2455,7 +2457,7 @@ app.get('/api/connections', async (req, res) => {
             FROM connections c
             WHERE c.user_a = ? OR c.user_b = ?
         `, [username, username, username]);
-        
+
         const enriched = [];
         for (const c of connectionsRows) {
             const peer = c.peer_username;
@@ -2561,7 +2563,7 @@ app.post('/api/connections/respond', async (req, res) => {
 
         res.json({ status: action === 'accept' ? 'accepted' : 'declined' });
     } catch (err) {
-        ((..._args) => {})("Respond Error:", err);
+        ((..._args) => { })("Respond Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2644,16 +2646,16 @@ app.get('/api/stories', async (req, res) => {
         `, [username, username, ...friends]);
 
         // Decrypt full_name, avatarUrl and media_url for each story before sending to client
-        const decrypted = stories.map(s => ({ 
-            ...s, 
+        const decrypted = stories.map(s => ({
+            ...s,
             name: decryptField(s.name),
             avatarUrl: decryptField(s.avatarUrl),
-            media_url: decryptField(s.media_url) 
+            media_url: decryptField(s.media_url)
         }));
 
         res.json({ stories: decrypted });
     } catch (err) {
-        ((..._args) => {})("Fetch Stories Error:", err);
+        ((..._args) => { })("Fetch Stories Error:", err);
         res.status(500).json({ stories: [] });
     }
 });
@@ -2664,16 +2666,16 @@ app.post('/api/stories', async (req, res) => {
     if (!username || !mediaUrl) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        
+
         // Encrypt story media URL so nobody can see it from DB raw view
         const encryptedMediaUrl = encryptField(mediaUrl);
 
-        await db.run('INSERT INTO stories (username, media_url, media_type, caption) VALUES (?, ?, ?, ?)', 
+        await db.run('INSERT INTO stories (username, media_url, media_type, caption) VALUES (?, ?, ?, ?)',
             [username.toLowerCase(), encryptedMediaUrl, mediaType || 'image', caption || '']);
-        
+
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => {})("Post Story Error:", err);
+        ((..._args) => { })("Post Story Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2691,7 +2693,7 @@ app.post('/api/stories/view', async (req, res) => {
         }
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => {})("Story View Error:", err);
+        ((..._args) => { })("Story View Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2712,7 +2714,7 @@ app.post('/api/stories/like', async (req, res) => {
             await db.run('DELETE FROM story_likes WHERE story_id = ? AND liker_username = ?', [storyId, sender]);
         } else {
             await db.run('INSERT INTO story_likes (story_id, liker_username) VALUES (?, ?)', [storyId, sender]);
-            
+
             // IG LIKE FEATURE: Send heart to chat and notification
             const likePayload = {
                 to: receiver,
@@ -2727,7 +2729,7 @@ app.post('/api/stories/like', async (req, res) => {
             // Notify Receiver's room
             io.to(receiver).emit('new_notification', { type: 'story_like', message: `Liked your story.`, from_username: sender });
             io.to(receiver).emit('dm:message', likePayload);
-            
+
             // Sync to Sender's other devices
             io.to(sender).emit('dm:message', { ...likePayload, text: `You liked ${receiver}'s story` });
 
@@ -2738,12 +2740,12 @@ app.post('/api/stories/like', async (req, res) => {
                     title: `${username} liked your story`,
                     body: "❤️",
                     icon: '/icon.svg'
-                })).catch((..._args) => {});
+                })).catch((..._args) => { });
             }
         }
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => {})("Story Like Error:", err);
+        ((..._args) => { })("Story Like Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2754,7 +2756,7 @@ app.post('/api/stories/reply', async (req, res) => {
     if (!storyId || !username || !targetUsername || !message) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        
+
         const sender = username.toLowerCase();
         const receiver = targetUsername.toLowerCase();
 
@@ -2763,7 +2765,7 @@ app.post('/api/stories/reply', async (req, res) => {
             'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
             [receiver, sender, 'story_reply', `Replied to your story: "${message}"`]
         );
-        
+
         // 2. Determine if we should also send it as a socket DM message
         // Since Nexora is E2E, we emit a 'dm:message' but note it's from a story
         const storyRelayPayload = {
@@ -2781,7 +2783,7 @@ app.post('/api/stories/reply', async (req, res) => {
         // 3. Notify via socket (Identity-based relay ensures all user devices receive)
         io.to(receiver).emit('new_notification', { type: 'story_reply', message: `Replied to your story: "${message}"`, from_username: sender });
         io.to(receiver).emit('dm:message', storyRelayPayload);
-        
+
         // Also sync back to sender's other devices
         io.to(sender).emit('dm:message', storyRelayPayload);
 
@@ -2794,7 +2796,7 @@ app.post('/api/stories/reply', async (req, res) => {
 
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => {})("Story Reply Error:", err);
+        ((..._args) => { })("Story Reply Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -2805,13 +2807,13 @@ app.get('/api/stories/stats', async (req, res) => {
     if (!storyId) return res.status(400).json({ error: "Missing storyId" });
     try {
         if (!db) return res.status(500).json({ views: [], likes: [] });
-        
+
         const views = await db.all(`
             SELECT u.username, u.full_name as name, u.color 
             FROM story_views sv JOIN users u ON LOWER(sv.viewer_username) = LOWER(u.username) 
             WHERE sv.story_id = ? ORDER BY sv.created_at DESC
         `, [storyId]);
-        
+
         const likes = await db.all(`
             SELECT u.username, u.full_name as name, u.color 
             FROM story_likes sl JOIN users u ON LOWER(sl.liker_username) = LOWER(u.username) 
@@ -2824,7 +2826,7 @@ app.get('/api/stories/stats', async (req, res) => {
 
         res.json({ views: decryptedViews, likes: decryptedLikes });
     } catch (err) {
-        ((..._args) => {})("Story Stats Error:", err);
+        ((..._args) => { })("Story Stats Error:", err);
         res.status(500).json({ views: [], likes: [] });
     }
 });
@@ -2861,7 +2863,7 @@ async function logAdminAction(admin_username, action, target, details) {
             [action, target, admin_username, details || '']
         );
     } catch (err) {
-        ((..._args) => {})("[AUDIT] Log failed:", err);
+        ((..._args) => { })("[AUDIT] Log failed:", err);
     }
 }
 
@@ -2873,29 +2875,29 @@ app.post('/api/admin/broadcast', async (req, res) => {
     try {
         if (!db) return res.status(503).json({ error: "Database initializing" });
         const users = await db.all('SELECT email, username FROM users');
-        
+
         let sent = 0;
         let failed = 0;
 
         // Background loop to prevent blocking (admin gets immediate success)
         (async () => {
-             for (const u of users) {
-                 try {
-                     await emailTransporter.sendMail({
-                         from: `"${process.env.GMAIL_NAME || 'Nexora Admin'}" <${process.env.GMAIL_USER}>`,
-                         to: u.email,
-                         subject: subject,
-                         html: html.split('{{username}}').join(u.username)
-                     });
-                     sent++;
-                     // Small delay to prevent SMTP throttling
-                     await new Promise(r => setTimeout(r, 500)); 
-                 } catch (e) {
-                     failed++;
-                     ((..._args) => {})(`[BROADCAST] Failed to ${u.email}:`, e.message);
-                 }
-             }
-             logAdminAction('ADMIN', 'EMAIL_BROADCAST', 'ALL_USERS', `Sent: ${sent}, Failed: ${failed}`);
+            for (const u of users) {
+                try {
+                    await emailTransporter.sendMail({
+                        from: `"${process.env.GMAIL_NAME || 'Nexora Admin'}" <${process.env.GMAIL_USER}>`,
+                        to: u.email,
+                        subject: subject,
+                        html: html.split('{{username}}').join(u.username)
+                    });
+                    sent++;
+                    // Small delay to prevent SMTP throttling
+                    await new Promise(r => setTimeout(r, 500));
+                } catch (e) {
+                    failed++;
+                    ((..._args) => { })(`[BROADCAST] Failed to ${u.email}:`, e.message);
+                }
+            }
+            logAdminAction('ADMIN', 'EMAIL_BROADCAST', 'ALL_USERS', `Sent: ${sent}, Failed: ${failed}`);
         })();
 
         res.json({ status: "success", message: "Broadcast sequence initialized.", total: users.length });
@@ -2908,17 +2910,17 @@ app.post('/api/admin/broadcast', async (req, res) => {
 app.get('/api/admin/analytics', async (req, res) => {
     try {
         if (!db) return res.status(503).json({ error: "DB initializing" });
-        
+
         // Signups over last 30 days
-        const growthSql = dbType === 'postgres' 
+        const growthSql = dbType === 'postgres'
             ? "SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY date ASC"
             : "SELECT date(created_at) as date, COUNT(*) as count FROM users WHERE created_at > date('now', '-30 days') GROUP BY date(created_at) ORDER BY date ASC";
-        
+
         const growth = await db.all(growthSql);
-        
+
         // Distribution of user roles
         const roles = await db.all("SELECT role, COUNT(*) as count FROM users GROUP BY role");
-        
+
         res.json({ growth, roles });
     } catch (err) {
         res.status(500).json({ error: "Failed to fetch analytics" });
@@ -2988,7 +2990,7 @@ app.get('/api/admin/stats', async (req, res) => {
             onlineUsers: onlineCount
         });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Stats error:", err);
+        ((..._args) => { })("[ADMIN] Stats error:", err);
         res.status(500).json({ error: "Failed to fetch stats" });
     }
 });
@@ -3014,7 +3016,7 @@ app.get('/api/admin/users', async (req, res) => {
         }));
         res.json({ users: decrypted });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Users list error:", err);
+        ((..._args) => { })("[ADMIN] Users list error:", err);
         res.status(500).json({ error: "Failed to fetch users" });
     }
 });
@@ -3029,7 +3031,7 @@ app.patch('/api/admin/users/:username/role', async (req, res) => {
         await db.run('UPDATE users SET role = ? WHERE LOWER(username) = LOWER(?)', [role, username]);
         res.json({ status: "success", message: `Role updated to ${role} for @${username}` });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Role update error:", err);
+        ((..._args) => { })("[ADMIN] Role update error:", err);
         res.status(500).json({ error: "Failed to update role" });
     }
 });
@@ -3044,7 +3046,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
         await db.run('UPDATE users SET status = ? WHERE LOWER(username) = LOWER(?)', [status, username]);
         res.json({ status: "success", message: `Status updated to ${status} for @${username}` });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Status update error:", err);
+        ((..._args) => { })("[ADMIN] Status update error:", err);
         res.status(500).json({ error: "Failed to update status" });
     }
 });
@@ -3072,7 +3074,7 @@ app.delete('/api/admin/users/:username', async (req, res) => {
         await db.run('DELETE FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         res.json({ status: "success", message: `User @${username} and all associated data deleted.` });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] User delete error:", err);
+        ((..._args) => { })("[ADMIN] User delete error:", err);
         res.status(500).json({ error: "Failed to delete user" });
     }
 });
@@ -3088,7 +3090,7 @@ app.patch('/api/admin/users/:username/password', async (req, res) => {
         await db.run('UPDATE users SET password = ? WHERE LOWER(username) = LOWER(?)', [hashed, username]);
         res.json({ status: "success", message: `Password reset for @${username}` });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Password reset error:", err);
+        ((..._args) => { })("[ADMIN] Password reset error:", err);
         res.status(500).json({ error: "Failed to reset password" });
     }
 });
@@ -3149,7 +3151,7 @@ app.put('/api/admin/email-templates/:type', (req, res) => {
     if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required" });
 
     emailTemplateOverrides.set(type, { subject, html });
-    ((..._args) => {})(`[ADMIN] Email template '${type}' customized.`);
+    ((..._args) => { })(`[ADMIN] Email template '${type}' customized.`);
     res.json({ status: "success", message: `Template '${type}' updated successfully.` });
 });
 
@@ -3157,7 +3159,7 @@ app.put('/api/admin/email-templates/:type', (req, res) => {
 app.delete('/api/admin/email-templates/:type', (req, res) => {
     const { type } = req.params;
     emailTemplateOverrides.delete(type);
-    ((..._args) => {})(`[ADMIN] Email template '${type}' reset to default.`);
+    ((..._args) => { })(`[ADMIN] Email template '${type}' reset to default.`);
     res.json({ status: "success", message: `Template '${type}' reset to default.` });
 });
 
@@ -3181,7 +3183,7 @@ app.get('/api/admin/connections', async (req, res) => {
         }));
         res.json({ connections: decrypted });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Connections list error:", err);
+        ((..._args) => { })("[ADMIN] Connections list error:", err);
         res.status(500).json({ error: "Failed to fetch connections" });
     }
 });
@@ -3194,7 +3196,7 @@ app.delete('/api/admin/connections/:id', async (req, res) => {
         await db.run('DELETE FROM connections WHERE id = ?', [id]);
         res.json({ status: "success", message: "Connection removed." });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Connection delete error:", err);
+        ((..._args) => { })("[ADMIN] Connection delete error:", err);
         res.status(500).json({ error: "Failed to remove connection" });
     }
 });
@@ -3208,7 +3210,7 @@ app.post('/api/admin/broadcast-chat', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         const allUsers = await db.all('SELECT username FROM users WHERE LOWER(username) != ? AND LOWER(username) != ?', ['nexora_31', 'me']);
-        
+
         broadcastState = {
             isRunning: true,
             total: allUsers.length,
@@ -3218,13 +3220,13 @@ app.post('/api/admin/broadcast-chat', async (req, res) => {
             lastMessage: message
         };
 
-        ((..._args) => {})(`[BROADCAST] Starting for ${allUsers.length} users...`);
+        ((..._args) => { })(`[BROADCAST] Starting for ${allUsers.length} users...`);
         // Trigger background loop
         sendNextBroadcastMessage(allUsers, 0, message);
 
         res.json({ status: "success", message: "Broadcast sequence initiated.", total: allUsers.length });
     } catch (err) {
-        ((..._args) => {})("[ADMIN] Chat broadcast error:", err);
+        ((..._args) => { })("[ADMIN] Chat broadcast error:", err);
         res.status(500).json({ error: "Failed to initialize broadcast" });
     }
 });
@@ -3251,7 +3253,7 @@ app.get('/api/blogs', async (req, res) => {
         const blogs = await db.all('SELECT * FROM blogs ORDER BY id DESC');
         res.json({ blogs });
     } catch (err) {
-        ((..._args) => {})("[BLOGS] Fetch error:", err);
+        ((..._args) => { })("[BLOGS] Fetch error:", err);
         res.status(500).json({ error: "Failed to fetch blogs" });
     }
 });
@@ -3260,7 +3262,7 @@ app.get('/api/blogs', async (req, res) => {
 app.post('/api/blogs', async (req, res) => {
     const { blogs } = req.body;
     if (!blogs || !Array.isArray(blogs)) return res.status(400).json({ error: "Invalid blogs data" });
-    
+
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         await db.run('DELETE FROM blogs');
@@ -3272,7 +3274,7 @@ app.post('/api/blogs', async (req, res) => {
         }
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => {})("[BLOGS] Save error:", err);
+        ((..._args) => { })("[BLOGS] Save error:", err);
         res.status(500).json({ error: "Failed to save blogs" });
     }
 });
@@ -3284,20 +3286,20 @@ Sentry.setupExpressErrorHandler(app);
 // ------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    ((..._args) => {})(`[SERVER] Nexora Core operational on port ${PORT}`);
-    ((..._args) => {})(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
-    
+    ((..._args) => { })(`[SERVER] Nexora Core operational on port ${PORT}`);
+    ((..._args) => { })(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
+
     // --- Render Anti-Sleep Mechanism ---
     // Pings its own public URL every 10 minutes (600,000 ms) to prevent sleeping
     const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
     if (selfUrl.includes('onrender')) {
-        ((..._args) => {})(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
+        ((..._args) => { })(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
         setInterval(() => {
             const lib = selfUrl.startsWith('https') ? require('https') : require('http');
             lib.get(selfUrl, (res) => {
-                ((..._args) => {})(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
+                ((..._args) => { })(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
             }).on("error", (err) => {
-                ((..._args) => {})(`[ANTI-SLEEP] Ping Failed:`, err.message);
+                ((..._args) => { })(`[ANTI-SLEEP] Ping Failed:`, err.message);
             });
         }, 10 * 60 * 1000); // 10 minutes
     }
