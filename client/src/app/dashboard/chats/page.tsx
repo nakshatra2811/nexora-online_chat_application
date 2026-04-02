@@ -179,6 +179,8 @@ function ChatsPageContent() {
 
 
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
   const [showPollCreator, setShowPollCreator] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
@@ -1941,6 +1943,77 @@ function ChatsPageContent() {
     e.target.value = "";
   };
 
+  // ═══ Drag & Drop File Share ═══
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    if (!activeThread || !cryptoKey) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const fileDataUrl = reader.result as string;
+        const msgId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const timestamp = formatToIndianTime();
+        const isImage = file.type.startsWith("image/");
+
+        const attachment = { name: file.name, type: file.type, url: fileDataUrl, size: file.size };
+        const msg: ChatMessage = {
+          id: msgId,
+          senderId: myUsernameRef.current,
+          text: isImage ? "" : `📎 ${file.name}`,
+          timestamp,
+          createdAt: Date.now(),
+          isSelf: true,
+          status: "delivered",
+          reactions: {},
+          attachment,
+        };
+
+        setMessages(prev => [...prev, msg]);
+        bumpThread(activeThread.username, { preview: msg.text || "📎 File", lastMessageTime: Date.now() });
+
+        const socket = socketService.getSocket();
+        if (socket && activeThread?.username) {
+          socket.emit("dm:media", {
+            to: activeThread.username,
+            from: myUsernameRef.current,
+            attachment,
+            msgId,
+            timestamp,
+            caption: msg.text,
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+    if (!activeThread) return;
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+
+  // keep the placeholder — original closing brace stays below
+  };
+
   const handleCameraCapture = () => {
     setShowAttachMenu(false);
     startCameraView();
@@ -2854,11 +2927,71 @@ function ChatsPageContent() {
 
       {/* ═══ ACTIVE CHAT ═══ */}
       {activeThread ? (
-        <div className="flex-1 flex flex-col min-w-0 max-h-full min-h-0 overflow-hidden relative animate-in fade-in slide-in-from-right-4 duration-500"
+        <div
+          className="flex-1 flex flex-col min-w-0 max-h-full min-h-0 overflow-hidden relative animate-in fade-in slide-in-from-right-4 duration-500"
           style={{
             background: chatWallpaper ? "transparent" : "var(--bg-base)",
             ...(chatWallpaper ? { backgroundImage: `url(${chatWallpaper})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "local" } : {})
-          }}>
+          }}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleFileDrop}
+        >
+          {/* ═══ DRAG & DROP OVERLAY ═══ */}
+          <AnimatePresence>
+            {isDragging && (
+              <motion.div
+                key="drag-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="absolute inset-0 z-[500] flex flex-col items-center justify-center pointer-events-none"
+                style={{
+                  background: isDark
+                    ? "rgba(10,10,20,0.88)"
+                    : "rgba(240,240,255,0.92)",
+                  backdropFilter: "blur(20px)",
+                  border: "2px dashed rgba(108,92,231,0.6)",
+                }}
+              >
+                <motion.div
+                  animate={{ scale: [1, 1.06, 1] }}
+                  transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+                  className="w-24 h-24 rounded-[2rem] flex items-center justify-center mb-6 shadow-2xl"
+                  style={{
+                    background: "linear-gradient(135deg,#6c5ce7,#00d4ff)",
+                    boxShadow: "0 0 60px rgba(108,92,231,0.5), 0 0 120px rgba(0,212,255,0.2)",
+                  }}
+                >
+                  <Upload className="w-10 h-10 text-white" strokeWidth={1.5} />
+                </motion.div>
+                <h2
+                  className="text-2xl font-black tracking-tight mb-2"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  Drop to Share
+                </h2>
+                <p
+                  className="text-sm font-semibold opacity-50"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Images, videos, docs & more — encrypted & sent instantly
+                </p>
+                <div
+                  className="mt-6 px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest"
+                  style={{
+                    background: "rgba(108,92,231,0.15)",
+                    border: "1px solid rgba(108,92,231,0.3)",
+                    color: "#6c5ce7",
+                  }}
+                >
+                  Release to Upload
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Chat Header */}
           <div className="sticky top-0 px-4 md:px-6 py-2 flex items-center justify-between border-b z-40 shrink-0 backdrop-blur-xl"

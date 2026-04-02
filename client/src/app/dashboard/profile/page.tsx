@@ -773,15 +773,19 @@ export default function ProfilePage() {
                     className="group flex items-center justify-between p-4 rounded-2xl transition-all"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
                     <div className="flex items-center gap-4">
-                      <Avatar 
-                        src={friend.avatarUrl || friend.avatar_url} 
-                        name={friend.name} 
-                        color={friend.color} 
-                        size={48} 
-                        animate={true}
-                        status={friend.online ? 'online' : 'offline'}
-                        className="shadow-md shrink-0"
-                      />
+                      <div className="relative">
+                        <Avatar 
+                          src={friend.avatarUrl || friend.avatar_url} 
+                          name={friend.name} 
+                          color={friend.color} 
+                          size={48} 
+                          animate={true}
+                          className="shadow-md shrink-0"
+                        />
+                        {friend.online && (
+                          <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow border-[2.5px] border-white dark:border-[#161622]" />
+                        )}
+                      </div>
                       <div>
                         <h4 className="font-bold transition-colors truncate max-w-[120px] sm:max-w-none" style={{ color: "var(--text-primary)" }}>{friend.name}</h4>
                         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{friend.preview}</p>
