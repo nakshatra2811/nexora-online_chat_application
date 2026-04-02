@@ -773,7 +773,7 @@ function ChatsPageContent() {
     if (lockedChatsMap[thread.id] && !unlockedSessionThreads.includes(thread.id)) {
       setChatLockEntry({ threadId: thread.id, error: "", pin: "", showPin: false, forgotMode: false, forgotError: "" });
     } else {
-      router.push(`?u=${thread.username}`, { scroll: false });
+      router.push(`/dashboard/chats?u=${thread.username}`, { scroll: false });
     }
   };
 
@@ -783,7 +783,7 @@ function ChatsPageContent() {
     if (chatLockEntry.pin === correctPin) {
       setUnlockedSessionThreads(prev => [...prev, chatLockEntry.threadId]);
       const found = threads.find(t => t.id === chatLockEntry.threadId);
-      if (found) router.push(`?u=${found.username}`, { scroll: false });
+      if (found) router.push(`/dashboard/chats?u=${found.username}`, { scroll: false });
       setChatLockEntry(null);
     } else {
       setChatLockEntry(prev => prev ? { ...prev, error: "Incorrect PIN", pin: "" } : null);
@@ -2779,7 +2779,7 @@ function ChatsPageContent() {
               {activeThread ? (
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
-                    onClick={() => router.push("/dashboard/chats", { scroll: false })}
+                    onClick={() => window.history.length > 2 ? router.back() : router.replace("/dashboard/chats", { scroll: false })}
                     className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
