@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Edit3, Camera, Shield, Zap, MapPin, Network, Link2, UserCheck, X,
@@ -18,6 +19,7 @@ const MOCK_CONTACTS: any[] = [];
 
 /* ─── Contacts Modal ─── */
 function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boolean }) {
+  const router = useRouter();
   const [contacts, setContacts] = useState(MOCK_CONTACTS);
   const [search, setSearch] = useState("");
 
@@ -111,7 +113,7 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
               </div>
               {contact.isUser ? (
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
-                  onClick={() => window.location.href = '/dashboard/chats'}
+                  onClick={() => router.push('/dashboard/chats')}
                   className="px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
                   style={{
                     background: "rgba(108,92,231,0.15)",
@@ -148,6 +150,7 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
 
 /* ─── Main Profile Page ─── */
 export default function ProfilePage() {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [userRole, setUserRole] = useState("Standard Account");
   const [profile, setProfile] = useState({

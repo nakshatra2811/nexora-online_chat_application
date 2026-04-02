@@ -2622,7 +2622,7 @@ function ChatsPageContent() {
           {/* Online Users Horizontal Scroll */}
           <div className="flex gap-3 overflow-x-auto pb-4 pt-1 px-1 mb-2 no-scrollbar" style={{ WebkitOverflowScrolling: "touch" }}>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={() => { window.location.href = '/dashboard/stories?user=me'; }}
+                onClick={() => { router.push('/dashboard/stories?user=me'); }}
                 className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                 <div className="relative">
                 <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
@@ -2631,7 +2631,7 @@ function ChatsPageContent() {
                 </div>
                 <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center cursor-pointer"
                     style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}
-                    onClick={(e) => { e.stopPropagation(); window.location.href = '/dashboard/stories?action=camera'; }}>
+                    onClick={(e) => { e.stopPropagation(); router.push('/dashboard/stories?action=camera'); }}>
                     <Plus className="w-3 h-3 text-white font-bold" />
                 </div>
                 {myStories.length > 0 && (
@@ -2659,7 +2659,7 @@ function ChatsPageContent() {
               
               return (
                 <motion.div key={user.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  onClick={() => hasStory ? (window.location.href = `/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
+                  onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                   <div className="relative">
                     <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
@@ -2753,7 +2753,8 @@ function ChatsPageContent() {
                 onClick={() => {
                   if(confirm("Logout from current session?")) {
                     localStorage.clear();
-                    window.location.href = "/auth";
+                    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
+                    router.push("/auth");
                   }
                 }}
                 className="w-8 h-8 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">

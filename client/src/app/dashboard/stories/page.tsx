@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical, RefreshCcw } from "lucide-react";
 import { useTheme } from "@/lib/theme";
@@ -25,6 +26,7 @@ const getTimeAgo = (dateStr: string, currentTime: number) => {
 };
 
 export default function StoriesPage() {
+  const router = useRouter();
   const { isDark } = useTheme();
   const [activeStory, setActiveStory] = useState<any | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -1312,7 +1314,7 @@ export default function StoriesPage() {
                     <motion.button 
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
                       onClick={() => { 
-                         window.location.href = `/dashboard/chats?u=${selectedProfileUser.username}`;
+                         router.push(`/dashboard/chats?u=${selectedProfileUser.username}`);
                       }}
                       className="flex-1 py-4.5 rounded-[28px] bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
                       style={{ color: "var(--text-primary)" }}
