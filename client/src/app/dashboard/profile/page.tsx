@@ -13,6 +13,7 @@ import { socketService } from "@/lib/socket";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
 import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, SnapchatIcon, TwitterIcon } from "@/components/SocialIcons";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
+import { Avatar } from "@/components/Avatar";
 
 /* ─── Mock contacts (Fallback for Web/Desktop) ─── */
 const MOCK_CONTACTS: any[] = [
@@ -188,9 +189,13 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
               className="flex items-center justify-between p-3.5 rounded-2xl"
               style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)", border: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${contact.color} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
-                  {contact.avatar}
-                </div>
+                <Avatar 
+                  name={contact.name} 
+                  color={contact.color} 
+                  size={40} 
+                  animate={false}
+                  showBorder={false}
+                />
                 <div>
                   <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{contact.name}</p>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>{contact.phone}</p>
@@ -564,18 +569,15 @@ export default function ProfilePage() {
             </div>
 
             {/* Avatar */}
-            <div className="relative mb-5">
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange} />
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white text-4xl font-extrabold shadow-xl border-4 overflow-hidden relative"
-                style={{ borderColor: "var(--bg-surface-solid)" }}>
-                {isUploadingAvatar ? (
-                   <span className="text-sm font-semibold animate-pulse">Wait...</span>
-                ) : profile.avatarUrl ? (
-                   <img src={profile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                   (profile.name?.[0] || 'N').toUpperCase()
-                )}
-              </div>
+              <div className="relative mb-5 group/avatar">
+                <Avatar 
+                  src={profile.avatarUrl} 
+                  name={profile.name} 
+                  color="from-[#6c5ce7] to-[#00d4ff]" 
+                  size={112} 
+                  animate={true}
+                  className="shadow-xl ring-4 ring-[var(--bg-surface-solid)]"
+                />
               <button onClick={() => fileInputRef.current?.click()} className="absolute bottom-1 right-1 p-2 rounded-full shadow-lg border hover:scale-110 transition-transform cursor-pointer z-10"
                 style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)", color: "#6c5ce7" }}>
                 <Camera className="w-4 h-4" />
@@ -771,11 +773,15 @@ export default function ProfilePage() {
                     className="group flex items-center justify-between p-4 rounded-2xl transition-all"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
                     <div className="flex items-center gap-4">
-                      <div className={`relative w-12 h-12 rounded-full bg-gradient-to-tr ${friend.color} flex justify-center items-center text-white font-bold text-lg shadow-md shrink-0`}>
-                        {friend.name[0]}
-                        <div className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${friend.online ? "bg-[#2ed573]" : "bg-gray-400"}`}
-                          style={{ borderColor: "var(--bg-card)" }} />
-                      </div>
+                      <Avatar 
+                        src={friend.avatarUrl || friend.avatar_url} 
+                        name={friend.name} 
+                        color={friend.color} 
+                        size={48} 
+                        animate={true}
+                        status={friend.online ? 'online' : 'offline'}
+                        className="shadow-md shrink-0"
+                      />
                       <div>
                         <h4 className="font-bold transition-colors truncate max-w-[120px] sm:max-w-none" style={{ color: "var(--text-primary)" }}>{friend.name}</h4>
                         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{friend.preview}</p>
@@ -834,9 +840,14 @@ export default function ProfilePage() {
                     className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl gap-4"
                     style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.03)", border: "1px solid var(--border-subtle)" }}>
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${req.fromColor?.includes('from-') ? req.fromColor : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-white font-black text-lg shadow-md border-2 border-white dark:border-[#161622]`}>
-                        {(req.fromName?.[0] || req.from?.[0] || "?").toUpperCase()}
-                      </div>
+                      <Avatar 
+                        src={req.fromAvatar || req.avatar_url} 
+                        name={req.fromName || req.from} 
+                        color={req.fromColor} 
+                        size={48} 
+                        animate={true}
+                        className="shadow-md border-2 border-white dark:border-[#161622]"
+                      />
                       <div>
                         <h4 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>@{req.from}</h4>
                         <p className="text-xs opacity-60 font-medium" style={{ color: "var(--text-muted)" }}>{req.fromName || "Sent a request"}</p>
@@ -890,9 +901,14 @@ export default function ProfilePage() {
                     className="flex items-center justify-between p-4 rounded-2xl"
                     style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${req.color?.includes('from-') ? req.color : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
-                        {(req.name?.[0] || "?").toUpperCase()}
-                      </div>
+                      <Avatar 
+                        src={req.avatarUrl || req.avatar_url} 
+                        name={req.name} 
+                        color={req.color} 
+                        size={40} 
+                        animate={false}
+                        className="shadow-sm"
+                      />
                       <div>
                         <h4 className="font-bold text-sm truncate max-w-[100px] sm:max-w-none" style={{ color: "var(--text-primary)" }}>{req.name}</h4>
                         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{req.time}</p>
@@ -935,9 +951,14 @@ export default function ProfilePage() {
                       className="flex items-center justify-between p-4 rounded-2xl group transition-all"
                       style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${user.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-white font-bold text-sm shadow-sm opacity-50 grayscale`}>
-                          {(user.name?.[0] || "?").toUpperCase()}
-                        </div>
+                        <Avatar 
+                          src={user.avatarUrl || user.avatar_url} 
+                          name={user.name} 
+                          color={user.color} 
+                          size={40} 
+                          animate={false}
+                          className="shadow-sm opacity-50 grayscale"
+                        />
                         <div>
                           <h4 className="font-bold text-sm text-[var(--text-primary)] opacity-70">{user.name}</h4>
                           <p className="text-[10px] uppercase tracking-widest font-bold text-red-500/80">Restricted</p>

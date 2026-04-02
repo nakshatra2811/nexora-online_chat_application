@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical, RefreshCcw } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
+import { Avatar } from "@/components/Avatar";
 
 const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
 
@@ -800,11 +801,14 @@ export default function StoriesPage() {
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#f0f0f0", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
 
-                  {currentUser?.avatarUrl ? (
-                    <img src={currentUser.avatarUrl} alt="Your story" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(myUsername || "?")[0].toUpperCase()}</span>
-                  )}
+                  <Avatar 
+                    src={currentUser?.avatarUrl} 
+                    name={myUsername || "Me"} 
+                    color={currentUser?.color} 
+                    size={84} 
+                    animate={true}
+                    showBorder={false}
+                  />
 
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
                     className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-full">
@@ -847,11 +851,14 @@ export default function StoriesPage() {
               } shadow-lg group-hover:shadow-2xl`}>
                 <div className="w-[84px] h-[84px] rounded-full overflow-hidden flex items-center justify-center relative"
                      style={{ background: isDark ? "#1a1a2e" : "#ffffff", border: `3px solid ${isDark ? "#0a0a12" : "#ffffff"}` }}>
-                  {group.avatarUrl ? (
-                    <img src={group.avatarUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-extrabold text-3xl" style={{ color: "var(--text-primary)" }}>{(nicknames[group.username]?.[0] || group.user?.[0] || group.username?.[0] || "?").toUpperCase()}</span>
-                  )}
+                  <Avatar 
+                    src={group.avatarUrl} 
+                    name={nicknames[group.username] || group.user || group.username} 
+                    color={group.color} 
+                    size={84} 
+                    animate={true}
+                    showBorder={false}
+                  />
                   {/* Play hover */}
                   <motion.div initial={{ opacity: 0 }} whileHover={{ opacity: 1 }}
                     className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-full">
@@ -932,10 +939,15 @@ export default function StoriesPage() {
 
               {/* Header */}
               <div className="absolute top-8 md:top-8 left-0 w-full px-5 flex justify-between items-center z-20 safe-top">
-                <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedProfileUser({ username: activeStory.username, name: activeStory.user, color: activeStory.color })}>
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${activeStory.color?.includes('from-') ? activeStory.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[3px] border-white/20 shadow-lg flex items-center justify-center font-extrabold text-white transition-transform group-hover:scale-105 uppercase overflow-hidden`}>
-                    {activeStory.avatar_url ? <img src={activeStory.avatar_url} alt="" className="w-full h-full object-cover" /> : (nicknames[activeStory.username]?.[0] || activeStory.user?.[0] || '?').toUpperCase()}
-                  </div>
+                <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedProfileUser({ username: activeStory.username, name: activeStory.user, color: activeStory.color, avatarUrl: activeStory.avatar_url })}>
+                  <Avatar 
+                    src={activeStory.avatar_url} 
+                    name={activeStory.name || activeStory.username} 
+                    color={activeStory.color} 
+                    size={40} 
+                    animate={true}
+                    className="group-hover:scale-105"
+                  />
                   <div className="flex-1 min-w-0">
                     <h3 className="text-white font-black text-[15px] truncate drop-shadow-md tracking-tight leading-none">
                       {activeStory.name || activeStory.username}
@@ -1138,9 +1150,14 @@ export default function StoriesPage() {
                             ) : viewersList.map(v => (
                               <div key={v.username} className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-white/8 cursor-pointer transition-all"
                                 onClick={e => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
-                                <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${v.color?.includes('from-') ? v.color : 'from-[#6c5ce7] to-[#00d4ff]'} flex items-center justify-center text-xs font-black text-white shrink-0`}>
-                                  {(v.name?.[0] || v.username?.[0] || '?').toUpperCase()}
-                                </div>
+                                <Avatar 
+                                  src={v.avatarUrl || v.avatar_url} 
+                                  name={v.name || v.username} 
+                                  color={v.color} 
+                                  size={32} 
+                                  animate={false}
+                                  className="shrink-0"
+                                />
                                 <span className="text-[13px] font-semibold text-white">{v.name || v.username}</span>
                               </div>
                             ))}
@@ -1166,9 +1183,14 @@ export default function StoriesPage() {
                             ) : likersList.map(v => (
                               <div key={v.username} className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-white/8 cursor-pointer transition-all"
                                 onClick={e => { e.stopPropagation(); setSelectedProfileUser({ username: v.username, name: v.name, color: v.color }); }}>
-                                <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${v.color?.includes('from-') ? v.color : 'from-[#ff006e] to-[#ffbe0b]'} flex items-center justify-center text-xs font-black text-white shrink-0`}>
-                                  {(v.name?.[0] || v.username?.[0] || '?').toUpperCase()}
-                                </div>
+                                <Avatar 
+                                  src={v.avatarUrl || v.avatar_url} 
+                                  name={v.name || v.username} 
+                                  color={v.color} 
+                                  size={32} 
+                                  animate={false}
+                                  className="shrink-0"
+                                />
                                 <span className="text-[13px] font-semibold text-white flex-1">{v.name || v.username}</span>
                                 <Heart className="w-3 h-3 shrink-0" fill="#ff006e" style={{ color: "#ff006e" }} />
                               </div>
@@ -1270,11 +1292,16 @@ export default function StoriesPage() {
 
               <div className="px-10 pb-10 -mt-20 relative z-10">
                 <div className="flex flex-col items-center">
-                  <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color?.includes('from-') ? selectedProfileUser.color : 'from-[#6c5ce7] to-[#00d4ff]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar`}>
-                    <span className="group-hover/avatar:scale-110 transition-transform duration-500 uppercase">
-                      {(nicknames[selectedProfileUser.username]?.[0] || selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || '?').toUpperCase()}
-                    </span>
-                  </div>
+                  <div className="relative group/avatar mb-6">
+                    <Avatar 
+                      src={selectedProfileUser.avatarUrl} 
+                      name={nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username} 
+                      color={selectedProfileUser.color} 
+                      size={144} 
+                      animate={true}
+                      className={`border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl transition-transform duration-500 group-hover/avatar:scale-105`}
+                      showBorder={false}
+                    />
 
                   <div className="text-center mb-8">
                     <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>

@@ -6,16 +6,17 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   MessageSquare, LayoutTemplate, Lock, Users, Settings, User, Search,
   LogOut, Sun, Moon, Shield, Menu, X, Eye, EyeOff, KeyRound, HelpCircle, ChevronLeft,
-  Bell, Check, UserPlus, Share2
+  Bell, Check, UserPlus, Share2, Ban
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch, APP_LOGO } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { pushService } from "@/lib/push";
 import { formatToIndianTime } from "@/lib/time";
-import { NotificationSkeleton } from "@/components/Skeleton";
+import { Avatar } from "@/components/Avatar";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
+import { LegalInfo } from "@/components/LegalInfo";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -29,6 +30,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Global Share Profile
   const [showGlobalShare, setShowGlobalShare] = useState(false);
+  const [showLegal, setShowLegal] = useState(false);
+  const [legalTab, setLegalTab] = useState<"privacy" | "terms" | "disclaimer">("privacy");
   const [globalProfile, setGlobalProfile] = useState({ name: "", username: "", email: "", avatarUrl: "" });
 
   // Notifications
@@ -54,6 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [appForgotNewPin, setAppForgotNewPin] = useState("");
   const [appForgotStep, setAppForgotStep] = useState<"answer" | "newpin">("answer");
   const [appForgotError, setAppForgotError] = useState("");
+  const [accountStatus, setAccountStatus] = useState("Active");
 
   useEffect(() => {
     setIsMounted(true);
@@ -95,7 +99,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const username = localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0];
       setGlobalProfile({ name, username, email: signupEmail, avatarUrl: localStorage.getItem("nexora_avatar_url") || "" });
     }
+    }
   }, []);
+
+  // Account Status Monitor protocol
+  useEffect(() => {
+    if (!isMounted) return;
+    const checkStatus = async () => {
+      const username = localStorage.getItem("nexora_signup_username") || "";
+      if (!username) return;
+      try {
+        const data = await nexoraFetch(`/api/auth/me?u=${encodeURIComponent(username)}`);
+        if (data?.status) setAccountStatus(data.status);
+      } catch (e) {
+        // Silent fail - network issue
+      }
+    };
+    checkStatus();
+    const statusInterval = setInterval(checkStatus, 60000 * 2); // Check every 2 minutes for light load
+
+    return () => clearInterval(statusInterval);
+  }, [isMounted]);
 
   // ═══ Global Action Notification Protocol ═══
   useEffect(() => {
@@ -706,13 +730,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             {pendingRequests.map((req) => (
                               <motion.div key={`req-${req.id}`} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: actionedIds.includes(req.id) ? 0 : 1, x: 0 }} exit={{ opacity: 0 }}
                                 className="px-4 py-4 border-b flex items-center gap-3" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black shadow-lg overflow-hidden shrink-0 ${!req.avatarUrl ? 'bg-gradient-to-br ' + (req.fromColor || "from-purple-500 to-indigo-500") : ""}`}>
-                                  {req.avatarUrl ? (
-                                    <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    (req.fromName || req.from)?.[0]?.toUpperCase()
-                                  )}
-                                </div>
+                                <Avatar 
+                                  src={req.avatarUrl} 
+                                  name={req.fromName || req.from} 
+                                  color={req.fromColor} 
+                                  size={40} 
+                                  animate={false}
+                                />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-[11px] font-bold"><span className="text-[#6c5ce7]">@{req.from}</span> requested.</p>
                                   <p className="text-[8px] opacity-30 uppercase font-black">{req.time}</p>
@@ -732,7 +756,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             {generalNotifications.map((notif) => (
                               <motion.div key={`notif-${notif.id}`} layout initial={{ opacity: 0 }} animate={{ opacity: actionedIds.includes(notif.id) ? 0 : 1 }} exit={{ opacity: 0 }}
                                 className="px-4 py-4 border-b flex items-center gap-3 last:border-0" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                                <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${notif.type.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} flex items-center justify-center text-white font-black text-[10px]`}>{(notif.from_username || "N")[0].toUpperCase()}</div>
+                                <Avatar 
+                                  name={notif.from_username} 
+                                  color={notif.type.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} 
+                                  size={36} 
+                                  animate={false}
+                                />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-[11px] leading-tight"><span className="font-bold">@{notif.from_username}</span> {notif.message}</p>
                                   <p className="text-[9px] opacity-30 mt-0.5">{notif.time || "Recently"}</p>
@@ -871,18 +900,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       className="relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 px-2 py-2"
                     >
                       {isProfile ? (
-                        <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-md border overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-[#6c5ce7] ring-offset-2 scale-110' : 'scale-100 opacity-70'}`}
-                          style={{
-                            background: "linear-gradient(135deg, #6c5ce7, #00d4ff)",
-                            borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)",
-                            borderWidth: "1.5px"
-                          }}>
-                          {globalProfile.avatarUrl ? (
-                            <img src={globalProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            (globalProfile.name?.[0] || globalProfile.username?.[0] || "?").toUpperCase()
-                          )}
-                        </div>
+                          <Avatar 
+                            src={globalProfile.avatarUrl} 
+                            name={globalProfile.name || globalProfile.username} 
+                            size={28} 
+                            className={isActive ? 'ring-2 ring-[#6c5ce7] ring-offset-2 scale-110' : 'scale-100 opacity-70'}
+                            animate={false}
+                            showBorder={false}
+                          />
                       ) : (
                         <div className="relative">
                           <item.icon className="h-[21px] w-[21px] transition-all duration-300"
@@ -959,13 +984,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                               className="flex items-center gap-3 px-4 py-3 border-b last:border-0"
                               style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}
                             >
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0 overflow-hidden ${!req.avatarUrl ? 'bg-gradient-to-br ' + (req.fromColor || "from-purple-500 to-indigo-500") : ""}`}>
-                                {req.avatarUrl ? (
-                                  <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  (req.fromName || req.from)?.[0]?.toUpperCase()
-                                )}
-                              </div>
+                              <Avatar 
+                                src={req.avatarUrl} 
+                                name={req.fromName || req.from} 
+                                color={req.fromColor} 
+                                size={36} 
+                                animate={false}
+                              />
                               <div className="flex-1 min-w-0">
                                 <p className="font-bold text-xs truncate" style={{ color: "var(--text-primary)" }}>
                                   <span style={{ color: "#6c5ce7" }}>{req.fromName || req.from}</span> wants to connect
@@ -1035,22 +1060,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   })}
                 </div>
                 <div className="mt-6 flex gap-3">
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setShowLegal(true); setLegalTab("privacy"); }}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
+                    style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-secondary)" }}>
+                    <Shield className="h-4 w-4" /><span className="text-xs font-bold">Legal</span>
+                  </motion.button>
                   <motion.button whileTap={{ scale: 0.95 }} onClick={toggleTheme}
                     className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl"
                     style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-secondary)" }}>
                     {isDark ? <Sun className="h-4 w-4 text-[#ffbe0b]" /> : <Moon className="h-4 w-4" />}
                     <span className="text-xs font-bold">{isDark ? "Light" : "Dark"}</span>
                   </motion.button>
+                </div>
+                <div className="mt-3">
                   <motion.button whileTap={{ scale: 0.95 }} onClick={() => triggerAction(null, "logout")}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[#ff006e]"
+                    className="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-[#ff006e]"
                     style={{ background: "rgba(255,0,110,0.08)" }}>
-                    <LogOut className="h-4 w-4" /><span className="text-xs font-bold">Log Out</span>
+                    <LogOut className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-widest">Terminate Session</span>
                   </motion.button>
                 </div>
               </motion.div>
             </>
           )}
         </AnimatePresence>
+
+        <LegalInfo isOpen={showLegal} onClose={() => setShowLegal(false)} tab={legalTab} />
 
         {/* ═══════════════════════════════════════
           DOUBLE CONFIRMATION MODAL & LOCK SCREEN
@@ -1095,6 +1129,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className="w-16 h-16 border-4 border-t-[#00d4ff] border-r-[#6c5ce7] border-b-transparent border-l-transparent rounded-full mb-4" />
               <h2 className="text-white font-bold text-xl tracking-widest uppercase">Processing Lock</h2>
               <p className="text-[#00d4ff] mt-2 font-mono text-sm tracking-widest">EXECUTING TASK...</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ═══════════════════════════════════════
+           ACCOUNT SUSPENDED OVERLAY (PROTECTION)
+        ═══════════════════════════════════════ */}
+        <AnimatePresence>
+          {accountStatus === 'Suspended' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-[40px] pointer-events-auto">
+              {/* Animated Danger Rings */}
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-50" />
+              <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-50" />
+              
+              <motion.div initial={{ scale: 0.8, y: 40 }} animate={{ scale: 1, y: 0 }}
+                className="w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl border flex flex-col items-center text-center relative overflow-hidden"
+                style={{ background: "rgba(20,10,10,0.95)", borderColor: "rgba(255,0,0,0.2)" }}>
+                
+                {/* Glowing Danger Aura */}
+                <div className="absolute -top-20 -left-20 w-40 h-40 bg-red-600/30 blur-[80px] rounded-full" />
+                <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-red-600/20 blur-[80px] rounded-full" />
+
+                <div className="w-24 h-24 rounded-3xl flex items-center justify-center mb-8 bg-red-500/10 border border-red-500/20 relative">
+                   <div className="absolute inset-0 bg-red-500/20 blur-2xl rounded-full" />
+                   < Shield className="w-12 h-12 text-red-500 relative" />
+                   <X className="w-8 h-8 text-white absolute bottom-1 right-1" />
+                </div>
+
+                <h1 className="text-3xl font-black tracking-tight mb-4 text-white uppercase italic">
+                  Account Terminated
+                </h1>
+                
+                <div className="bg-red-500/10 border border-red-500/10 rounded-2xl p-6 mb-8 text-left">
+                  <p className="text-sm font-bold text-red-100 flex items-center gap-2 mb-2 uppercase tracking-widest leading-none">
+                     <Ban className="w-4 h-4" /> Protocol Violation Detected
+                  </p>
+                  <p className="text-xs text-red-100/60 leading-relaxed">
+                    This account <span className="text-red-400 font-black">@{globalProfile.username}</span> has been permanently suspended for violating Nexora's Security & Moderation policies. 
+                    Your access to the private chat cluster has been revoked by the system administrator.
+                  </p>
+                </div>
+
+                <p className="text-[10px] text-white/30 font-bold uppercase tracking-[0.2em] mb-10 leading-relaxed max-w-xs">
+                   Evidence has been recorded and archived in the safety protocol logs.
+                </p>
+
+                <div className="flex flex-col gap-3 w-full">
+                  <button onClick={() => triggerAction(null, "logout")} 
+                    className="w-full py-5 rounded-2xl bg-white text-black font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+                    Sign Out Immediately
+                  </button>
+                  <button onClick={() => window.location.href = "mailto:support@nexora.io"} 
+                    className="w-full py-4 rounded-2xl bg-white/5 text-white/40 font-bold text-[11px] uppercase tracking-widest hover:bg-white/10 transition-all border border-white/5">
+                    Appeal Decision
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

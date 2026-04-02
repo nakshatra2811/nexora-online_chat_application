@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, Share2, UserCheck, MessageSquare } from "lucide-react";
+import { UserPlus, Share2, UserCheck, MessageSquare, Users as UsersIcon } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
 import { motion, AnimatePresence } from "framer-motion";
 import { ButtonLoader } from "@/components/Loader";
+import { Avatar } from "@/components/Avatar";
 
 export function SuggestedUsers() {
   const router = useRouter();
@@ -121,9 +122,14 @@ export function SuggestedUsers() {
                 className="flex items-center justify-between p-3 rounded-2xl bg-white/40 dark:bg-white/5 border border-white/50 dark:border-white/5 shadow-sm"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${u.color || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-lg shadow-inner`}>
-                    {u.username[0].toUpperCase()}
-                  </div>
+                  <Avatar 
+                    src={u.avatarUrl || u.avatar_url} 
+                    name={u.username} 
+                    color={u.color} 
+                    size={44} 
+                    animate={true}
+                    className="shadow-inner"
+                  />
                   <div>
                     <div className="text-sm font-black text-[#1a1a2e] dark:text-white">@{u.username}</div>
                     <div className="text-[11px] font-bold text-[#64748b]">{u.fullName}</div>
@@ -161,7 +167,7 @@ export function SuggestedUsers() {
               className="text-center py-10"
             >
               <div className="w-16 h-16 bg-[#6c5ce7]/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="text-[#6c5ce7] opacity-40" />
+                <UsersIcon className="text-[#6c5ce7] opacity-40" />
               </div>
               <p className="text-xs font-bold text-[#64748b] px-6 leading-relaxed">
                 Unlock the protocol graph. Sync your contacts to see who else is in the void.
@@ -174,23 +180,12 @@ export function SuggestedUsers() {
       <div className="mt-8 pt-6 border-t border-[#6c5ce7]/5">
          <button 
           onClick={shareProfile}
-          className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-br from-[#6c5ce7] to-[#8271ff] text-white text-sm font-black shadow-[0_15px_30px_rgba(108,92,231,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all"
+          className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-br from-[#6c5ce7] to-[#8271ff] text-white text-sm font-black shadow-[0_15px_30_rgba(108,92,231,0.2)] hover:scale-[1.02] active:scale-[0.98] transition-all"
          >
             <Share2 size={18} /> Share My Link
          </button>
          <p className="text-[10px] text-center mt-4 font-bold text-[#94a3b8]">Your phone number is hashed and never leaves the server in plain text.</p>
       </div>
     </div>
-  );
-}
-
-function Users({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
   );
 }

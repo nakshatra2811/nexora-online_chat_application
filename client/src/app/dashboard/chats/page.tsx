@@ -12,7 +12,7 @@ import {
   AlertTriangle, ChevronRight, ChevronLeft, Pin, ArrowUp, ArrowDown, Wallpaper, Upload, XCircle, Eye, EyeOff,
   Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film, Heart,
   BarChart3, Users, UserPlus, MessageSquare, Share2, Plus, ToggleLeft, ToggleRight, Mail, Smartphone,
-  RefreshCcw, Bell, BellOff, UserCheck, Clock, Star
+  RefreshCcw, Bell, BellOff, UserCheck, Clock, Star, Flag
 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/SocialIcons";
 import { socketService } from "@/lib/socket";
@@ -24,7 +24,9 @@ import { formatToIndianTime } from "@/lib/time";
 import { pushService } from "@/lib/push";
 import { useCall } from "@/components/Call/CallProvider";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
+import { Avatar } from "@/components/Avatar";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
+import { ReportModal } from "@/components/ReportModal";
 
 const TUNNEL_ID = "nexora_secure_room_1";
 const TUNNEL_PASSWORD = "super_secret_e2e_password_123";
@@ -90,12 +92,7 @@ export interface Thread {
 
 function ChatsPageContent() {
   const router = useRouter();
-  const [threads, setThreads] = useState<Thread[]>(() => {
-    if (typeof window !== "undefined") {
-      return JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-    }
-    return [];
-  });
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
@@ -289,35 +286,20 @@ function ChatsPageContent() {
   ]);
 
   // Original function names pointing to global context
-  const acceptIncomingCall = () => handleAccept();
   const endCall = () => handleEnd();
   const [showChatMenu, setShowChatMenu] = useState(false);
-  const [nicknames, setNicknames] = useState<Record<string, string>>(() => {
-    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_nicknames") || "{}");
-    return {};
-  });
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [nicknameInput, setNicknameInput] = useState("");
   const [showDisappearSubmenu, setShowDisappearSubmenu] = useState(false);
-  const [disappearTimer, setDisappearTimer] = useState<"off" | "1h" | "24h" | "after_view">(() => {
-    if (typeof window !== "undefined") return (localStorage.getItem("nexora_disappear_global_timer") as any) || "off";
-    return "off";
-  });
+  const [disappearTimer, setDisappearTimer] = useState<"off" | "1h" | "24h" | "after_view">("off");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [imageViewer, setImageViewer] = useState<{ url: string; name: string } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [blockedThreads, setBlockedThreads] = useState<number[]>(() => {
-    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_blocked") || "[]");
-    return [];
-  });
-  const [pinnedThreads, setPinnedThreads] = useState<number[]>(() => {
-    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_pinned") || "[]");
-    return [];
-  });
-  const [mutedThreads, setMutedThreads] = useState<number[]>(() => {
-    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_muted") || "[]");
-    return [];
-  });
+  const [blockedThreads, setBlockedThreads] = useState<number[]>([]);
+  const [pinnedThreads, setPinnedThreads] = useState<number[]>([]);
+  const [mutedThreads, setMutedThreads] = useState<number[]>([]);
   const [threadContextMenu, setThreadContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -331,15 +313,9 @@ function ChatsPageContent() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [threadContextMenu]);
-  const [lockedChatsMap, setLockedChatsMap] = useState<Record<number, string>>(() => {
-    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_locked_chats_map") || "{}");
-    return {};
-  });
+  const [lockedChatsMap, setLockedChatsMap] = useState<Record<number, string>>({});
   const [unlockedSessionThreads, setUnlockedSessionThreads] = useState<number[]>([]);
-  const [hiddenThreads, setHiddenThreads] = useState<number[]>(() => {
-    if (typeof window !== "undefined") return JSON.parse(localStorage.getItem("nexora_hidden") || "[]");
-    return [];
-  });
+  const [hiddenThreads, setHiddenThreads] = useState<number[]>([]);
   const [chatLockEntry, setChatLockEntry] = useState<{ threadId: number; error: string; pin: string; showPin: boolean; forgotMode: boolean; forgotError: string } | null>(null);
   const [lockSetupEntry, setLockSetupEntry] = useState<{ threadId: number; step: "pin" | "confirm"; pin: string; confirmPin: string; error: string } | null>(null);
   const [globalChatLockEntry, setGlobalChatLockEntry] = useState<{ pin: string; error: string; showPin: boolean; forgotMode: boolean; forgotAnswer: string; forgotNewPin: string; forgotStep: "answer" | "newpin"; forgotError: string } | null>(null);
@@ -388,10 +364,10 @@ function ChatsPageContent() {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [myProfile, setMyProfile] = useState<{ id: number; name: string; username: string; color: string; avatarUrl?: string }>({
     id: 0,
-    name: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_name") || "" : "",
-    username: typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "",
+    name: "",
+    username: "",
     color: "from-purple-500 to-indigo-500",
-    avatarUrl: typeof window !== "undefined" ? localStorage.getItem("nexora_avatar_url") || "" : ""
+    avatarUrl: ""
   });
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
@@ -1401,10 +1377,27 @@ function ChatsPageContent() {
             });
 
             if (senderThread) {
-              const threadMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${senderThread.id}`) || "[]");
+              const key = `nexora_msgs_${senderThread.id}`;
+              const raw = localStorage.getItem(key) || "[]";
+              let threadMsgs: any[] = [];
+              try { 
+                if (raw.startsWith("anc:")) {
+                  // Vault encryption detected
+                  const decrypted = await decryptStorageData(raw, vaultKey!);
+                  threadMsgs = decrypted || [];
+                } else {
+                  threadMsgs = JSON.parse(raw); 
+                }
+              } catch (e) { threadMsgs = []; }
+
               if (!threadMsgs.find((m: any) => m.id === newMsg.id)) {
                 threadMsgs.push(newMsg);
-                localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
+                if (vaultKey) {
+                  const encrypted = await encryptStorageData(threadMsgs, vaultKey);
+                  localStorage.setItem(key, encrypted);
+                } else {
+                  localStorage.setItem(key, JSON.stringify(threadMsgs));
+                }
               }
             }
             bumpThread(senderUsername, { preview: decryptedText, unread: (senderThread?.unread || 0) + 1 });
@@ -1492,15 +1485,32 @@ function ChatsPageContent() {
         // Remove from current UI
         setMessages(prev => prev.filter(m => m.id !== data.msgId));
 
-        // Also purge from localStorage for ALL threads (since we don't know which thread it's in by just msgId)
-        // Optimization: Usually we only care about the sender's thread
-        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-        connections.forEach((conn: any) => {
+        // Also purge from localStorage for ALL threads
+        const rawConns = localStorage.getItem("nexora_secure_connections") || "[]";
+        let connections = [];
+        try { connections = JSON.parse(rawConns); } catch (e) { connections = []; }
+
+        connections.forEach(async (conn: any) => {
           const key = `nexora_msgs_${conn.id}`;
-          const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
+          const raw = localStorage.getItem(key) || "[]";
+          let currentMsgs: any[] = [];
+          try {
+            if (raw.startsWith("anc:")) {
+              const decrypted = await decryptStorageData(raw, vaultKey!);
+              currentMsgs = decrypted || [];
+            } else {
+              currentMsgs = JSON.parse(raw);
+            }
+          } catch (e) { currentMsgs = []; }
+
           const filtered = currentMsgs.filter((m: any) => m.id !== data.msgId);
           if (filtered.length !== currentMsgs.length) {
-            localStorage.setItem(key, JSON.stringify(filtered));
+            if (vaultKey) {
+              const encrypted = await encryptStorageData(filtered, vaultKey);
+              localStorage.setItem(key, encrypted);
+            } else {
+              localStorage.setItem(key, JSON.stringify(filtered));
+            }
           }
         });
       });
@@ -1515,9 +1525,19 @@ function ChatsPageContent() {
 
         // Persist if it belongs to a stored thread
         const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-        connections.forEach((conn: any) => {
+        connections.forEach(async (conn: any) => {
           const key = `nexora_msgs_${conn.id}`;
-          const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
+          const raw = localStorage.getItem(key) || "[]";
+          let currentMsgs: any[] = [];
+          try {
+            if (raw.startsWith("anc:")) {
+              const decrypted = await decryptStorageData(raw, vaultKey!);
+              currentMsgs = decrypted || [];
+            } else {
+              currentMsgs = JSON.parse(raw);
+            }
+          } catch (e) { currentMsgs = []; }
+
           let changed = false;
           const updated = currentMsgs.map((m: any) => {
             if (m.id === data.msgId) {
@@ -1528,7 +1548,12 @@ function ChatsPageContent() {
             return m;
           });
           if (changed) {
-            localStorage.setItem(key, JSON.stringify(updated));
+            if (vaultKey) {
+              const encrypted = await encryptStorageData(updated, vaultKey);
+              localStorage.setItem(key, encrypted);
+            } else {
+              localStorage.setItem(key, JSON.stringify(updated));
+            }
           }
         });
       });
@@ -1668,9 +1693,19 @@ function ChatsPageContent() {
         }));
         // Also persist to localStorage for any matching thread
         const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
-        connections.forEach((conn: any) => {
+        connections.forEach(async (conn: any) => {
           const key = `nexora_msgs_${conn.id}`;
-          const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
+          const raw = localStorage.getItem(key) || "[]";
+          let currentMsgs: any[] = [];
+          try {
+            if (raw.startsWith("anc:")) {
+              const decrypted = await decryptStorageData(raw, vaultKey!);
+              currentMsgs = decrypted || [];
+            } else {
+              currentMsgs = JSON.parse(raw);
+            }
+          } catch (e) { currentMsgs = []; }
+
           let changed = false;
           const updated = currentMsgs.map((m: any) => {
             if (m.id === data.msgId && m.poll) {
@@ -1683,7 +1718,14 @@ function ChatsPageContent() {
             }
             return m;
           });
-          if (changed) localStorage.setItem(key, JSON.stringify(updated));
+          if (changed) {
+            if (vaultKey) {
+              const encrypted = await encryptStorageData(updated, vaultKey);
+              localStorage.setItem(key, encrypted);
+            } else {
+              localStorage.setItem(key, JSON.stringify(updated));
+            }
+          }
         });
       });
 
@@ -2136,11 +2178,13 @@ function ChatsPageContent() {
       const stored = localStorage.getItem(key);
       (async () => {
         let currentMsgs: any[] = [];
-        if (stored?.startsWith("anc:")) {
-          currentMsgs = await decryptStorageData(stored, vaultKey) || [];
-        } else if (stored) {
-          currentMsgs = JSON.parse(stored);
-        }
+        try {
+          if (stored?.startsWith("anc:")) {
+            currentMsgs = await decryptStorageData(stored, vaultKey) || [];
+          } else if (stored) {
+            currentMsgs = JSON.parse(stored);
+          }
+        } catch (e) { currentMsgs = []; }
 
         const updated = currentMsgs.map((m: any) => {
           if (m.id === msgId) {
@@ -2631,10 +2675,15 @@ function ChatsPageContent() {
               onClick={() => { router.push('/dashboard/stories?user=me'); }}
               className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
               <div className="relative">
-                <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]") : 'ring-2 ring-transparent bg-gradient-to-tr ' + (myProfile.color || "from-[#6c5ce7] to-[#00d4ff]")} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
-                  style={myStoryPreview ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                  {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
-                </div>
+                <Avatar 
+                  src={myProfile.avatarUrl} 
+                  name={myProfile.name || "Me"} 
+                  color={myProfile.color} 
+                  size={56} 
+                  className={myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2' : 'ring-2 ring-transparent'}
+                  animate={true}
+                  showBorder={false}
+                />
                 <div className="absolute bottom-0 right-0 h-4 w-4 rounded-full bg-[#6c5ce7] shadow-md z-10 flex items-center justify-center cursor-pointer"
                   style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }}
                   onClick={(e) => { e.stopPropagation(); router.push('/dashboard/stories?action=camera'); }}>
@@ -2724,10 +2773,16 @@ function ChatsPageContent() {
                   className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all relative group/thread"
                   style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
                   <div className="relative shrink-0">
-                    <div className={`h-11 w-11 rounded-full ${isLockedDisplay ? 'bg-black border border-white/10' : `bg-gradient-to-tr ${thread.color?.includes('from-') ? thread.color : "from-[#6c5ce7] to-[#00d4ff]"}`} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/5 uppercase overflow-hidden`}
-                      onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
-                      {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[thread.username]?.[0] || thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
-                    </div>
+                    <Avatar 
+                      src={thread.avatarUrl} 
+                      name={nicknames[thread.username] || thread.name || thread.username} 
+                      color={thread.color} 
+                      size={44} 
+                      animate={true}
+                      onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}
+                      className={isLockedDisplay ? 'grayscale opacity-50' : ''}
+                      icon={isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : undefined}
+                    />
                     {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
                       <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
                         style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
@@ -2766,9 +2821,14 @@ function ChatsPageContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className={`h-10 w-10 rounded-full ${myProfile.color?.includes('from-') ? 'bg-gradient-to-tr ' + myProfile.color : "bg-gradient-to-tr from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm shadow-lg border border-white/10 uppercase overflow-hidden`}>
-                  {myProfile.avatarUrl ? <img src={myProfile.avatarUrl} alt="" className="w-full h-full object-cover" /> : (myProfile.name?.[0] || "M").toUpperCase()}
-                </div>
+                <Avatar 
+                  src={myProfile.avatarUrl} 
+                  name={myProfile.name || myProfile.username} 
+                  color={myProfile.color} 
+                  size={40} 
+                  animate={true}
+                  showBorder={true}
+                />
                 <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573] z-10 animate-pulse"
                   style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
               </div>
@@ -2820,11 +2880,15 @@ function ChatsPageContent() {
                     style={{ color: "var(--text-primary)" }}>
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </motion.button>
-                  <div className="relative shrink-0" onClick={() => setSelectedProfileUser(activeThread)}>
-                    <div className={`h-9 w-9 md:h-11 md:w-11 rounded-full bg-gradient-to-tr ${activeThread.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white font-black text-sm md:text-base shadow-xl border border-white/10 cursor-pointer shrink-0 transition-transform active:scale-90 uppercase overflow-hidden`}
-                      onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}>
-                      {activeThread.avatarUrl ? <img src={activeThread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[activeThread.username]?.[0] || activeThread.name?.[0] || activeThread.username?.[0] || "?").toUpperCase()}
-                    </div>
+                  <div className="relative shrink-0">
+                    <Avatar 
+                      src={activeThread.avatarUrl} 
+                      name={nicknames[activeThread.username] || activeThread.name || activeThread.username} 
+                      color={activeThread.color} 
+                      size={44} 
+                      animate={true}
+                      onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}
+                    />
                     {activeThread.online || liveOnlineUsers.includes(activeThread.username) ? (
                       <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse"
                         style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
@@ -2936,6 +3000,7 @@ function ChatsPageContent() {
                     )}
                   </div>
                   <button onClick={clearChat} className="flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-red-500"><Trash2 className="w-4 h-4 text-red-500" /> Clear Chat</button>
+                  <button onClick={() => { setShowReportModal(true); setShowChatMenu(false); }} className="flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-red-500/10 text-sm font-bold text-red-500"><Flag className="w-4 h-4 text-red-500" /> Report User</button>
                 </div>
               )}
             </div>
@@ -3931,14 +3996,16 @@ function ChatsPageContent() {
 
               <div className="px-10 pb-10 -mt-20 relative z-10">
                 <div className="flex flex-col items-center">
-                  <div className={`h-36 w-36 rounded-full bg-gradient-to-tr ${selectedProfileUser.color || 'from-[#6c5ce7] to-[#a29bfe]'} border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl flex items-center justify-center text-white text-5xl font-black mb-6 relative group/avatar overflow-hidden`}>
-                    {selectedProfileUser.avatarUrl ? (
-                      <img src={selectedProfileUser.avatarUrl} alt="" className="w-full h-full object-cover group-hover/avatar:scale-110 transition-transform duration-500" />
-                    ) : (
-                      <span className="group-hover/avatar:scale-110 transition-transform duration-500 text-white uppercase drop-shadow-2xl">
-                        {(nicknames[selectedProfileUser.username]?.[0] || selectedProfileUser.name?.[0] || selectedProfileUser.username?.[0] || "?").toUpperCase()}
-                      </span>
-                    )}
+                  <div className="relative group/avatar mb-6">
+                    <Avatar 
+                      src={selectedProfileUser.avatarUrl} 
+                      name={nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username} 
+                      color={selectedProfileUser.color} 
+                      size={144} 
+                      animate={true}
+                      className={`border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl transition-transform duration-500 group-hover/avatar:scale-105`}
+                      showBorder={false}
+                    />
                     {(selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)) && (
                       <motion.div
                         initial={{ scale: 0 }} animate={{ scale: 1 }}
@@ -4377,6 +4444,15 @@ function ChatsPageContent() {
           )}
         </AnimatePresence>
       </AnimatePresence>
+      {showReportModal && activeThread && (
+        <ReportModal 
+          isOpen={showReportModal} 
+          onClose={() => setShowReportModal(false)} 
+          targetUser={activeThread.username} 
+          reporterUser={myProfile?.username || ""} 
+          evidenceMessages={messages.slice(-5)}
+        />
+      )}
     </div>
   );
 }

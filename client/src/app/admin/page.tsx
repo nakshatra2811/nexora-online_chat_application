@@ -10,7 +10,7 @@ import {
   KeyRound, FileText, LineChart, Hash, MonitorSmartphone, Map, FileCode2,
   GitPullRequest, ClipboardList, Palette, TrendingUp, Presentation,
   Network, SearchCode, Database, Cpu, PieChart, ShieldCheck, Clock,
-  TerminalSquare, Maximize, FilePlus2, UploadCloud, FileEdit
+  TerminalSquare, Maximize, FilePlus2, UploadCloud, FileEdit, Flag
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { API_BASE_URL, APP_LOGO } from "@/lib/config";
@@ -37,9 +37,9 @@ interface EmailTemplate {
 }
 
 export type TabId = 
-  | "overview" | "users" | "connections" | "config" | "security" | "templates" | "broadcast"
-  | "blog" | "gallery" | "seo_manager" | "keywords" | "analytics" 
-  | "audit_logs" | "google_bing" | "indexing";
+    "overview" | "users" | "connections" | "config" | "security" | "templates" | "broadcast" |
+    "blog" | "gallery" | "seo_manager" | "keywords" | "analytics" | 
+    "audit_logs" | "google_bing" | "indexing" | "safety";
 
 export const TABS: { id: TabId; label: string; icon: any; color: string; group?: string }[] = [
   // Core
@@ -66,6 +66,7 @@ export const TABS: { id: TabId; label: string; icon: any; color: string; group?:
   { id: "audit_logs", label: "Audit Logs", icon: ClipboardList, color: "#2ed573", group: "Analytics" },
   
   // System
+  { id: "safety", label: "Safety & Reports", icon: Flag, color: "#ff4757", group: "System" },
   { id: "config", label: "Configuration", icon: Settings, color: "#ffbe0b", group: "System" },
   { id: "security", label: "Security", icon: ShieldCheck, color: "#ff006e", group: "System" },
 ];
@@ -774,8 +775,177 @@ function BroadcastTab() {
 
 
 // ═══════════════════════════════════════
-// CONNECTIONS TAB
+// SAFETY & REPORTS TAB
 // ═══════════════════════════════════════
+interface SafetyRecord {
+  id: number;
+  reporter: string;
+  target: string;
+  reason: string;
+  category: string;
+  evidence: string; // JSON
+  status: string;
+  created_at: string;
+}
+
+function SafetyTab() {
+  const { isDark } = useTheme();
+  const [reports, setReports] = useState<SafetyRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedReport, setExpandedReport] = useState<number | null>(null);
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    const data = await adminFetch("/api/admin/reports");
+    if (data?.reports) setReports(data.reports);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchReports(); }, [fetchReports]);
+
+  const handleUpdateStatus = async (id: number, status: string) => {
+    await adminFetch(`/api/admin/reports/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    });
+    fetchReports();
+  };
+
+  const handleUserStatus = async (username: string, status: string) => {
+    if (status === "Suspended" && !confirm(`Are you absolutely sure you want to PERMANENTLY SUSPEND @${username}? This will block all access to the protocol immediately.`)) {
+      return;
+    }
+    await adminFetch(`/api/admin/users/${username}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    });
+    alert(`Protocol ${status === 'Suspended' ? 'TERMINATED' : 'RESTORED'} for @${username}.`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Safety Protocol Center</h2>
+          <p className="text-xs font-bold opacity-50 uppercase tracking-widest mt-1">Evidence-Based Abuse Reporting</p>
+        </div>
+        <button onClick={fetchReports} className="p-2.5 rounded-xl" style={{ background: "rgba(255,71,87,0.1)", color: "#ff4757" }}>
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        {loading ? (
+          <div className="text-center py-12">Loading reports...</div>
+        ) : reports.length === 0 ? (
+          <div className="text-center py-12 border border-dashed rounded-2xl opacity-40">No active reports.</div>
+        ) : reports.map(report => (
+          <motion.div key={report.id} layout className="border rounded-3xl overflow-hidden shadow-sm"
+            style={{ 
+              background: isDark ? "rgba(255,255,255,0.02)" : "#fff", 
+              borderColor: report.status === "Pending" ? "#ff475730" : "var(--border-subtle)" 
+            }}>
+            
+            <div className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-2xl bg-red-500/10 text-red-500">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-black uppercase text-red-500 bg-red-500/5 px-2 py-0.5 rounded-md">
+                      {report.category}
+                    </span>
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                      report.status === 'Pending' ? 'bg-orange-500/10 text-orange-500' : 'bg-green-500/10 text-green-500'
+                    }`}>
+                      {report.status}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
+                    Report against <span className="text-[#00d4ff]">@{report.target}</span>
+                  </h3>
+                  <p className="text-xs opacity-60" style={{ color: "var(--text-secondary)" }}>
+                    By @{report.reporter} · {new Date(report.created_at).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setExpandedReport(expandedReport === report.id ? null : report.id)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border border-white/5 bg-white/5 hover:bg-white/10 transition-all flex items-center gap-2">
+                  <Eye className="w-3.5 h-3.5" /> {expandedReport === report.id ? "Hide Evidence" : "View Evidence"}
+                </button>
+                <div className="h-6 w-[1px] bg-white/10 mx-1" />
+                <button onClick={() => handleUpdateStatus(report.id, "Resolved")} className="p-2 rounded-xl text-green-500 hover:bg-green-500/10 transition-all" title="Mark Resolved">
+                  <CheckCircle className="w-5 h-5" />
+                </button>
+                <button onClick={() => handleUpdateStatus(report.id, "Dismissed")} className="p-2 rounded-xl text-orange-500 hover:bg-orange-500/10 transition-all" title="Dismiss Report">
+                   <XCircle className="w-5 h-5" />
+                </button>
+                <button onClick={() => handleUserStatus(report.target, "Suspended")} className="p-2 rounded-xl text-red-500 hover:bg-red-500/10 transition-all" title="Suspend User">
+                  <Ban className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {expandedReport === report.id && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-white/5 overflow-hidden">
+                  <div className="p-6 space-y-4">
+                    <div>
+                      <h4 className="text-[10px] font-black uppercase text-[#6c5ce7] tracking-widest mb-2">Reporter Context</h4>
+                      <div className="p-4 rounded-2xl bg-white/5 text-sm font-medium italic" style={{ color: "var(--text-primary)" }}>
+                        "{report.reason}"
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-[10px] font-black uppercase text-[#00d4ff] tracking-widest">Chat Evidence (Last 5 Messages)</h4>
+                        <span className="text-[10px] font-bold opacity-30 uppercase italic">Unencrypted Review Mode</span>
+                      </div>
+                      <div className="space-y-2">
+                        {(() => {
+                            try {
+                              const evidence = typeof report.evidence === 'string' ? JSON.parse(report.evidence) : report.evidence;
+                              if (!evidence || evidence.length === 0) return <p className="text-xs opacity-40">No message evidence attached for this incident.</p>;
+                              return evidence.map((m: any, i: number) => (
+                                <div key={i} className={`flex flex-col p-3 rounded-2xl border ${m.from === report.target ? 'bg-red-500/5 border-red-500/10' : 'bg-blue-500/5 border-blue-500/10'}`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] font-black uppercase tracking-tighter" style={{ color: m.from === report.target ? "#ff4757" : "#6c5ce7" }}>
+                                      {m.from === report.target ? "REPORTED USER" : "REPORTER"} (@{m.from})
+                                    </span>
+                                    <span className="text-[9px] opacity-40 font-mono">SEQ_ID: {m.id?.slice(-6) || i}</span>
+                                  </div>
+                                  <p className="text-xs font-semibold leading-relaxed" style={{ color: "var(--text-primary)" }}>{m.text}</p>
+                                  {m.type === 'image' && <div className="mt-2 text-[9px] font-bold text-orange-500 uppercase">📷 Attachment: {m.imageName || 'Media File'}</div>}
+                                </div>
+                              ));
+                            } catch (e) {
+                              return <p className="text-xs text-red-400">Security Exception: Failed to decode evidence hash.</p>;
+                            }
+                         })()}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                       <button onClick={() => handleUpdateStatus(report.id, "In Review")} className="flex-1 py-3 rounded-2xl bg-[#6c5ce7] text-white font-black text-[10px] uppercase tracking-widest">
+                         Promote to Review Queue
+                       </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ConnectionsTab() {
   const { isDark } = useTheme();
   const [connections, setConnections] = useState<ConnectionRecord[]>([]);
@@ -1720,6 +1890,7 @@ export default function AdminPanel() {
                     {activeTab === "analytics" && <AnalyticsTab />}
                     {activeTab === "audit_logs" && <AuditLogsTab />}
                     {activeTab === "security" && <SecurityTab />}
+                    {activeTab === "safety" && <SafetyTab />}
 
                     {/* Highly Functional SEO / configuration forms! */}
                     {["config", "seo_manager", "keywords", "google_bing", "indexing"].includes(activeTab) && (

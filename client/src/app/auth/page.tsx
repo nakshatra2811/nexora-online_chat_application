@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone, Eye, EyeOff, XCircle } from "lucide-react";
+import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone, Eye, EyeOff, XCircle, ShieldCheck, FileText, ChevronLeft, Flag } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
 import { nexoraFetch, APP_NAME, APP_LOGO } from "@/lib/config";
@@ -22,6 +22,8 @@ function AuthContent() {
   const [announcement, setAnnouncement] = useState("");
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [successOverlay, setSuccessOverlay] = useState<{ show: boolean; isLogin: boolean; name: string } | null>(null);
+  const [showLegalStep, setShowLegalStep] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Form State
   const [fullName, setFullName] = useState("");
@@ -203,48 +205,60 @@ function AuthContent() {
           setIsLoading(false);
           return;
         }
-        const data = await nexoraFetch("/api/auth/signup", {
-          method: "POST",
-          body: JSON.stringify({
-            username,
-            password,
-            email,
-            fullName,
-            phoneNumber,
-            isAuthorized: false
-          })
-        });
+        
+        // Before calling API, show legal agreement step
+        setShowLegalStep(true);
+        setIsLoading(false);
+        return;
+      }
+    } catch (err) {
+      alert("Connectivity error: High-load during tunnel establishment.");
+      setIsLoading(false);
+    }
+  };
 
-        if (data && data._httpError) {
-          // Server returned an error (e.g. username taken)
-          alert(data.error || "Signup failed: Protocol error.");
-          if (data.error?.includes("Username")) {
-            setUsernameStatus("taken");
-          }
-        } else if (data) {
-          if (data.status === "pending") {
-            setPendingApproval(true);
-            localStorage.setItem("nexora_pending_authorized", "true");
-            setIsLoading(false);
-            return;
-          } else if (data.status === "success" && data.user) {
-            const u = data.user;
-            const role = u.role || "Standard";
-            document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`; // 30 days persistence
-            localStorage.setItem("nexora_assigned_role", role);
-            localStorage.setItem("nexora_signup_username", u.username);
-            localStorage.setItem("nexora_signup_name", u.fullName);
-            localStorage.setItem("nexora_signup_email", u.email);
-            localStorage.setItem("nexora_signup_phone", u.phoneNumber || "Not Set");
-            localStorage.setItem("nexora_signup_color", u.color);
-            localStorage.removeItem("nexora_user_profile");
-            localStorage.removeItem("nexora_active_thread_id");
+  const handleFinalSignup = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
 
-            setSuccessOverlay({ show: true, isLogin: false, name: u.fullName || u.username });
-            setTimeout(() => router.push("/dashboard/chats"), 2200);
-          }
-        } else {
-          alert("Signup failed: Server unreachable.");
+    try {
+      const data = await nexoraFetch("/api/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          password,
+          email,
+          fullName,
+          phoneNumber,
+          isAuthorized: false
+        })
+      });
+
+      if (data && data._httpError) {
+        alert(data.error || "Signup failed: Protocol error.");
+        if (data.error?.includes("Username")) {
+          setUsernameStatus("taken");
+        }
+        setShowLegalStep(false);
+      } else if (data) {
+        if (data.status === "pending") {
+          setPendingApproval(true);
+          localStorage.setItem("nexora_pending_authorized", "true");
+        } else if (data.status === "success" && data.user) {
+          const u = data.user;
+          const role = u.role || "Standard";
+          document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`; // 30 days persistence
+          localStorage.setItem("nexora_assigned_role", role);
+          localStorage.setItem("nexora_signup_username", u.username);
+          localStorage.setItem("nexora_signup_name", u.fullName);
+          localStorage.setItem("nexora_signup_email", u.email);
+          localStorage.setItem("nexora_signup_phone", u.phoneNumber || "Not Set");
+          localStorage.setItem("nexora_signup_color", u.color);
+          localStorage.removeItem("nexora_user_profile");
+          localStorage.removeItem("nexora_active_thread_id");
+
+          setSuccessOverlay({ show: true, isLogin: false, name: u.fullName || u.username });
+          setTimeout(() => router.push("/dashboard/chats"), 2200);
         }
       }
     } catch (err) {
@@ -341,6 +355,105 @@ function AuthContent() {
             <button onClick={() => { setIsForgot(false); setForgotStep(1); setForgotError(""); setForgotOTP(""); setForgotNewPassword(""); setForgotEmail(""); }} className="w-full text-center text-xs font-bold uppercase tracking-widest text-[#6c5ce7] hover:opacity-70 transition-opacity">
               Back to Terminal
             </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // UI: Legal Agreement Step
+  if (showLegalStep) {
+    return (
+      <div className="flex min-h-[100dvh] w-full items-center justify-center p-3 sm:p-6" style={{ background: "var(--bg-base)" }}>
+        <motion.div initial="hidden" animate="visible" variants={fadeIn} className="glass-panel p-8 sm:p-12 w-full max-w-lg shadow-2xl space-y-8 text-left relative overflow-hidden">
+          {/* Background Glow */}
+          <div className="absolute -right-20 -top-20 w-64 h-64 bg-[#6c5ce7]/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="space-y-3 relative z-10">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2.5 rounded-xl bg-[#6c5ce7]/10 text-[#6c5ce7]">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+                Security Protocol
+              </h2>
+            </div>
+            <p className="text-sm font-bold uppercase tracking-widest opacity-50" style={{ color: "var(--text-secondary)" }}>
+              Identity Verification & Privacy Agreement
+            </p>
+          </div>
+
+          <div className="space-y-6 relative z-10">
+            <div className="grid gap-4">
+              <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/5 space-y-2">
+                <div className="flex items-center gap-2 text-[#6c5ce7]">
+                  <Lock className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase">Zero-Knowledge Encryption</span>
+                </div>
+                <p className="text-[11px] leading-relaxed opacity-70" style={{ color: "var(--text-primary)" }}>
+                  Nexora is architected on a zero-knowledge framework. We do not store or have access to your private keys. Your messages are encrypted locally on your device before transmission.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/5 space-y-2">
+                <div className="flex items-center gap-2 text-pink-500">
+                  <User className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase">Identity & Accountability</span>
+                </div>
+                <p className="text-[11px] leading-relaxed opacity-70" style={{ color: "var(--text-primary)" }}>
+                   Your account is tied to your public handle. You are solely responsible for the content you transmit. Nexora does not index or search user messages.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/5 space-y-2">
+                <div className="flex items-center gap-2 text-orange-500">
+                  <Flag className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase">Prohibited Conduct</span>
+                </div>
+                <p className="text-[11px] leading-relaxed opacity-70" style={{ color: "var(--text-primary)" }}>
+                  Any use of Nexora for illegal activities—including harassment, fraud, or the distribution of prohibited materials—is a violation of our protocol and will lead to account termination.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="mt-1 relative">
+                  <input 
+                    type="checkbox" 
+                    checked={acceptedTerms} 
+                    onChange={e => setAcceptedTerms(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <div className={`w-5 h-5 rounded-md border-2 transition-all flex items-center justify-center ${acceptedTerms ? 'bg-[#6c5ce7] border-[#6c5ce7]' : 'border-gray-400 group-hover:border-[#6c5ce7]'}`}>
+                    {acceptedTerms && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold leading-tight" style={{ color: "var(--text-secondary)" }}>
+                  I have read and agree to the <a href="/policies/terms" target="_blank" className="text-[#6c5ce7] underline">Terms of Service</a> and <a href="/policies/privacy" target="_blank" className="text-[#6c5ce7] underline">Privacy Policy</a>.
+                </span>
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <button 
+                type="button"
+                onClick={() => setShowLegalStep(false)}
+                className="flex-1 py-4 px-6 rounded-2xl font-bold text-xs uppercase tracking-widest border border-gray-400/20 transition-all active:scale-95 hover:bg-black/5 dark:hover:bg-white/5"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Decline
+              </button>
+              <button 
+                type="button"
+                onClick={handleFinalSignup}
+                disabled={!acceptedTerms || isLoading}
+                className="flex-[2] py-4 px-6 rounded-2xl font-bold text-xs uppercase tracking-widest text-white shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:grayscale"
+                style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
+              >
+                {isLoading ? <><ButtonLoader /> <span className="ml-2">Establishing...</span></> : "Accept & Join Nexora"}
+              </button>
+            </div>
           </div>
         </motion.div>
       </div>

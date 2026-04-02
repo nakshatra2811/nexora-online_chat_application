@@ -109,9 +109,7 @@ self.addEventListener('push', (event) => {
       badge: payload.badge || '/badge.png',
       color: payload.color || '#0066ff',  // Android tint color
       image: isCall ? (msgData.callerAvatar || null) : null,
-      vibrate: isCall 
-        ? Array(20).fill([500, 500]).flat()
-        : [200, 100, 200],
+      vibrate: msgData.vibrate || (isCall ? Array(20).fill([500, 500]).flat() : [200, 100, 200]),
       data: payload.data || {},
       actions: isCall ? [
         { action: 'view', title: 'Answer' },

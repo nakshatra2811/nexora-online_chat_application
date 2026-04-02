@@ -249,12 +249,6 @@ let pgPool;
 
             CREATE TABLE IF NOT EXISTS blogs (
                 id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
-                title TEXT,
-                excerpt TEXT,
-                status TEXT DEFAULT 'Draft',
-                date TEXT,
-                author TEXT,
-                category TEXT,
                 image TEXT
             );
 
@@ -290,6 +284,17 @@ let pgPool;
                 payload TEXT NOT NULL,
                 created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
+
+            CREATE TABLE IF NOT EXISTS reports (
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                reporter TEXT NOT NULL,
+                target TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                category TEXT NOT NULL,
+                evidence TEXT,
+                status TEXT DEFAULT 'Pending',
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+            );
         `);
 
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
@@ -301,6 +306,16 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL"); } catch (e) { }
         // Migration for wallpaper in connections
         try { await db.run("ALTER TABLE connections ADD COLUMN wallpaper TEXT"); } catch (e) { }
+
+        // Migration for Avatar System (Modernization)
+        // Clear old static logo from existing users so they get the new premium dynamic avatars
+        try {
+            const LEGACY_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
+            const updateResult = await db.run("UPDATE users SET avatar_url = NULL WHERE avatar_url = ?", [LEGACY_LOGO]);
+            if (updateResult.changes > 0) {
+                ((..._args) => { })(`[MIGRATION] Modernized ${updateResult.changes} legacy user avatars.`);
+            }
+        } catch (e) { ((..._args) => { })("[MIGRATION] Avatar modernization failed:", e); }
 
         // Re-hash existing phone numbers if needed (one-time migration for Zero-Knowledge Sync)
         try {
@@ -334,13 +349,13 @@ let pgPool;
                     const hashed = await bcrypt.hash(user[3], saltRounds);
                     await db.run(
                         'INSERT INTO users (full_name, email, username, password, color, role, phone_number, phone_hash, bio, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        [encryptField(user[0]), user[1], user[2], hashed, user[4], user[5], encryptField(user[6] || 'Not Set'), hashPhone(user[6]), 'The Private Chat Protocol', APP_LOGO_URL]
+                        [encryptField(user[0]), user[1], user[2], hashed, user[4], user[5], encryptField(user[6] || 'Not Set'), hashPhone(user[6]), 'The Private Chat Protocol', null]
                     );
                 } else if (user[2] === 'Nexora_31') {
                     // Force update admin profile to match new brand
                     await db.run(
                         'UPDATE users SET full_name = ?, bio = ?, avatar_url = ?, email = ?, password = ? WHERE username = ?',
-                        [encryptField('Nexora'), 'The Private Chat Protocol', APP_LOGO_URL, 'Nexoraprivatechat31@gmail.com', await bcrypt.hash('Ruhi@#$%*09052024', 10), 'Nexora_31']
+                        [encryptField('Nexora'), 'The Private Chat Protocol', null, 'Nexoraprivatechat31@gmail.com', await bcrypt.hash('Ruhi@#$%*09052024', 10), 'Nexora_31']
                     );
                 }
             } catch (err) { }
@@ -829,7 +844,14 @@ async function sendPushNotification(username, payloadData) {
             try {
                 const sub = JSON.parse(row.subscription);
                 if (!sub || !sub.endpoint) return;
-                await webpush.sendNotification(sub, payload);
+                
+                // High-priority delivery options for calls
+                const options = {
+                    TTL: 60,
+                    urgency: payloadData.urgency || 'normal'
+                };
+                
+                await webpush.sendNotification(sub, payload, options);
             } catch (err) {
                 // Remove expired or "Gone" subscriptions from the registry
                 if (err.statusCode === 410 || err.statusCode === 404) {
@@ -1286,13 +1308,14 @@ io.on('connection', (socket) => {
                 body: `${data.callerName || 'Someone'} is calling you on Nexora 🔐`,
                 icon: '/icon.png',
                 badge: '/badge.png',
-                color: '#0066ff',
+                color: '#6c5ce7',
                 urgency: 'high',
                 data: { 
                     type: 'call',
                     callerName: data.callerName || senderId,
                     callerAvatar: callerAvatar || data.callerAvatar,
-                    audio: '/ringtone.mp3'
+                    audio: '/ringtone.mp3',
+                    vibrate: Array(20).fill([500, 500]).flat() // 20s rhythmic vibration
                 }
             });
         }
@@ -1506,6 +1529,13 @@ app.post('/api/auth/login', async (req, res) => {
                 // Send Login Alert (Non-blocking)
                 nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch((..._args) => { });
 
+                if (user.status === 'Suspended') {
+                    return res.status(403).json({ 
+                        status: "error", 
+                        message: "Your account has been suspended for violating platform policies." 
+                    });
+                }
+
                 return res.json({
                     status: "success",
                     role: user.role,
@@ -1514,6 +1544,7 @@ app.post('/api/auth/login', async (req, res) => {
                     username: user.username,
                     phoneNumber: decryptField(user.phone_number),
                     color: user.color,
+                    accountStatus: user.status,
                     message: "Identity recognized. Protocol access granted."
                 });
             }
@@ -1522,6 +1553,21 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (err) {
         ((..._args) => { })("Login Error:", err);
         res.status(500).json({ error: "Server Error" });
+    }
+});
+
+// GET /api/auth/me - Fetch current user status/profile (Minified for performance)
+app.get('/api/auth/me', async (req, res) => {
+    const username = req.query.u;
+    if (!username) return res.status(400).json({ error: "Context missing" });
+
+    try {
+        if (!db) return res.status(500).json({ error: "DB offline" });
+        const user = await db.get('SELECT status, role, username FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        if (!user) return res.status(404).json({ error: "Identity lost" });
+        res.json({ status: user.status, role: user.role, username: user.username });
+    } catch (err) {
+        res.status(500).json({ error: "Relay failed" });
     }
 });
 
@@ -3292,6 +3338,88 @@ app.post('/api/blogs', async (req, res) => {
     } catch (err) {
         ((..._args) => { })("[BLOGS] Save error:", err);
         res.status(500).json({ error: "Failed to save blogs" });
+    }
+});
+
+// ------------------------------------------------------------------
+// SAFETY & MODERATION PROTOCOL
+// ------------------------------------------------------------------
+
+// POST /api/report - Submit a new abuse report with evidence
+app.post('/api/report', async (req, res) => {
+    const { reporter, target, reason, category, evidence } = req.body;
+    if (!reporter || !target || !category) return res.status(400).json({ error: "Missing required fields" });
+
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        
+        // 1. Log the report
+        await db.run(
+            'INSERT INTO reports (reporter, target, reason, category, evidence, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [reporter.toLowerCase(), target.toLowerCase(), reason, category, JSON.stringify(evidence || []), 'Pending']
+        );
+
+        // 2. Automatically flag target user for review
+        await db.run('UPDATE users SET status = ? WHERE LOWER(username) = ? AND status = ?', ['InReview', target.toLowerCase(), 'Active']);
+
+        // 3. Notify Admin (Optional Log)
+        ((..._args) => { })(`[SAFETY] Report submitted against @${target} by @${reporter}. Evidence Attached.`);
+
+        res.json({ success: true, status: "success", message: "Report received and queued for review." });
+    } catch (err) {
+        ((..._args) => { })("[SAFETY] Report error:", err);
+        res.status(500).json({ error: "Failed to process report." });
+    }
+});
+
+// GET /api/admin/reports - Fetch all reports (Admin Only)
+app.get('/api/admin/reports', async (req, res) => {
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        const reports = await db.all('SELECT * FROM reports ORDER BY id DESC');
+        res.json({ status: "success", reports });
+    } catch (err) {
+        ((..._args) => { })("[ADMIN] Reports fetch error:", err);
+        res.status(500).json({ error: "Failed to fetch reports" });
+    }
+});
+
+// PATCH /api/admin/reports/:id/status - Update report status
+app.patch('/api/admin/reports/:id/status', async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: "Status required" });
+
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('UPDATE reports SET status = ? WHERE id = ?', [status, id]);
+        res.json({ status: "success", message: "Report status updated." });
+    } catch (err) {
+        ((..._args) => { })("[ADMIN] Report update error:", err);
+        res.status(500).json({ error: "Failed to update report" });
+    }
+});
+
+// PATCH /api/admin/users/:username/status - Update user account status (Suspend/Activate)
+app.patch('/api/admin/users/:username/status', async (req, res) => {
+    const { username } = req.params;
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: "Status required" });
+
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('UPDATE users SET status = ? WHERE LOWER(username) = ?', [status, username.toLowerCase()]);
+        
+        // Log to audit logs if possible
+        await db.run(
+            'INSERT INTO audit_logs (action, target, admin_username, details) VALUES (?, ?, ?, ?)',
+            ['STATUS_CHANGE', username, 'system_admin', `User status changed to ${status}`]
+        );
+
+        res.json({ status: "success", message: `User @${username} status updated to ${status}.` });
+    } catch (err) {
+        ((..._args) => { })("[ADMIN] User status error:", err);
+        res.status(500).json({ error: "Failed to update user status" });
     }
 });
 
