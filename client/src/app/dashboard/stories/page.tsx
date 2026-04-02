@@ -261,21 +261,21 @@ export default function StoriesPage() {
        startCameraView();
        // Clean up URL so it doesn't trigger again on re-renders
        const newUrl = window.location.pathname;
-       window.history.replaceState({}, '', newUrl);
+       window.history.replaceState({ ...window.history.state }, '', newUrl);
     } else if (targetUser && !activeStory) {
        const myUsername = localStorage.getItem("nexora_signup_username");
        if (targetUser === myUsername || targetUser === 'me') {
           if (myStories.length > 0) {
             setActiveStory(myStories[0]);
             const newUrl = window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
+            window.history.replaceState({ ...window.history.state }, '', newUrl);
           }
        } else {
           const userStories = allOtherStories.filter((s: any) => s.username === targetUser);
           if (userStories.length > 0) {
             setActiveStory(userStories[0]);
             const newUrl = window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
+            window.history.replaceState({ ...window.history.state }, '', newUrl);
           }
        }
     }

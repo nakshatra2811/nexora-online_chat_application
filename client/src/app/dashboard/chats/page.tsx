@@ -471,7 +471,7 @@ function ChatsPageContent() {
             // Clean up call param silently from URL without triggering a Next.js re-render loop
             const url = new URL(window.location.href);
             url.searchParams.delete("call");
-            originalReplaceState.current?.({}, "", url.toString());
+            originalReplaceState.current?.({ ...window.history.state }, "", url.toString());
             setCallInitiation(null);
           }
           return;
@@ -2775,7 +2775,7 @@ function ChatsPageContent() {
           {/* Chat Header */}
           <div className="sticky top-0 px-4 md:px-6 py-2 flex items-center justify-between border-b z-40 shrink-0 backdrop-blur-xl"
             style={{ borderColor: "var(--border-subtle)", background: "var(--bg-surface)" }}>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
               {activeThread ? (
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
@@ -2794,7 +2794,7 @@ function ChatsPageContent() {
                         style={{ border: `2px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     ) : null}
                   </div>
-                  <div className="cursor-pointer group min-w-0 pr-2" onClick={() => setSelectedProfileUser(activeThread)}>
+                  <div className="cursor-pointer group min-w-0 flex-1 overflow-hidden" onClick={() => setSelectedProfileUser(activeThread)}>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <h3 className="font-extrabold text-[13px] md:text-base truncate transition-all group-hover:text-[#6c5ce7]"
                         style={{ color: "var(--text-primary)" }}>
@@ -2826,7 +2826,7 @@ function ChatsPageContent() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3 shrink-0 ml-2">
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full hidden sm:inline"
                 style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>AES-256 Encrypted</span>
               {activeThread.username !== 'nexora_31' && (
