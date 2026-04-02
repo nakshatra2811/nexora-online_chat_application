@@ -1,0 +1,33 @@
+{
+  "name": "Nexora — The Privacy Protocol",
+  "short_name": "Nexora",
+  "description": "Military-grade encrypted private chat platform with zero-knowledge protocol.",
+  "start_url": "/dashboard/chats",
+  "display": "standalone",
+  "background_color": "#0a0a14",
+  "theme_color": "#6c5ce7",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chats",
+      "url": "/dashboard/chats",
+      "icons": [{ "src": "/logo.svg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Stories",
+      "url": "/dashboard/stories",
+      "icons": [{ "src": "/logo.svg", "sizes": "96x96" }]
+    }
+  ]
+}

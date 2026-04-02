@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Edit3, Camera, Shield, Zap, MapPin, Network, Link2, UserCheck, X,
+  Edit3, Camera, Shield, Zap, MapPin, Network, Link2, UserCheck, X, ChevronLeft,
   Share2, Copy, Check, UserPlus, Mail, Phone, Search,
   MessageCircle, Send, ShieldOff, Bell, UserX, Clock, RefreshCcw
 } from "lucide-react";
@@ -14,14 +14,97 @@ import { LoadingAnimation } from "@/components/LoadingAnimation";
 import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, SnapchatIcon, TwitterIcon } from "@/components/SocialIcons";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
 
-/* ─── Mock contacts ─── */
-const MOCK_CONTACTS: any[] = [];
+/* ─── Mock contacts (Fallback for Web/Desktop) ─── */
+const MOCK_CONTACTS: any[] = [
+  { id: 1, name: "Aarav Shah", phone: "+91 98765 43210", color: "from-amber-500 to-orange-600", avatar: "A", isUser: true, invited: false },
+  { id: 2, name: "Isha Sharma", phone: "+91 98765 43211", color: "from-rose-500 to-pink-600", avatar: "I", isUser: true, invited: false },
+  { id: 3, name: "Rohan Mehta", phone: "+91 98765 43212", color: "from-emerald-500 to-teal-600", avatar: "R", isUser: true, invited: false },
+  { id: 4, name: "Varun Patel", phone: "+91 88888 77777", color: "from-gray-500 to-gray-700", avatar: "V", isUser: false, invited: false },
+  { id: 5, name: "Sara Khan", phone: "+91 77777 66666", color: "from-gray-500 to-gray-700", avatar: "S", isUser: false, invited: false }
+];
 
 /* ─── Contacts Modal ─── */
 function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boolean }) {
   const router = useRouter();
   const [contacts, setContacts] = useState(MOCK_CONTACTS);
   const [search, setSearch] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const syncContacts = async () => {
+    setIsSyncing(true);
+    try {
+      const supportsContacts = 'contacts' in navigator && 'ContactsManager' in window;
+      let rawContacts: any[] = [];
+      
+      if (supportsContacts) {
+        try {
+          const nativeContacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: true });
+          if (nativeContacts && nativeContacts.length > 0) {
+            rawContacts = nativeContacts;
+          }
+        } catch(err) {
+          ((..._args: any[]) => {})("Sync cancelled", err);
+        }
+      } 
+      
+      if (rawContacts.length === 0) {
+        rawContacts = [
+          { name: ["Aarav Shah"], tel: ["9876543210"] },
+          { name: ["Isha Sharma"], tel: ["9876543211"] },
+          { name: ["Rohan Mehta"], tel: ["9876543212"] },
+          { name: ["Varun Patel"], tel: ["8888877777"] },
+          { name: ["Sara Khan"], tel: ["7777766666"] }
+        ];
+      }
+
+      const formattedContacts: any[] = [];
+      const contactNumbers: string[] = [];
+
+      rawContacts.forEach((c, idx) => {
+         let n = (c.tel && c.tel[0]) ? c.tel[0].replace(/\D/g, '') : "";
+         if (n.length >= 10) {
+            contactNumbers.push(n);
+            formattedContacts.push({
+               id: idx + 100, // offset id
+               name: (c.name && c.name[0]) ? c.name[0] : "Unknown Contact",
+               phone: c.tel[0] || "",
+               avatar: ((c.name && c.name[0]) ? c.name[0][0] : "?").toUpperCase(),
+               color: "from-gray-500 to-gray-700",
+               rawPhone: n,
+               isUser: false,
+               invited: false
+            });
+         }
+      });
+
+      if (contactNumbers.length > 0) {
+        const me = localStorage.getItem("nexora_signup_username") || "";
+        const { nexoraFetch } = await import("@/lib/config");
+        const res = await nexoraFetch("/api/users/sync-contacts", {
+          method: "POST",
+          body: JSON.stringify({ contacts: contactNumbers, me })
+        });
+
+        if (res && res.registeredPhones) {
+           const registeredSet = new Set(res.registeredPhones);
+           const finalContacts = formattedContacts.map(c => {
+               if (registeredSet.has(c.rawPhone)) {
+                   c.isUser = true;
+                   c.color = "from-[#6c5ce7] to-[#00d4ff]";
+               }
+               return c;
+           });
+           setContacts(finalContacts);
+        } else {
+           setContacts(formattedContacts); 
+        }
+      }
+    } catch (e) {
+       ((..._args: any[]) => {})("Contacts sync error", e);
+    } finally {
+       setIsSyncing(false);
+    }
+  };
 
   const inviteApps = [
     { name: "WhatsApp", icon: <WhatsAppIcon size={16} color="#25D366" />, color: "#25D366" },
@@ -47,26 +130,30 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
   const filtered = contacts.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search));
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md" onClick={onClose}>
-      <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
-        onClick={e => e.stopPropagation()}
-        className="w-full max-w-md max-h-[85vh] rounded-[2rem] flex flex-col shadow-2xl overflow-hidden"
-        style={{ background: isDark ? "rgba(16,16,30,0.98)" : "rgba(255,255,255,0.98)", border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(108,92,231,0.12)"}` }}>
+    <div className="fixed inset-0 z-[300] bg-white dark:bg-[#10101e] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+        className="w-full h-full flex flex-col"
+        style={{ background: isDark ? "#10101e" : "#ffffff" }}>
 
-        {/* Header */}
-        <div className="p-6 pb-3 shrink-0">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-extrabold" style={{ color: "var(--text-primary)" }}>Contacts & Invite</h2>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Import from your device & send invitations</p>
-            </div>
-            <button onClick={onClose} className="p-2 rounded-xl opacity-50 hover:opacity-100" style={{ color: "var(--text-muted)" }}>
-              <X className="w-4 h-4" />
+        {/* Full Screen Header */}
+        <div className="pt-safe pb-4 shrink-0 relative bg-white dark:bg-[#10101e] border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)", zIndex: 10 }}>
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors" style={{ color: "var(--text-primary)" }}>
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+            <h2 className="text-xl font-black absolute left-1/2 -translate-x-1/2" style={{ color: "var(--text-primary)" }}>Find Friends</h2>
+            <div className="w-10"></div>
+          </div>
+          
+          <div className="px-6 mt-2">
+            <button onClick={syncContacts} disabled={isSyncing} className="w-full py-3.5 rounded-2xl font-bold flex justify-center items-center gap-2 text-white shadow-lg shadow-indigo-500/30 transition-transform active:scale-95" style={{ background: "linear-gradient(135deg, #6c5ce7, #a29bfe)" }}>
+              {isSyncing ? "Syncing..." : "Sync Device Contacts"}
             </button>
           </div>
+        </div>
 
           {/* Invite via apps row */}
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+          <div className="flex gap-2 mt-4 px-6 mb-4 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
             {inviteApps.map(app => (
               <motion.button key={app.name} whileTap={{ scale: 0.92 }}
                 onClick={() => {
@@ -86,7 +173,7 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
           </div>
 
           {/* Search */}
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border"
+          <div className="flex items-center gap-2 px-3 mx-6 py-2.5 rounded-xl border"
             style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderColor: "var(--border-subtle)" }}>
             <Search className="w-4 h-4 shrink-0" style={{ color: "var(--text-muted)" }} />
             <input value={search} onChange={e => setSearch(e.target.value)}
@@ -94,8 +181,6 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
               className="flex-1 bg-transparent outline-none text-sm"
               style={{ color: "var(--text-primary)" }} />
           </div>
-        </div>
-
         {/* Contact list */}
         <div className="flex-1 overflow-y-auto px-6 pb-6 flex flex-col gap-2">
           {filtered.map(contact => (
@@ -463,11 +548,20 @@ export default function ProfilePage() {
           {/* Profile Card */}
           <div className="glass-panel p-7 flex flex-col items-center text-center relative shadow-lg"
             style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
-            <button onClick={() => setIsEditing(!isEditing)}
-              className="absolute top-4 right-4 p-2 rounded-full transition-all cursor-pointer"
-              style={{ color: "var(--text-muted)" }}>
-              <Edit3 className="w-5 h-5 hover:text-[#6c5ce7]" />
-            </button>
+            <div className="absolute top-4 right-4 flex items-center gap-1">
+              <button 
+                onClick={() => setShowShare(true)}
+                className="p-2 rounded-full transition-all cursor-pointer sm:hidden"
+                style={{ color: "var(--text-muted)" }}
+              >
+                <Share2 className="w-5 h-5 hover:text-[#00d4ff]" />
+              </button>
+              <button onClick={() => setIsEditing(!isEditing)}
+                className="p-2 rounded-full transition-all cursor-pointer"
+                style={{ color: "var(--text-muted)" }}>
+                <Edit3 className="w-5 h-5 hover:text-[#6c5ce7]" />
+              </button>
+            </div>
 
             {/* Avatar */}
             <div className="relative mb-5">

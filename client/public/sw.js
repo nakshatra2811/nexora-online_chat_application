@@ -24,7 +24,7 @@ self.addEventListener('push', (event) => {
 
   const title = payload.title || 'Nexora';
   const options = {
-    body: payload.body || 'You have a new message',
+    body: payload.body || 'Encrypted Message is here 🔐',
     icon: payload.icon || '/icon.svg',
     badge: payload.badge || '/icon.svg',
     vibrate: [200, 100, 200],

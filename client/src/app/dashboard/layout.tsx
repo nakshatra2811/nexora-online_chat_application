@@ -4,13 +4,14 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  MessageSquare, LayoutTemplate, Lock, Users, Settings, User,
+  MessageSquare, LayoutTemplate, Lock, Users, Settings, User, Search,
   LogOut, Sun, Moon, Shield, Menu, X, Eye, EyeOff, KeyRound, HelpCircle, ChevronLeft,
   Bell, Check, UserPlus, Share2
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch, APP_LOGO } from "@/lib/config";
 import { socketService } from "@/lib/socket";
+import { pushService } from "@/lib/push";
 import { NotificationSkeleton } from "@/components/Skeleton";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
@@ -28,7 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Global Share Profile
   const [showGlobalShare, setShowGlobalShare] = useState(false);
-  const [globalProfile, setGlobalProfile] = useState<any>(null);
+  const [globalProfile, setGlobalProfile] = useState({ name: "", username: "", email: "", avatarUrl: "" });
 
   // Notifications
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -103,6 +104,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const socket = socketService.connect();
     socket.emit("register", username);
+
+    // Proactive Push Subscription Protocol
+    pushService.subscribe(username).catch((..._args: any[]) => {});
 
       const fetchRequests = async () => {
         setIsLoadingNotifs(true);
@@ -295,11 +299,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: "Settings", icon: Settings, href: "/dashboard/settings" },
   ];
 
-  // Items shown in the bottom pill: always Chats, Stories, Requests, Profile + Settings
+  // Items shown in the bottom pill: now Chats, Stories, Profile, Settings
   const bottomNavItems = navItems.filter(item =>
     ["Chats", "Stories", "Profile", "Settings"].includes(item.name)
   );
-  // Extra items that need a hamburger (e.g., Vault for special users)
+  // Extra items that need a hamburger (e.g., Vault specifically)
   const extraNavItems = navItems.filter(item =>
     !["Chats", "Stories", "Profile", "Settings"].includes(item.name)
   );
@@ -739,51 +743,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
             className="md:hidden fixed z-[200] rounded-full flex justify-center shadow-2xl"
             style={{
-              background: isDark ? "rgba(16,16,24,0.9)" : "rgba(255,255,255,0.9)",
-              backdropFilter: "blur(24px) saturate(1.8)",
-              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-              bottom: "calc(16px + env(safe-area-inset-bottom))",
-              left: "16px", right: "16px",
+              background: isDark ? "rgba(16,16,24,0.92)" : "rgba(255,255,255,0.95)",
+              backdropFilter: "blur(40px) saturate(2)",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"}`,
+              bottom: "calc(10px + env(safe-area-inset-bottom))",
+              left: "12px", right: "12px",
               pointerEvents: "auto",
+              boxShadow: isDark ? "0 10px 40px rgba(0,0,0,0.4)" : "0 8px 30px rgba(108,92,231,0.08)",
             }}>
-            <div className="flex w-full items-center justify-around px-1 py-1.5">
+            <div className="flex w-full items-center justify-around px-2 py-2">
               {bottomNavItems.map((item) => {
-                const isActive = pathname.startsWith(item.href);
+                const isActive = pathname === item.href || (item.href !== "/dashboard/chats" && pathname.startsWith(item.href));
+                const isProfile = item.name === "Profile";
+                
                 return (
-                  <motion.button key={item.name} whileTap={{ scale: 0.85 }} onClick={() => triggerAction(item.href)}
-                    className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300 cursor-pointer active:scale-90"
+                  <motion.button key={item.name} whileTap={{ scale: 0.8 }} onClick={() => triggerAction(item.href)}
+                    className="relative flex flex-col items-center justify-center gap-1 transition-all duration-300 cursor-pointer active:scale-95 px-3 py-1.5 rounded-2xl"
                     style={{ 
-                      background: isActive ? "linear-gradient(135deg, #0066ff, #00d4ff)" : "transparent",
-                      pointerEvents: "auto",
+                      background: isActive ? (isDark ? "rgba(108,92,231,0.12)" : "rgba(108,92,231,0.06)") : "transparent",
                     }}>
-                    <item.icon className="h-6 w-6" style={{ color: isActive ? "#fff" : "var(--text-secondary)" }} />
+                    {isProfile ? (
+                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm border overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-[#6c5ce7] ring-offset-2 scale-110' : 'scale-100'}`}
+                           style={{ 
+                             background: "linear-gradient(135deg, #6c5ce7, #00d4ff)",
+                             borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+                             borderWidth: isActive ? "2px" : "1px"
+                           }}>
+                        {globalProfile.avatarUrl ? (
+                          <img src={globalProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          (globalProfile.name?.[0] || globalProfile.username?.[0] || "?").toUpperCase()
+                        )}
+                      </div>
+                    ) : (
+                      <item.icon className="h-[20px] w-[20px] transition-all duration-300" 
+                                 fill={isActive ? "#6c5ce7" : "none"}
+                                 style={{ 
+                                   color: isActive ? "#6c5ce7" : "var(--text-secondary)", 
+                                   transform: isActive ? "scale(1.1)" : "scale(1)" 
+                                 }} />
+                    )}
+                    
+                    <span className="text-[9px] font-bold leading-none tracking-tight transition-colors duration-300"
+                          style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)" }}>
+                      {item.name}
+                    </span>
+
+                    {isActive && (
+                      <motion.div layoutId="mobileNavDot" className="absolute -bottom-1 w-1 h-1 rounded-full bg-[#6c5ce7]" />
+                    )}
                   </motion.button>
                 );
               })}
 
-              {/* Mobile Notification Bell */}
-              <motion.button whileTap={{ scale: 0.85 }} onClick={() => setShowGlobalShare(true)}
-                className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300">
-                <Share2 className="h-6 w-6" style={{ color: "#00d4ff" }} />
-              </motion.button>
-
-              <motion.button whileTap={{ scale: 0.85 }}
-                onClick={() => setShowNotifPanel(v => !v)}
-                className="relative flex items-center justify-center p-3 rounded-full transition-colors duration-300"
-                style={{ background: showNotifPanel ? "linear-gradient(135deg,#6c5ce7,#00d4ff)" : "transparent" }}>
-                <Bell className="h-6 w-6" style={{ color: showNotifPanel ? "#fff" : "var(--text-secondary)" }} />
-                {pendingRequests.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 h-4 min-w-4 px-0.5 rounded-full text-[8px] font-black text-white flex items-center justify-center"
-                    style={{ background: "#ff006e" }}>
-                    {pendingRequests.length}
-                  </span>
-                )}
-              </motion.button>
-
               {extraNavItems.length > 0 && (
-                <motion.button whileTap={{ scale: 0.85 }} onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                  className="flex items-center justify-center p-3 rounded-full transition-colors duration-300">
-                  <Menu className="h-6 w-6" style={{ color: "var(--text-secondary)" }} />
+                <motion.button whileTap={{ scale: 0.8 }} onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="flex items-center justify-center p-2.5 rounded-2xl transition-colors duration-300">
+                  <Menu className="h-[22px] w-[22px]" style={{ color: "var(--text-secondary)" }} />
+                  {mobileMenuOpen && (
+                     <motion.div layoutId="mobileNavDot" className="absolute -bottom-1 w-1 h-1 rounded-full bg-[#6c5ce7]" />
+                  )}
                 </motion.button>
               )}
             </div>

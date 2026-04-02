@@ -274,6 +274,12 @@ let pgPool;
                 type TEXT,
                 created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
+
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                username TEXT PRIMARY KEY,
+                subscription TEXT NOT NULL,
+                created_at ${dbType==='postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+            );
         `);
 
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
@@ -796,11 +802,27 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     ((..._args) => {})('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
 }
 
-// In-memory push subscription store (username -> subscription)
-const pushSubscriptions = new Map(); // username -> PushSubscription
-
 // In-memory offline message queue: username -> [{...msgData}]
 const offlineMessageQueue = new Map();
+
+async function sendPushNotification(username, payloadData) {
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+    try {
+        const row = await db.get('SELECT subscription FROM push_subscriptions WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        if (row) {
+            const sub = JSON.parse(row.subscription);
+            const payload = JSON.stringify(payloadData);
+            webpush.sendNotification(sub, payload).catch(err => {
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                    db.run('DELETE FROM push_subscriptions WHERE LOWER(username) = ?', [username.toLowerCase()]).catch((..._args) => {});
+                }
+                ((..._args) => {})('[PUSH] Notification delivery failed:', err.message);
+            });
+        }
+    } catch (e) {
+        ((..._args) => {})('[PUSH] Persistence error:', e.message);
+    }
+}
 
 function queueMessageForUser(username, msgData) {
     if (!offlineMessageQueue.has(username)) {
@@ -811,24 +833,14 @@ function queueMessageForUser(username, msgData) {
     if (queue.length >= 100) queue.shift();
     queue.push(msgData);
 
-    // Send Web Push notification if user has a subscription
-    const sub = pushSubscriptions.get(username);
-    if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-        const payload = JSON.stringify({
-            title: `New message from ${msgData.from || 'Someone'}`,
-            body: '🔒 Encrypted message received',
-            icon: '/icon.svg',
-            badge: '/icon.svg',
-            data: { from: msgData.from },
-        });
-        webpush.sendNotification(sub, payload).catch(err => {
-            if (err.statusCode === 410 || err.statusCode === 404) {
-                // Subscription expired — remove it
-                pushSubscriptions.delete(username);
-            }
-            ((..._args) => {})('[PUSH] Notification failed:', err.message);
-        });
-    }
+    // Proactive background push to all registered devices
+    sendPushNotification(username, {
+        title: `New Message`,
+        body: 'Encrypted Message is here 🔐',
+        icon: '/icon.svg',
+        badge: '/icon.svg',
+        data: { from: msgData.from },
+    });
 }
 
 function deliverQueuedMessages(username, socket) {
@@ -953,13 +965,10 @@ io.on('connection', (socket) => {
         const enriched = { ...data, from: senderId || data.from };
 
         // 1. Relay to target user's devices
-        const targetRoom = io.sockets.adapter.rooms.get(targetId);
-        if (targetRoom && targetRoom.size > 0) {
-            io.to(targetId).emit('dm:message', enriched);
-        } else {
-            // Offline: queue for delivery when any of their devices reconnect
-            queueMessageForUser(targetId, enriched);
-        }
+        io.to(targetId).emit('dm:message', enriched);
+        
+        // 2. Always attempt background push to ensure delivery if tab is closed/background
+        queueMessageForUser(targetId, enriched);
 
         // 2. Sync to sender's OTHER devices
         if (senderId) {
@@ -973,12 +982,11 @@ io.on('connection', (socket) => {
         const senderId = socketToUser.get(socket.id);
         const enriched = { ...data, from: senderId || data.from, isMedia: true };
 
-        const targetRoom = io.sockets.adapter.rooms.get(targetId);
-        if (targetRoom && targetRoom.size > 0) {
-            io.to(targetId).emit('dm:media', enriched);
-        } else {
-            queueMessageForUser(targetId, enriched);
-        }
+        // 1. Relay to target user's devices
+        io.to(targetId).emit('dm:media', enriched);
+        
+        // 2. Always attempt background push
+        queueMessageForUser(targetId, enriched);
 
         // Sync to sender's OTHER devices
         if (senderId) {
@@ -1170,16 +1178,13 @@ io.on('connection', (socket) => {
                 callerColor: data.callerColor,
                 roomId: data.roomId // Pass along room ID if provided
             });
-            // Push notification for incoming call
-            const sub = pushSubscriptions.get(targetId);
-            if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-                webpush.sendNotification(sub, JSON.stringify({
-                    title: `Incoming ${data.callType} call`,
-                    body: `${data.callerName || senderId} is calling you on Nexora`,
-                    icon: '/icon.svg',
-                    badge: '/icon.svg',
-                })).catch((..._args) => {});
-            }
+            // Push notification for incoming call (using privacy text)
+            sendPushNotification(targetId, {
+                title: `Incoming Secret Call`,
+                body: `An encrypted call is incoming on Nexora 🔐`,
+                icon: '/icon.svg',
+                badge: '/icon.svg',
+            });
         }
     });
 
@@ -1319,6 +1324,57 @@ app.get('/api/users/public/:username', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: "Relay console failure." });
+    }
+});
+
+// SYNC CONTACTS (Phase: Identity Validation from local address book)
+app.post('/api/users/sync-contacts', async (req, res) => {
+    try {
+        const { contacts, me } = req.body;
+        if (!contacts || !Array.isArray(contacts)) {
+            return res.status(400).json({ error: "Invalid payload format." });
+        }
+        if (!db) return res.status(500).json({ error: "Database not ready." });
+
+        if (contacts.length === 0) {
+            return res.json({ suggestions: [] });
+        }
+
+        // 1. Hash incoming phone numbers and map them back to original strings
+        const phoneToHash = {};
+        const hashedContacts = [];
+        for (const c of contacts) {
+             const h = hashPhone(c);
+             if (h) {
+                 hashedContacts.push(h);
+                 phoneToHash[h] = c;
+             }
+        }
+
+        if (hashedContacts.length === 0) {
+             return res.json({ suggestions: [], registeredPhones: [] });
+        }
+
+        // 2. Fetch matched identities
+        const placeholders = hashedContacts.map((_, i) => (dbType === 'postgres' ? `$${i + 2}` : '?')).join(',');
+        const sql = `SELECT username, full_name, color, phone_hash FROM users WHERE username != ${dbType === 'postgres' ? '$1' : '?'} AND phone_hash IN (${placeholders}) LIMIT 50`;
+        const params = [me || '', ...hashedContacts];
+
+        const users = await db.all(sql, params);
+
+        const registeredPhones = users.map(u => phoneToHash[u.phone_hash]).filter(Boolean);
+
+        const suggestions = users.map(u => ({
+            username: u.username,
+            fullName: decryptField(u.full_name),
+            reason: 'In your contacts',
+            color: u.color || 'from-[#6c5ce7] to-[#00d4ff]'
+        }));
+
+        res.json({ suggestions, registeredPhones });
+    } catch (e) {
+        ((..._args) => {})("Contact Sync Protocol Error:", e);
+        res.status(500).json({ error: "Server sync failure." });
     }
 });
 
@@ -2020,21 +2076,33 @@ app.get('/api/push/vapid-public-key', (req, res) => {
 });
 
 // Subscribe user to push notifications
-app.post('/api/push/subscribe', (req, res) => {
+app.post('/api/push/subscribe', async (req, res) => {
     const { username, subscription } = req.body;
     if (!username || !subscription) {
         return res.status(400).json({ error: 'username and subscription required' });
     }
-    pushSubscriptions.set(username.toLowerCase(), subscription);
-    ((..._args) => {})(`[PUSH] Subscription registered for: ${username}`);
-    res.json({ status: 'success', message: 'Push subscription registered.' });
+    try {
+        const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
+        const sql = dbType === 'postgres' 
+            ? 'INSERT INTO push_subscriptions (username, subscription) VALUES ($1, $2) ON CONFLICT (username) DO UPDATE SET subscription = $2'
+            : 'INSERT OR REPLACE INTO push_subscriptions (username, subscription) VALUES (?, ?)';
+        await db.run(sql, [username.toLowerCase(), subStr]);
+        ((..._args) => {})(`[PUSH] Subscription persisted for: ${username}`);
+        res.json({ status: 'success', message: 'Push subscription registered.' });
+    } catch (err) {
+        res.status(500).json({ error: 'Database error while subscribing' });
+    }
 });
 
 // Unsubscribe user from push notifications
-app.delete('/api/push/subscribe/:username', (req, res) => {
+app.delete('/api/push/subscribe/:username', async (req, res) => {
     const username = req.params.username.toLowerCase();
-    pushSubscriptions.delete(username);
-    res.json({ status: 'success' });
+    try {
+        await db.run('DELETE FROM push_subscriptions WHERE LOWER(username) = ?', [username]);
+        res.json({ status: 'success' });
+    } catch (err) {
+        res.status(500).json({ error: 'Database error while unsubscribing' });
+    }
 });
 
 // ------------------------------------------------------------------
@@ -2622,15 +2690,12 @@ app.post('/api/stories/reply', async (req, res) => {
         // Also sync back to sender's other devices
         io.to(sender).emit('dm:message', storyRelayPayload);
 
-        // Push notification
-        const sub = pushSubscriptions.get(receiver);
-        if (sub && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-            webpush.sendNotification(sub, JSON.stringify({
-                title: `New story reply from ${username}`,
-                body: message,
-                icon: '/icon.svg'
-            })).catch((..._args) => {});
-        }
+        // Push notification (Privacy standard)
+        sendPushNotification(receiver, {
+            title: `New Message`,
+            body: 'Encrypted Message is here 🔐',
+            icon: '/icon.svg'
+        });
 
         res.json({ status: "success" });
     } catch (err) {

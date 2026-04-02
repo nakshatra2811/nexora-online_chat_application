@@ -12,7 +12,7 @@ import {
   AlertTriangle, ChevronRight, ChevronLeft, Pin, ArrowUp, ArrowDown, Wallpaper, Upload, XCircle, Eye, EyeOff,
   Volume2, VolumeX, FolderOpen, Download, Play, Pause, Square, PhoneIncoming, PhoneOutgoing, PhoneMissed, Film, Heart,
   BarChart3, Users, UserPlus, MessageSquare, Share2, Plus, ToggleLeft, ToggleRight, Mail, Smartphone,
-  RefreshCcw, Bell, UserCheck, Clock, Star
+  RefreshCcw, Bell, BellOff, UserCheck, Clock, Star
 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/SocialIcons";
 import { socketService } from "@/lib/socket";
@@ -23,6 +23,7 @@ import { nexoraFetch } from "@/lib/config";
 import { pushService } from "@/lib/push";
 import { useCall } from "@/components/Call/CallProvider";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
+import { ShareProfileModal } from "@/components/ShareProfileModal";
 
 const TUNNEL_ID = "nexora_secure_room_1";
 const TUNNEL_PASSWORD = "super_secret_e2e_password_123";
@@ -106,8 +107,20 @@ function ChatsPageContent() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   // Refs for stable values inside socket callbacks
   const activeThreadRef = useRef<Thread | null>(null);
+  const myUsernameRef = useRef("");
+  const isSendingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveOnlineUsers, setLiveOnlineUsers] = useState<string[]>([]);
+
+  // Bumps a thread to the top and updates its metadata for recency sorting
+  const bumpThread = (username: string, updates: Partial<Thread>) => {
+    setThreads(prev => {
+      const thread = prev.find(t => t.username?.toLowerCase() === username?.toLowerCase());
+      if (!thread) return prev; // If not found, stay as is (fetchConnections will pick it up)
+      const otherThreads = prev.filter(t => t.username?.toLowerCase() !== username?.toLowerCase());
+      return [{ ...thread, ...updates, lastMessageTime: Date.now() }, ...otherThreads];
+    });
+  };
 
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
@@ -244,9 +257,20 @@ function ChatsPageContent() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [blockedThreads, setBlockedThreads] = useState<number[]>([]);
   const [pinnedThreads, setPinnedThreads] = useState<number[]>([]);
+  const [mutedThreads, setMutedThreads] = useState<number[]>([]);
   const [threadContextMenu, setThreadContextMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
-
+  // Close context menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (threadContextMenu && contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setThreadContextMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [threadContextMenu]);
   const [lockedChatsMap, setLockedChatsMap] = useState<Record<number, string>>({});
   const [unlockedSessionThreads, setUnlockedSessionThreads] = useState<number[]>([]);
   const [hiddenThreads, setHiddenThreads] = useState<number[]>([]);
@@ -262,6 +286,7 @@ function ChatsPageContent() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMatches, setSyncMatches] = useState<any[]>([]);
+  const [syncNonMatches, setSyncNonMatches] = useState<string[]>([]);
   const [manualPhone, setManualPhone] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   
@@ -284,6 +309,7 @@ function ChatsPageContent() {
     const query = manualPhone.trim();
     if (!query) return;
     setIsSyncing(true);
+    setSyncNonMatches([]); // Clear previous sync results
     try {
       const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(query)}`);
       if (res && res.user) {
@@ -301,6 +327,9 @@ function ChatsPageContent() {
 
   const handleNativeSync = async () => {
     setIsSyncing(true);
+    setManualPhone(""); 
+    setSyncMatches([]);
+    setSyncNonMatches([]);
     try {
       // 1. Try modern Contacts API if available
       let numbers: string[] = [];
@@ -324,17 +353,23 @@ function ChatsPageContent() {
          ((..._args: any[]) => {})("No contacts selected/found. Syncing limited to manual entries.");
       }
 
-      // Hash numbers for privacy before sending
-      const hashedContacts = await Promise.all(cleanNumbers.map(n => hashString(n)));
-      
-      // Send hashes to server to find matches
-      if (hashedContacts.length > 0) {
-        const res = await nexoraFetch("/api/connections/sync", {
+      // Send original numbers to server (server will hash them for PII protection during match)
+      if (cleanNumbers.length > 0) {
+        const res = await nexoraFetch("/api/users/sync-contacts", {
           method: "POST",
-          body: JSON.stringify({ hashes: hashedContacts })
+          body: JSON.stringify({ 
+            contacts: cleanNumbers,
+            me: myProfile.username 
+          })
         });
-        if (res && res.matches) {
-          setSyncMatches(res.matches);
+        
+        if (res && res.suggestions) {
+          setSyncMatches(res.suggestions);
+          
+          // Calculate non-matches (invite list)
+          const registered = res.registeredPhones || [];
+          const notOnNexora = cleanNumbers.filter(n => !registered.includes(n));
+          setSyncNonMatches(notOnNexora);
         }
       }
     } catch (e) {
@@ -399,9 +434,6 @@ function ChatsPageContent() {
     fetchProfile();
   }, [selectedProfileUser]);
 
-  const myUsernameRef = useRef("");
-  const isSendingRef = useRef(false);
-
   const myClientId = useRef("").current;
 
   // ═══ Initialize Self Profile ═══
@@ -434,7 +466,16 @@ function ChatsPageContent() {
       try {
         const u = searchParams.get("u") || searchParams.get("username");
         const call = searchParams.get("call");
+        const searchOpen = searchParams.get("search") === "true";
         
+        if (searchOpen) {
+          setShowGlobalSearch(true);
+          // Silently clean up the search param
+          const url = new URL(window.location.href);
+          url.searchParams.delete("search");
+          window.history.replaceState({ ...window.history.state }, "", url.toString());
+        }
+
         setCurrentChatUser(u);
         if (call && u) {
           setCallInitiation({ type: call, user: u });
@@ -509,22 +550,20 @@ function ChatsPageContent() {
     try {
       const data = await nexoraFetch(`/api/connections?username=${encodeURIComponent(myUsername)}`);
       if (data && data.connections) {
-        setThreads(prev => {
-          // Merge: use server data but preserve existing socket-based online status
-          const prevMap = new Map(prev.map(t => [t.username, t]));
-          return data.connections.map((c: any) => {
-            const existing = prevMap.get(c.username);
-            // Sync server-side wallpaper to local cache
-            if (c.wallpaper) {
-               localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
-            }
-            return {
-              ...c,
-              // Use server online status OR existing socket-based status
-              online: c.online || (existing?.online ?? false),
-            };
-          });
-        });
+        setThreads(data.connections.map((c: any) => {
+          // Sync server-side wallpaper to local cache
+          if (c.wallpaper) {
+             localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
+          }
+          const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+          const existing = connections.find((ec: any) => ec.username === c.username);
+          return {
+            ...c,
+            // Use server online status OR existing socket-based status
+            online: c.online || (existing?.online ?? false),
+            lastMessageTime: existing?.lastMessageTime || c.lastMessageTime || 0,
+          };
+        }).sort((a: any, b: any) => (b.lastMessageTime || 0) - (a.lastMessageTime || 0)));
         localStorage.setItem("nexora_secure_connections", JSON.stringify(data.connections));
       }
 
@@ -1020,6 +1059,9 @@ function ChatsPageContent() {
           attachment: { name: "Location", type: "location", url: `${coords.lat},${coords.lng}` },
         };
         setMessages(prev => [...prev, locMsg]);
+        if (activeThread?.username) {
+          bumpThread(activeThread.username, { preview: "📍 Location" });
+        }
         setSharingLocation(false);
 
         // Send to other user via socket
@@ -1222,6 +1264,8 @@ function ChatsPageContent() {
               if (prev.find(m => m.id === newMsg.id)) return prev; // 🛡️ Prevent duplicates
               return [...prev, newMsg];
             });
+            // Bump thread to top
+            bumpThread(senderUsername, { preview: decryptedText });
             // Send seen receipt
             socket.emit("dm:seen", { to: senderUsername, msgId: newMsg.id });
           } else {
@@ -1251,15 +1295,10 @@ function ChatsPageContent() {
               return next;
             });
             // Update thread preview + bump to top
-            setThreads(prev => prev.map(t =>
-              t.username?.toLowerCase() === senderUsername?.toLowerCase()
-                ? { ...t, preview: decryptedText, unread: (t.unread || 0) + 1, lastMessageTime: Date.now() }
-                : t
-            ));
-            // Local push notification (tab not focused on this chat)
+            bumpThread(senderUsername, { preview: decryptedText, unread: (senderThread?.unread || 0) + 1 });
             pushService.showLocalNotification(
               senderThread?.name || senderUsername,
-              `${decryptedText.slice(0, 60)}${decryptedText.length > 60 ? '...' : ''}`,
+              'Encrypted Message is here 🔐',
               { from: senderUsername }
             );
           }
@@ -1288,6 +1327,8 @@ function ChatsPageContent() {
             if (prev.find(m => m.id === newMsg.id)) return prev; // 🛡️ De-duplicate
             return [...prev, newMsg];
           });
+          // Bump thread to top
+          bumpThread(senderUsername, { preview: newMsg.text || "📎 Attachment" });
         } else {
           setUnreadCounts(prev => {
             const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
@@ -1303,11 +1344,15 @@ function ChatsPageContent() {
               localStorage.setItem(`nexora_msgs_${senderThread.id}`, JSON.stringify(threadMsgs));
             }
           }
-          setThreads(prev => prev.map(t =>
-            t.username?.toLowerCase() === senderUsername?.toLowerCase()
-              ? { ...t, preview: "📎 Attachment", unread: (t.unread || 0) + 1 }
-              : t
-          ));
+          bumpThread(senderUsername, { preview: data.caption || "📎 Attachment", unread: (senderThread?.unread || 0) + 1 });
+          // Local push notification (when chat is not active)
+          if (!isFromSelf) {
+            pushService.showLocalNotification(
+              senderThread?.name || senderUsername,
+              'Encrypted Message is here 🔐',
+              { from: senderUsername }
+            );
+          }
         }
       });
 
@@ -1510,11 +1555,7 @@ function ChatsPageContent() {
           setMessages(prev => [...prev, notifMsg]);
         } else {
            // Notify even if not in active thread by updating thread data locally
-           setThreads(prev => prev.map(t => 
-             t.username?.toLowerCase() === data.from?.toLowerCase() 
-             ? { ...t, wallpaper: data.wallpaper || undefined } 
-             : t
-           ));
+           bumpThread(data.from, { wallpaper: data.wallpaper || undefined });
         }
       });
 
@@ -1574,14 +1615,10 @@ function ChatsPageContent() {
               localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
               return next;
             });
-            setThreads(prev => prev.map(t =>
-              t.username?.toLowerCase() === senderUsername?.toLowerCase()
-                ? { ...t, preview: "📍 Location", unread: (t.unread || 0) + 1 }
-                : t
-            ));
+            bumpThread(senderUsername, { preview: "📍 Location", unread: (senderThread?.unread || 0) + 1 });
             pushService.showLocalNotification(
               senderThread?.name || senderUsername,
-              "📍 Shared a location",
+              'Encrypted Message is here 🔐',
               { from: senderUsername }
             );
           }
@@ -1625,14 +1662,10 @@ function ChatsPageContent() {
               localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
               return next;
             });
-            setThreads(prev => prev.map(t =>
-              t.username?.toLowerCase() === senderUsername?.toLowerCase()
-                ? { ...t, preview: "📊 Poll", unread: (t.unread || 0) + 1 }
-                : t
-            ));
+            bumpThread(senderUsername, { preview: "📊 Poll", unread: (senderThread?.unread || 0) + 1 });
             pushService.showLocalNotification(
               senderThread?.name || senderUsername,
-              `📊 Poll: ${data.poll?.question || 'New poll'}`,
+              'Encrypted Message is here 🔐',
               { from: senderUsername }
             );
           }
@@ -1714,7 +1747,7 @@ function ChatsPageContent() {
             ));
             pushService.showLocalNotification(
               senderThread?.name || senderUsername,
-              `👤 Shared a contact: ${data.contact?.name || 'Contact'}`,
+              'Encrypted Message is here 🔐',
               { from: senderUsername }
             );
           }
@@ -1904,6 +1937,12 @@ function ChatsPageContent() {
         };
         
         setMessages(prev => [...prev, msg]);
+        // Bump thread to top
+        if (activeThread) {
+          setThreads(prev => prev.map(t =>
+            t.username === activeThread.username ? { ...t, preview: msg.text, lastMessageTime: Date.now() } : t
+          ));
+        }
 
         // Send over Socket
         const socket = socketService.getSocket();
@@ -1985,6 +2024,10 @@ function ChatsPageContent() {
     };
     msg.attachment = attachment; // keep it locally but hidden via UI flags later
     setMessages(prev => [...prev, msg]);
+    // Bump thread to top
+    if (activeThread) {
+      bumpThread(activeThread.username, { preview: "📷 Photo" });
+    }
 
     const socket = socketService.getSocket();
     if (socket && activeThread?.username) {
@@ -2110,6 +2153,10 @@ function ChatsPageContent() {
       replyTo: currentReplyId,
     };
     setMessages(prev => [...prev, msg]);
+    // Bump thread to top
+    if (activeThread) {
+      bumpThread(activeThread.username, { preview: "🎙 Voice Message" });
+    }
     
     const socket = socketService.getSocket();
     if (socket && activeThread?.username) {
@@ -2503,18 +2550,32 @@ function ChatsPageContent() {
             <div className="flex items-center gap-2">
               <motion.button
                 whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all relative active:scale-95 ${showNotifications ? 'bg-gradient-to-tr from-pink-500 via-rose-500 to-orange-400 text-white shadow-xl shadow-rose-500/30 ring-2 ring-rose-500/20' : 'bg-gradient-to-tr from-rose-500/10 to-pink-500/10 dark:from-rose-500/20 dark:to-pink-500/20 text-rose-500 shadow-sm hover:shadow-md'}`}
+                title="Activity Protocol"
+              >
+                <Bell className="w-5 h-5" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-[var(--bg-surface)] shadow-lg animate-in zoom-in spin-in-90">
+                    {notifications.length}
+                  </span>
+                )}
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.9 }}
                 onClick={() => { setShowSyncModal(true); setSyncMatches([]); }}
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-gradient-to-br from-indigo-500 via-purple-500 to-[#6c5ce7] text-white shadow-lg active:scale-95 hover:shadow-purple-500/30"
                 title="Find & Contact Friends"
               >
                 <UserPlus className="w-5 h-5" />
               </motion.button>
             </div>
           </div>
-          <div className="flex items-center rounded-2xl px-4 py-3 gap-3 neumorphic-input">
-            <Search className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
+          <div className="flex items-center rounded-2xl px-4 py-3 gap-3 neumorphic-input transition-all focus-within:ring-2 focus-within:ring-[#6c5ce7]/20 border border-transparent focus-within:border-[#6c5ce7]/30">
+            <Search className="h-4 w-4 shrink-0 transition-colors group-focus-within:text-[#6c5ce7]" style={{ color: "var(--text-muted)" }} />
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent text-sm outline-none font-medium" placeholder="Search conversations..."
+              className="w-full bg-transparent text-sm outline-none font-medium placeholder:text-muted/50" placeholder="Search conversations..."
               style={{ color: "var(--text-primary)" }} />
           </div>
         </div>
@@ -2566,14 +2627,11 @@ function ChatsPageContent() {
           )}
 
           {/* Activity/Notifications Tray */}
-          {notifications.length > 0 && (
+          {showNotifications && (
             <div className="mb-4">
-               <div className="flex items-center justify-between px-2 mb-2">
-                 <button onClick={() => setShowNotifications(!showNotifications)} className="flex items-center gap-2 group">
-                   <Bell className="w-4 h-4 text-purple-500" />
-                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-500">Activity Protocol</span>
-                 </button>
-                 {showNotifications && (
+               {notifications.length > 0 && (
+                <div className="flex items-center justify-between px-2 mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-500 opacity-60">Activity Stream</span>
                   <button 
                     onClick={async () => {
                       const user = localStorage.getItem("nexora_signup_username");
@@ -2582,15 +2640,19 @@ function ChatsPageContent() {
                     }} 
                     className="px-2 py-1 rounded-lg text-[9px] font-black text-purple-500 bg-purple-500/5 hover:bg-purple-500/10 transition-all uppercase tracking-widest"
                   >
-                    Clear
+                    Clear All
                   </button>
-                 )}
-               </div>
+                </div>
+               )}
                
                <AnimatePresence>
-                 {showNotifications && (
-                  <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} exit={{opacity:0, height:0}} className="space-y-1.5">
-                    {notifications.map(notif => (
+                 <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:"auto"}} exit={{opacity:0, height:0}} className="space-y-1.5 px-1">
+                   {notifications.length === 0 ? (
+                     <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 text-center transition-all">
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Quiet Protocol</p>
+                     </div>
+                   ) : (
+                     notifications.map(notif => (
                       <motion.div 
                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                          key={notif.id} 
@@ -2612,9 +2674,9 @@ function ChatsPageContent() {
                             nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
                           }}><X className="w-3 h-3" /></button>
                       </motion.div>
-                    ))}
-                  </motion.div>
-                 )}
+                     ))
+                   )}
+                 </motion.div>
                </AnimatePresence>
             </div>
           )}
@@ -2698,6 +2760,23 @@ function ChatsPageContent() {
                   initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
                   whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenThread(thread)}
+                  onContextMenu={(e) => {
+                    if (thread.username === 'nexora_31') return;
+                    e.preventDefault();
+                    setThreadContextMenu({ id: thread.id, x: e.clientX, y: e.clientY });
+                  }}
+                  onTouchStart={(e) => {
+                    if (thread.username === 'nexora_31') return;
+                    const touch = e.touches[0];
+                    const x = touch.clientX;
+                    const y = touch.clientY;
+                    longPressTimerRef.current = setTimeout(() => {
+                      setThreadContextMenu({ id: thread.id, x, y });
+                    }, 700);
+                  }}
+                  onTouchEnd={() => {
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                  }}
                   className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all relative group/thread"
                   style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
                   <div className="relative shrink-0">
@@ -2705,11 +2784,16 @@ function ChatsPageContent() {
                       onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}>
                       {isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : thread.avatarUrl ? <img src={thread.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[thread.username]?.[0] || thread.name?.[0] || thread.username?.[0] || "?").toUpperCase()}
                     </div>
-                    {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
-                      <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
-                        style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
-                    )}
-                  </div>
+                      {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
+                        <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
+                          style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
+                      )}
+                      {mutedThreads.includes(thread.id) && (
+                        <div className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20">
+                          <BellOff className="w-2.5 h-2.5 text-orange-400" />
+                        </div>
+                      )}
+                    </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -2829,7 +2913,7 @@ function ChatsPageContent() {
             <div className="flex items-center gap-2 md:gap-3 shrink-0 ml-2">
               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full hidden sm:inline"
                 style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>AES-256 Encrypted</span>
-              {activeThread.username !== 'nexora_31' && (
+              {activeThread && activeThread.username.toLowerCase() !== 'nexora_31' && activeThread.username !== myProfile.username && (
                 <>
                   <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleStartCall("voice")} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)]">
                     <Phone className="w-5 h-5" />
@@ -2839,9 +2923,11 @@ function ChatsPageContent() {
                   </motion.button>
                 </>
               )}
-              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setShowChatMenu(!showChatMenu); setShowDisappearSubmenu(false); }} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)] relative">
-                <MoreVertical className="w-5 h-5" />
-              </motion.button>
+              {activeThread && activeThread.username.toLowerCase() !== 'nexora_31' && (
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setShowChatMenu(!showChatMenu); setShowDisappearSubmenu(false); }} className="p-2 rounded-xl bg-black/5 dark:bg-white/5 text-[var(--text-secondary)] relative">
+                  <MoreVertical className="w-5 h-5" />
+                </motion.button>
+              )}
 
               {showChatMenu && (
                 <div className="absolute top-20 right-6 p-2 rounded-2xl shadow-xl flex flex-col gap-1 w-52 border z-50"
@@ -3459,96 +3545,166 @@ function ChatsPageContent() {
       <AnimatePresence>
         {showGlobalSearch && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] flex flex-col"
-            style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex flex-col sm:items-center sm:justify-start"
+            style={{ 
+              background: isDark ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.7)", 
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)"
+            }}
             onClick={() => setShowGlobalSearch(false)}
           >
             <motion.div
-              initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -30, opacity: 0 }}
-              transition={{ type: "spring", damping: 26, stiffness: 300 }}
-              className="w-full max-w-lg mx-auto mt-16 rounded-[2.5rem] overflow-hidden shadow-2xl glass-panel relative"
+              initial={{ y: "100%", opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 32, stiffness: 350, mass: 0.8 }}
+              className="w-full h-full sm:h-auto sm:max-h-[85vh] sm:max-w-xl sm:mx-auto sm:mt-16 sm:rounded-[2.5rem] overflow-hidden shadow-[0_32px_120px_rgba(0,0,0,0.5)] relative flex flex-col"
               style={{
-                background: "var(--bg-surface)",
-                borderColor: "var(--border-subtle)",
-                boxShadow: "0 40px 100px rgba(0,0,0,0.5)"
+                background: isDark ? "rgba(18, 18, 30, 0.95)" : "rgba(255, 255, 255, 0.98)",
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                borderWidth: "1px"
               }}
               onClick={e => e.stopPropagation()}
             >
               {/* Search Header */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)" }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
-                  <Search className="w-4 h-4 text-white" />
+              <div className="flex items-center gap-3 px-4 py-5 sm:px-6 border-b sticky top-0 z-20 backdrop-blur-3xl" 
+                   style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", background: isDark ? "rgba(18, 18, 30, 0.5)" : "rgba(255, 255, 255, 0.5)" }}>
+                <button onClick={() => setShowGlobalSearch(false)} className="sm:hidden p-2 -ml-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="hidden sm:flex w-10 h-10 rounded-2xl items-center justify-center shrink-0 shadow-lg" style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
+                  <Search className="w-5 h-5 text-white" />
                 </div>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="Search people by name or username..."
-                  value={globalSearchQuery}
-                  onChange={e => setGlobalSearchQuery(e.target.value)}
-                  className="flex-1 bg-transparent outline-none text-sm font-semibold"
-                  style={{ color: "var(--text-primary)" }}
-                />
+                <div className="flex-1 relative flex items-center group">
+                  <Search className="sm:hidden w-5 h-5 text-[var(--text-muted)] absolute left-3 transition-colors group-focus-within:text-[#6c5ce7]" />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Find people on Nexora..."
+                    value={globalSearchQuery}
+                    onChange={e => setGlobalSearchQuery(e.target.value)}
+                    className="w-full bg-black/5 dark:bg-white/5 sm:bg-transparent rounded-2xl sm:rounded-none py-3 sm:py-2 pl-11 sm:pl-0 pr-4 sm:pr-0 outline-none text-base sm:text-lg font-black transition-all focus:ring-2 focus:ring-[#6c5ce7]/20 sm:focus:ring-0"
+                    style={{ color: "var(--text-primary)" }}
+                  />
+                </div>
                 <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowGlobalSearch(false)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center"
-                  style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", color: "var(--text-muted)" }}>
-                  <X className="w-4 h-4" />
+                  className="hidden sm:flex w-9 h-9 rounded-xl items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                  style={{ color: "var(--text-muted)" }}>
+                  <X className="w-5 h-5" />
                 </motion.button>
               </div>
 
-              {/* Results */}
-              <div className="max-h-96 overflow-y-auto">
+              {/* Results Container */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar pb-32 sm:pb-10 px-1 sm:px-2">
                 {globalSearchLoading ? (
-                  <div className="flex items-center justify-center py-12 gap-3">
-                    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-5 h-5 border-2 border-[#6c5ce7] border-t-transparent rounded-full" />
-                    <span className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>Searching...</span>
+                  <div className="flex flex-col items-center justify-center py-24 gap-6">
+                    <div className="relative">
+                       <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                         className="w-12 h-12 border-4 border-[#6c5ce7]/10 border-t-[#6c5ce7] rounded-full" />
+                       <div className="absolute inset-0 blur-xl bg-[#6c5ce7]/20 animate-pulse rounded-full" />
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: "#6c5ce7" }}>Syncing Protocol</span>
+                      <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest text-[var(--text-muted)]">Scanning global directory</span>
+                    </div>
                   </div>
                 ) : globalSearchQuery.length < 2 ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: isDark ? "rgba(108,92,231,0.1)" : "rgba(108,92,231,0.08)" }}>
-                      <UserPlus className="w-7 h-7" style={{ color: "#6c5ce7" }} />
+                  <div className="flex flex-col items-center justify-center py-20 px-8 gap-8">
+                    <div className="relative">
+                       <div className="w-24 h-24 rounded-[2.5rem] flex items-center justify-center rotate-12 shadow-[0_20px_50px_rgba(108,92,231,0.3)] relative z-10 overflow-hidden" 
+                            style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}>
+                         <UserPlus className="w-10 h-10 text-white" />
+                         <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
+                       </div>
+                       <div className="absolute -inset-6 bg-purple-500/20 blur-3xl rounded-full animate-pulse" />
+                       <div className="absolute top-0 right-0 w-8 h-8 rounded-full bg-[#00d4ff] blur-xl opacity-50 animate-bounce" />
                     </div>
-                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Find New People</p>
-                    <p className="text-xs text-center max-w-xs" style={{ color: "var(--text-muted)" }}>Type at least 2 characters to search users on Nexora</p>
+                    <div className="text-center max-w-xs">
+                       <h2 className="text-2xl font-black tracking-tight mb-3" style={{ color: "var(--text-primary)" }}>Connect Globally</h2>
+                       <p className="text-sm font-bold leading-relaxed opacity-50" style={{ color: "var(--text-muted)" }}>
+                         Enter a handle or name to discover users on the Nexora network. All connections are secured via AES-256 protocol.
+                       </p>
+                    </div>
                   </div>
                 ) : globalSearchResults.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-2">
-                    <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>No users found</p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>Try a different username or name</p>
+                  <div className="flex flex-col items-center justify-center py-24 px-10 gap-4 opacity-60">
+                    <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-2">
+                       <ShieldOff className="w-8 h-8 text-[var(--text-muted)]" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-black tracking-tight" style={{ color: "var(--text-primary)" }}>No Nodes Active</p>
+                      <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>Protocol could not locate user</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="p-2">
-                    {globalSearchResults.map((user: any) => {
+                  <div className="px-3 py-2 space-y-1">
+                    <div className="px-4 py-1.5 mb-2">
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-30">Nodes Found ({globalSearchResults.length})</span>
+                    </div>
+                    {globalSearchResults.map((user: any, idx: number) => {
                       const alreadyRequested = sentRequests.includes(user.username);
                       const alreadyConnected = threads.some((t: any) => t.username === user.username);
                       return (
                         <motion.div key={user.username}
-                          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                          initial={{ opacity: 0, x: -10 }} 
+                          animate={{ opacity: 1, x: 0 }} 
+                          transition={{ delay: idx * 0.04, ease: "easeOut" }}
                           onClick={() => setSelectedProfileUser(user)}
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-colors hover:bg-[rgba(108,92,231,0.05)]"
-                          style={{ background: "transparent" }}
+                          className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98]"
                         >
-                          <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-bold text-base shadow-md shrink-0 overflow-hidden`}>
-                            {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : user.fullName?.[0]?.toUpperCase()}
+                          <div className="relative shrink-0 flex-none scale-100 group-hover:scale-105 transition-transform duration-300">
+                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-xl overflow-hidden ring-2 ring-transparent group-hover:ring-[#6c5ce7]/30 transition-all uppercase`}>
+                              {user.avatarUrl ? (
+                                <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                (user.fullName?.[0] || user.username?.[0] || "?").toUpperCase()
+                              )}
+                            </div>
+                            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--bg-surface)] flex items-center justify-center shadow-lg border-[3px] border-[var(--bg-surface)]">
+                               <div className="w-full h-full flex items-center justify-center">
+                                  <div className="w-3.5 h-3.5 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573]" />
+                               </div>
+                            </div>
                           </div>
+                          
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
-                            <p className="text-xs" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
+                              {user.username === 'nexora_31' && (
+                                <span className="flex-none px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[7px] font-black uppercase tracking-tighter shadow-sm">Official</span>
+                              )}
+                            </div>
+                            <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
                           </div>
-                          {alreadyConnected ? (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: "rgba(46,213,115,0.12)", color: "#2ed573" }}>Connected ✓</span>
-                          ) : alreadyRequested ? (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: "rgba(255,190,11,0.12)", color: "#ffbe0b" }}>Sent ✓</span>
-                          ) : (
-                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
-                              onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
-                              className="text-[11px] font-bold px-3 py-1.5 rounded-xl text-white shrink-0"
-                              style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 4px 12px rgba(108,92,231,0.3)" }}
-                            >
-                              + Connect
-                            </motion.button>
-                          )}
+
+                          <div className="shrink-0 ml-2">
+                            {alreadyConnected ? (
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#2ed573]/10 flex items-center justify-center border border-[#2ed573]/20 shadow-sm" title="Already Connected">
+                                <Check className="w-5 h-5 sm:w-6 sm:h-6 text-[#2ed573]" />
+                              </div>
+                            ) : alreadyRequested ? (
+                              <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 transition-all">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
+                              </div>
+                            ) : (
+                              <motion.button 
+                                whileHover={{ scale: 1.05, y: -2 }} 
+                                whileTap={{ scale: 0.95 }}
+                                onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
+                                className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
+                                style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}
+                              >
+                                <span className="relative z-10 flex items-center gap-2">
+                                  <Plus className="w-3.5 h-3.5" />
+                                  Connect
+                                </span>
+                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
+                              </motion.button>
+                            )}
+                          </div>
                         </motion.div>
                       );
                     })}
@@ -3559,6 +3715,7 @@ function ChatsPageContent() {
           </motion.div>
         )}
       </AnimatePresence>
+
 
       {/* ═══ POLL CREATOR MODAL ═══ */}
       <AnimatePresence>
@@ -3886,10 +4043,14 @@ function ChatsPageContent() {
                       Message
                     </motion.button>
                     
-                    {selectedProfileUser.username === 'nexora_31' ? (
+                    {selectedProfileUser.username.toLowerCase() === 'nexora_31' ? (
                        <div className="flex-1 py-4 rounded-[28px] bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
                           <span className="text-[9px] font-black text-[#00d4ff] uppercase tracking-widest">Protocol Channel</span>
                        </div>
+                    ) : selectedProfileUser.username.toLowerCase() === myProfile.username.toLowerCase() ? (
+                      <div className="flex-1 py-4 rounded-[28px] bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                         <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest">Personal Profile</span>
+                      </div>
                     ) : (
                       blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
                         <motion.button 
@@ -4090,15 +4251,15 @@ function ChatsPageContent() {
                 {/* Sync Results */}
                 {syncMatches.length > 0 && (
                   <div className="space-y-4 pt-4 border-t border-white/5">
-                    <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
-                      <Zap className="w-3.5 h-3.5" /> Found on Nexora
+                    <h4 className="text-[11px] font-black uppercase tracking-widest text-[#6c5ce7] flex items-center gap-2">
+                      <Zap className="w-3.5 h-3.5" /> Members on Nexora
                     </h4>
                     <div className="space-y-3">
                       {syncMatches.map(u => {
                         const isConnected = threads.some(t => t.username === u.username);
                         const isRequested = sentRequests.includes(u.username);
                         return (
-                          <div key={u.username} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-indigo-500/30 transition-all">
+                          <div key={u.username} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-[#6c5ce7]/30 transition-all">
                             <div className="flex items-center gap-3">
                               <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${u.color || 'from-indigo-500 to-purple-500'} flex items-center justify-center text-white font-black text-sm overflow-hidden`}>
                                 {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" /> : (u.fullName?.[0] || u.username?.[0]).toUpperCase()}
@@ -4111,13 +4272,43 @@ function ChatsPageContent() {
                             {isConnected ? (
                               <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-500 text-[10px] font-black uppercase">Connected</span>
                             ) : (
-                              <button onClick={() => handleSendConnectionRequest(u)} disabled={isRequested} className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${isRequested ? 'bg-white/10 opacity-50' : 'bg-indigo-500 text-white hover:scale-105 active:scale-95'}`}>
+                              <button onClick={() => handleSendConnectionRequest(u)} disabled={isRequested} className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${isRequested ? 'bg-white/10 opacity-50' : 'bg-[#6c5ce7] text-white hover:scale-105 active:scale-95'}`}>
                                 {isRequested ? "Pending" : "Add"}
                               </button>
                             )}
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Non-Members / Invite Section */}
+                {syncNonMatches.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-white/5">
+                    <h4 className="text-[11px] font-black uppercase tracking-widest text-pink-500 flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5" /> Not on Nexora
+                    </h4>
+                    <div className="space-y-3">
+                       {syncNonMatches.map(phone => (
+                         <div key={phone} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-pink-500/30 transition-all">
+                            <div className="flex items-center gap-3">
+                               <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/40 font-bold text-xs uppercase">
+                                  {phone.slice(-2)}
+                               </div>
+                               <div>
+                                  <p className="text-sm font-bold truncate leading-tight">{phone}</p>
+                                  <p className="text-[10px] text-muted-foreground font-medium opacity-50">Contact Sync Match</p>
+                               </div>
+                            </div>
+                            <button onClick={() => {
+                               setSharePhone(phone);
+                               setShowShareModal(true);
+                            }} className="px-4 py-1.5 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase hover:bg-pink-500 transition-all">
+                               Invite
+                            </button>
+                         </div>
+                       ))}
                     </div>
                   </div>
                 )}
@@ -4139,6 +4330,81 @@ function ChatsPageContent() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showShareModal && (
+          <ShareProfileModal 
+            profile={myProfile} 
+            onClose={() => setShowShareModal(false)} 
+            isDark={isDark} 
+          />
+        )}
+        {/* Global Thread Context Menu */}
+        <AnimatePresence>
+          {threadContextMenu && (
+            <motion.div
+              ref={contextMenuRef}
+              initial={{ opacity: 0, scale: 0.9, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 10 }}
+              className="fixed z-[500] w-52 rounded-3xl overflow-hidden shadow-2xl glass-panel border"
+              style={{
+                 left: Math.min(threadContextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1000) - 220),
+                 top: Math.min(threadContextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 1000) - 180),
+                 background: isDark ? "rgba(16,16,24,0.95)" : "rgba(255,255,255,0.95)",
+                 border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)"}`,
+                 backdropFilter: "blur(24px) saturate(1.8)"
+              }}
+            >
+              <div className="p-2 flex flex-col gap-1">
+                <button
+                  onClick={() => {
+                    const id = threadContextMenu.id;
+                    setPinnedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [id, ...prev]);
+                    setThreadContextMenu(null);
+                  }}
+                  className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-[#6c5ce7]/10 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Pin className={`w-4 h-4 ${pinnedThreads.includes(threadContextMenu.id) ? "text-[#6c5ce7]" : "text-[var(--text-muted)]"} transition-colors`} />
+                    <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{pinnedThreads.includes(threadContextMenu.id) ? "Unpin Chat" : "Pin to Top"}</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const id = threadContextMenu.id;
+                    setMutedThreads(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+                    setThreadContextMenu(null);
+                  }}
+                  className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-orange-500/10 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    {mutedThreads.includes(threadContextMenu.id) ? <Bell className="w-4 h-4 text-orange-500" /> : <BellOff className="w-4 h-4 text-[var(--text-muted)]" />}
+                    <span className="text-xs font-bold" style={{ color: "var(--text-primary)" }}>{mutedThreads.includes(threadContextMenu.id) ? "Unmute Alerts" : "Mute Notifications"}</span>
+                  </div>
+                </button>
+
+                <div className="h-px bg-current opacity-[0.05] mx-4 my-1" />
+
+                <button
+                  onClick={() => {
+                    setHiddenThreads(prev => [...prev, threadContextMenu.id]);
+                    setThreadContextMenu(null);
+                  }}
+                  className="flex items-center justify-between px-3 py-3 rounded-2xl hover:bg-rose-500/10 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Trash2 className="w-4 h-4 text-rose-500/60 transition-colors" />
+                    <span className="text-xs font-bold text-rose-500/80">Delete Conversation</span>
+                  </div>
+                  <X className="w-3 h-3 text-rose-500/30 group-hover:text-rose-500" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AnimatePresence>
 
     </div>

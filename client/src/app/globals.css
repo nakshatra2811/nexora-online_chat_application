@@ -252,3 +252,40 @@ input[type="button"],
 input[type="reset"] {
   cursor: pointer !important;
 }
+/* ═══════════════════════════════════════════════
+   CUSTOM PREMIUM SCROLLBAR
+═══════════════════════════════════════════════ */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(108, 92, 231, 0.1);
+  border-radius: 20px;
+  transition: all 0.3s ease;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(108, 92, 231, 0.25);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(108, 92, 231, 0.4);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(168, 154, 255, 0.1);
+}
+
+.dark .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(168, 154, 255, 0.2);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 154, 255, 0.35);
+}
