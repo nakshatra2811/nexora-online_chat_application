@@ -1302,6 +1302,7 @@ export default function StoriesPage() {
                       className={`border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl transition-transform duration-500 group-hover/avatar:scale-105`}
                       showBorder={false}
                     />
+                  </div>
 
                   <div className="text-center mb-8">
                     <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>
