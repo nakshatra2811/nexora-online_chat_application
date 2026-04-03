@@ -4408,7 +4408,7 @@ function ChatsPageContent() {
                     <h4 className="text-[11px] font-black uppercase tracking-widest text-[#6c5ce7] flex items-center gap-2">
                       <Zap className="w-3.5 h-3.5" /> Members on Nexora
                     </h4>
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
                       {syncMatches.map(u => {
                         const isConnected = threads.some(t => t.username === u.username);
                         const isRequested = sentRequests.includes(u.username);
