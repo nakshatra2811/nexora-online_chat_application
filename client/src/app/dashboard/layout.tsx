@@ -873,7 +873,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               key="mobile-back-button"
               initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}
               whileTap={{ scale: 0.92 }}
-              onClick={() => router.back()}
+              onClick={() => router.push('/dashboard/chats')}
               className="md:hidden fixed top-2 left-4 z-[90] flex items-center justify-center w-10 h-10 rounded-full shadow-xl backdrop-blur-xl"
               style={{
                 background: isDark ? "rgba(16,16,30,0.85)" : "rgba(255,255,255,0.9)",

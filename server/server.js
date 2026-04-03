@@ -56,6 +56,7 @@ function decryptField(encryptedText) {
         decrypted += decipher.final('utf8');
         return decrypted;
     } catch (e) {
+        console.error("[DECRYPT] Critical failure:", e);
         return encryptedText; // Fallback to raw if decryption fails
     }
 }
@@ -92,16 +93,17 @@ let pgPool;
         const databaseUrl = process.env.DATABASE_URL;
 
         if (databaseUrl) {
-            console.log("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
+            console.log("[DATABASE] Initializing Protocol: PostgreSQL (Supabase/Neon Cloud)");
             dbType = 'postgres';
 
-            // Clean database URL to avoid SSL alias warnings
-            const cleanUrl = databaseUrl.split('?')[0];
-
+            // Neon requires SSL. We keep the URL intact for pooling params but force ssl config.
             pgPool = new Pool({
-                connectionString: cleanUrl,
+                connectionString: databaseUrl,
                 ssl: { rejectUnauthorized: false }
             });
+
+            // Re-verify connection immediately
+            pgPool.connect().then(() => console.log("[DATABASE] Handshake Successful: Neon Cloud Verified.")).catch(err => console.error("[DATABASE] Connection Refused by Neon:", err));
 
             // Mock sqlite methods for pg
             db = {
@@ -1796,7 +1798,7 @@ app.post('/api/auth/signup', async (req, res) => {
             message: "User identity initialized."
         });
     } catch (err) {
-        ((..._args) => { })("Signup error details:", err);
+        console.error("[SIGNUP] System Error:", err);
         res.status(500).json({ status: "error", error: "Server Error: Failed to process signup." });
     }
 });
@@ -2314,11 +2316,11 @@ app.get('/api/users/search', async (req, res) => {
     const q = (req.query.q || '').toLowerCase().trim();
     const me = (req.query.me || '').toLowerCase();
 
-    if (!q || q.length < 2) return res.json({ users: [] });
+    if (!q || q.length < 1) return res.json({ users: [] });
 
     try {
         if (!db) return res.json({ users: [] });
-        ((..._args) => { })(`[SEARCH] Query: "${q}" by User: "${me}"`);
+        console.log(`[SEARCH] Query: "${q}" by User: "${me}"`);
         const exactPrefix = `${q}%`;
         const exactContains = `%${q}%`;
         const fuzzyQ = '%' + q.split('').join('%') + '%';
@@ -2348,7 +2350,7 @@ app.get('/api/users/search', async (req, res) => {
         }));
         res.json({ users: mappedUsers });
     } catch (err) {
-        ((..._args) => { })("Search error:", err);
+        console.error("Search error:", err);
         res.status(500).json({ users: [] });
     }
 });

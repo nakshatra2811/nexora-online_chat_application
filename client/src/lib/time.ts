@@ -49,7 +49,15 @@ export function formatToIndianDateTime(date: Date = new Date()): string {
  */
 export function formatLastSeen(timestamp?: number | string | Date | null): string {
   if (!timestamp) return "offline";
-  const date = new Date(timestamp);
+  // Fix for Postgres BIGINT which often returns as a string
+  let ts = timestamp;
+  if (typeof timestamp === 'string' && /^\d+$/.test(timestamp)) {
+    ts = parseInt(timestamp, 10);
+  }
+  
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return "offline";
+  
   const now = new Date();
   
   const timeStr = date.toLocaleTimeString(INDIAN_LOCALE, {
@@ -87,7 +95,15 @@ export function formatLastSeen(timestamp?: number | string | Date | null): strin
  */
 export function formatLastSeenShort(timestamp?: number | string | Date | null): string {
   if (!timestamp) return "?";
-  const date = new Date(timestamp);
+  // Fix for Postgres BIGINT which often returns as a string
+  let ts = timestamp;
+  if (typeof timestamp === 'string' && /^\d+$/.test(timestamp)) {
+    ts = parseInt(timestamp, 10);
+  }
+
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return "?";
+  
   const now = new Date();
   
   const isToday = date.toDateString() === now.toDateString();

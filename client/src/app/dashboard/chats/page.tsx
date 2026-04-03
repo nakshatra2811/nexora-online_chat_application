@@ -2613,7 +2613,7 @@ function ChatsPageContent() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <motion.button whileTap={{ scale: 0.9 }}
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push('/dashboard/chats')}
                 className="p-2 -ml-2 rounded-xl sm:hidden transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                 style={{ color: "var(--text-primary)" }}>
                 <ArrowLeft className="w-5 h-5" />
