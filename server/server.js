@@ -97,10 +97,13 @@ let pgPool;
             dbType = 'postgres';
 
             // Neon/Supabase SSL configuration
-            // Suppress SSL Aliasing Warning by explicitly specifying verify-full as requested by pg v8+
-            const enhancedUrl = databaseUrl.toLowerCase().includes('sslmode=') 
-                ? databaseUrl 
-                : `${databaseUrl}${databaseUrl.includes('?') ? '&' : '?'}sslmode=verify-full`;
+            // Suppress SSL Aliasing Warning by forcing 'verify-full' mode (prevents warning for 'require'/'prefer' aliases)
+            let enhancedUrl = databaseUrl;
+            if (enhancedUrl.toLowerCase().includes('sslmode=')) {
+                enhancedUrl = enhancedUrl.replace(/sslmode=[^&]+/gi, 'sslmode=verify-full');
+            } else {
+                enhancedUrl += (enhancedUrl.includes('?') ? '&' : '?') + 'sslmode=verify-full';
+            }
 
             pgPool = new Pool({
                 connectionString: enhancedUrl,
