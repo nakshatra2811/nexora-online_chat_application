@@ -92,7 +92,7 @@ let pgPool;
         const databaseUrl = process.env.DATABASE_URL;
 
         if (databaseUrl) {
-            ((..._args) => { })("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
+            console.log("[DATABASE] Mode: PostgreSQL (Supabase/Neon)");
             dbType = 'postgres';
 
             // Clean database URL to avoid SSL alias warnings
@@ -166,7 +166,7 @@ let pgPool;
                 }
             };
         } else {
-            ((..._args) => { })("[DATABASE] Mode: Local SQLite");
+            console.log("[DATABASE] Mode: Local SQLite");
             dbType = 'sqlite';
             const dbPath = process.env.DATABASE_PATH || './database.sqlite';
             const dbDir = path.dirname(dbPath);
@@ -319,9 +319,9 @@ let pgPool;
             const LEGACY_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
             const updateResult = await db.run("UPDATE users SET avatar_url = NULL WHERE avatar_url = ?", [LEGACY_LOGO]);
             if (updateResult.changes > 0) {
-                ((..._args) => { })(`[MIGRATION] Modernized ${updateResult.changes} legacy user avatars.`);
+                console.log(`[MIGRATION] Modernized ${updateResult.changes} legacy user avatars.`);
             }
-        } catch (e) { ((..._args) => { })("[MIGRATION] Avatar modernization failed:", e); }
+        } catch (e) { console.log("[MIGRATION] Avatar modernization failed:", e); }
 
         // Re-hash existing phone numbers if needed (one-time migration for Zero-Knowledge Sync)
         try {
@@ -333,7 +333,7 @@ let pgPool;
                     await db.run("UPDATE users SET phone_hash = ? WHERE id = ?", [newHash, u.id]);
                 }
             }
-        } catch (e) { ((..._args) => { })("[MIGRATION] Phone re-hash failed:", e); }
+        } catch (e) { console.log("[MIGRATION] Phone re-hash failed:", e); }
 
         // SEED DATA
         const seedUsers = [
@@ -382,34 +382,34 @@ let pgPool;
             } catch (e) { /* already exists */ }
         }
 
-        ((..._args) => { })(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
-
-        // ------------------------------------------------------------------
-        // START SERVER (Ensured to run AFTER DB migrations)
-        // ------------------------------------------------------------------
-        const PORT = process.env.PORT || 5000;
-        server.listen(PORT, () => {
-            ((..._args) => { })(`[SERVER] Nexora Core operational on port ${PORT}`);
-            ((..._args) => { })(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
-
-            // --- Render Anti-Sleep Mechanism ---
-            const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-            if (selfUrl.includes('onrender')) {
-                ((..._args) => { })(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
-                setInterval(() => {
-                    const lib = selfUrl.startsWith('https') ? require('https') : require('http');
-                    lib.get(selfUrl, (res) => {
-                        ((..._args) => { })(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
-                    }).on("error", (err) => {
-                        ((..._args) => { })(`[ANTI-SLEEP] Ping Failed:`, err.message);
-                    });
-                }, 10 * 60 * 1000); // 10 minutes
-            }
-        });
+        console.log(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
     } catch (e) {
-        ((..._args) => { })("[DATABASE] Critical Initialization Failure:", e);
+        console.error("[DATABASE] Critical Initialization Failure:", e);
     }
 })();
+
+// ------------------------------------------------------------------
+// START SERVER (Ensured to run in parallel with DB migrations)
+// ------------------------------------------------------------------
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+    console.log(`[SERVER] Nexora Core operational on port ${PORT}`);
+    console.log(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
+
+    // --- Render Anti-Sleep Mechanism ---
+    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    if (selfUrl.includes('onrender')) {
+        console.log(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
+        setInterval(() => {
+            const lib = selfUrl.startsWith('https') ? require('https') : require('http');
+            lib.get(selfUrl, (res) => {
+                console.log(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
+            }).on("error", (err) => {
+                console.error(`[ANTI-SLEEP] Ping Failed:`, err.message);
+            });
+        }, 10 * 60 * 1000); // 10 minutes
+    }
+});
 
 // ------------------------------------------------------------------
 // SECURITY HARDENING (Phase 5)
@@ -470,9 +470,9 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
                     : undefined,
             })
         });
-        ((..._args) => { })("[FIREBASE] Admin SDK connected successfully.");
+        console.log("[FIREBASE] Admin SDK connected successfully.");
     } catch (e) {
-        ((..._args) => { })("[FIREBASE] Initialization error:", e.message);
+        console.log("[FIREBASE] Initialization error:", e.message);
     }
 }
 
@@ -488,9 +488,9 @@ const emailTransporter = nodemailer.createTransport({
 
 emailTransporter.verify((error, success) => {
     if (error) {
-        ((..._args) => { })("[SMTP] Core Communication Relay Failure:", error);
+        console.log("[SMTP] Core Communication Relay Failure:", error);
     } else {
-        ((..._args) => { })("[SMTP] Secure Mail Protocol Initialized.");
+        console.log("[SMTP] Secure Mail Protocol Initialized.");
     }
 });
 
