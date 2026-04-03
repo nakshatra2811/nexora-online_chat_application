@@ -3106,6 +3106,31 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         await db.run('UPDATE users SET status = ? WHERE LOWER(username) = LOWER(?)', [status, username]);
+        
+        // Handle real-time suspension enforcement
+        if (status === 'Suspended') {
+            const lowerUser = username.toLowerCase();
+            ((..._args) => { })(`[SAFETY] Terminating all active sessions for @${lowerUser}`);
+            
+            // 1. Alert all connected devices of this user
+            io.to(lowerUser).emit('force_logout', { 
+                reason: "Protocol Access Revoked: This account has been suspended for violating safety guidelines." 
+            });
+
+            // 2. Force disconnect all sockets in that user's room
+            const userRoom = io.sockets.adapter.rooms.get(lowerUser);
+            if (userRoom) {
+                const socketIds = Array.from(userRoom);
+                socketIds.forEach(socketId => {
+                    const s = io.sockets.sockets.get(socketId);
+                    if (s) {
+                        s.disconnect(true);
+                        ((..._args) => { })(`[SAFETY] Disconnected socket ${socketId} for @${lowerUser}`);
+                    }
+                });
+            }
+        }
+
         res.json({ status: "success", message: `Status updated to ${status} for @${username}` });
     } catch (err) {
         ((..._args) => { })("[ADMIN] Status update error:", err);

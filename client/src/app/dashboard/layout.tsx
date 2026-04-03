@@ -101,24 +101,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, []);
 
-  // Account Status Monitor protocol
-  useEffect(() => {
-    if (!isMounted) return;
-    const checkStatus = async () => {
-      const username = localStorage.getItem("nexora_signup_username") || "";
-      if (!username) return;
-      try {
-        const data = await nexoraFetch(`/api/auth/me?u=${encodeURIComponent(username)}`);
-        if (data?.status) setAccountStatus(data.status);
-      } catch (e) {
-        // Silent fail - network issue
-      }
-    };
-    checkStatus();
-    const statusInterval = setInterval(checkStatus, 60000 * 2); // Check every 2 minutes for light load
-
-    return () => clearInterval(statusInterval);
-  }, [isMounted]);
+    // Account Status Monitor protocol
+    useEffect(() => {
+      if (!isMounted) return;
+      const checkStatus = async () => {
+        const username = localStorage.getItem("nexora_signup_username") || "";
+        if (!username) return;
+        try {
+          const data = await nexoraFetch(`/api/auth/me?u=${encodeURIComponent(username.toLowerCase())}`);
+          if (data?.status) {
+            setAccountStatus(data.status);
+            // Protocol Auto-Kill: If account is suspended during a session check, force logout immediately.
+            if (data.status === 'Suspended') {
+              localStorage.clear();
+              document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
+              window.location.href = "/auth";
+            }
+          }
+        } catch (e) {
+          // Silent fail - network issue
+        }
+      };
+      checkStatus();
+      const statusInterval = setInterval(checkStatus, 60000 * 2); // Check every 2 minutes for light load
+  
+      return () => clearInterval(statusInterval);
+    }, [isMounted]);
 
   // ═══ Global Action Notification Protocol ═══
   useEffect(() => {
@@ -292,6 +300,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // We just ensure we have one active socket handler here if needed.
     };
 
+    const handleForceLogout = (data: any) => {
+      ((..._args: any[]) => { })("[SAFETY] FORCE LOGOUT RECEIVED:", data.reason);
+      localStorage.clear();
+      document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
+      window.location.href = `/auth?reason=${encodeURIComponent(data.reason || "Session Terminated")}`;
+    };
+
     socket.on("connection_request", handleNewRequest);
     socket.on("connection_accepted", handleAccepted);
     socket.on("new_notification", handleNewNotification);
@@ -299,6 +314,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     socket.on("dm:media", handleGlobalMessage);
     socket.on("dm:poll", handleGlobalMessage);
     socket.on("call:offer", handleCallOffer);
+    socket.on("force_logout", handleForceLogout);
 
     return () => {
       socket.off("connect", doRegister);
@@ -309,6 +325,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       socket.off("dm:media", handleGlobalMessage);
       socket.off("dm:poll", handleGlobalMessage);
       socket.off("call:offer", handleCallOffer);
+      socket.off("force_logout", handleForceLogout);
     };
   }, []);
 
