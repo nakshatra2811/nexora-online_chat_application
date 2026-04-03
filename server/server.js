@@ -191,7 +191,8 @@ let pgPool;
                 created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 phone_number TEXT DEFAULT 'Not Set',
                 phone_hash TEXT,
-                last_visit INTEGER
+                last_visit ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'}
+            );
 
             CREATE TABLE IF NOT EXISTS connection_requests (
                 id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
@@ -304,8 +305,11 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL"); } catch (e) { }
         // Migration for bio
         try { await db.run("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL"); } catch (e) { }
-        // Migration for last_visit
-        try { await db.run("ALTER TABLE users ADD COLUMN last_visit INTEGER"); } catch (e) { }
+        // Migration for last_visit (BIGINT for timestamp support)
+        try { await db.run(`ALTER TABLE users ADD COLUMN last_visit ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'}`); } catch (e) { }
+        if (dbType === 'postgres') {
+            try { await db.run("ALTER TABLE users ALTER COLUMN last_visit TYPE BIGINT"); } catch (e) { }
+        }
         // Migration for wallpaper in connections
         try { await db.run("ALTER TABLE connections ADD COLUMN wallpaper TEXT"); } catch (e) { }
 
@@ -379,7 +383,31 @@ let pgPool;
         }
 
         ((..._args) => { })(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
+
+        // ------------------------------------------------------------------
+        // START SERVER (Ensured to run AFTER DB migrations)
+        // ------------------------------------------------------------------
+        const PORT = process.env.PORT || 5000;
+        server.listen(PORT, () => {
+            ((..._args) => { })(`[SERVER] Nexora Core operational on port ${PORT}`);
+            ((..._args) => { })(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
+
+            // --- Render Anti-Sleep Mechanism ---
+            const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+            if (selfUrl.includes('onrender')) {
+                ((..._args) => { })(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
+                setInterval(() => {
+                    const lib = selfUrl.startsWith('https') ? require('https') : require('http');
+                    lib.get(selfUrl, (res) => {
+                        ((..._args) => { })(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
+                    }).on("error", (err) => {
+                        ((..._args) => { })(`[ANTI-SLEEP] Ping Failed:`, err.message);
+                    });
+                }, 10 * 60 * 1000); // 10 minutes
+            }
+        });
     } catch (e) {
+        ((..._args) => { })("[DATABASE] Critical Initialization Failure:", e);
     }
 })();
 
@@ -3462,26 +3490,4 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
 
 Sentry.setupExpressErrorHandler(app);
 
-// ------------------------------------------------------------------
-// START SERVER
-// ------------------------------------------------------------------
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-    ((..._args) => { })(`[SERVER] Nexora Core operational on port ${PORT}`);
-    ((..._args) => { })(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
-
-    // --- Render Anti-Sleep Mechanism ---
-    // Pings its own public URL every 10 minutes (600,000 ms) to prevent sleeping
-    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-    if (selfUrl.includes('onrender')) {
-        ((..._args) => { })(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
-        setInterval(() => {
-            const lib = selfUrl.startsWith('https') ? require('https') : require('http');
-            lib.get(selfUrl, (res) => {
-                ((..._args) => { })(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
-            }).on("error", (err) => {
-                ((..._args) => { })(`[ANTI-SLEEP] Ping Failed:`, err.message);
-            });
-        }, 10 * 60 * 1000); // 10 minutes
-    }
-});
+// Server startup moved to async initialization block to prevent race conditions.

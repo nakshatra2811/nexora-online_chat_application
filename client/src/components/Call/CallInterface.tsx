@@ -182,6 +182,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
               className={`w-full h-full object-cover transition-opacity duration-700 ${
                 remoteStream && status === "accepted" && !remoteVideoOff ? "opacity-100" : "opacity-0"
               }`}
+              style={{ filter: "contrast(1.08) brightness(1.04) saturate(1.1)" }}
             />
 
             {/* Connecting overlay when no remote stream yet OR remote video is off */}

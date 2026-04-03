@@ -196,6 +196,7 @@ export class WebRTCService {
       ((..._args: any[]) => {})("[WebRTC] Connection state:", state);
       if (state === "connected" && !this._connected) {
         this._connected = true;
+        this._optimizeSenderParameters(); // APPLY QUALITY BOOST ON CONNECT
         this.events?.onCallConnected();
       }
       if (state === "disconnected" || state === "failed" || state === "closed") {
@@ -211,10 +212,46 @@ export class WebRTCService {
         // but not connectionState 'connected'
         if (state === "connected" && !this._connected) {
           this._connected = true;
+          this._optimizeSenderParameters(); // APPLY QUALITY BOOST ON CONNECT
           this.events?.onCallConnected();
         }
       }
     };
+  }
+
+  /**
+   * Post-connection quality optimization.
+   * Forces the browser to prioritize image detail and high bitrate.
+   */
+  private async _optimizeSenderParameters() {
+    if (!this.pc) return;
+    const senders = this.pc.getSenders();
+    
+    for (const sender of senders) {
+      if (sender.track?.kind === "video") {
+        const parameters = sender.getParameters();
+        if (!parameters.encodings) parameters.encodings = [{}];
+        
+        parameters.encodings[0].maxBitrate = 6000 * 1000; // 6 Mbps
+        parameters.encodings[0].priority = "high";
+        parameters.encodings[0].networkPriority = "high";
+        
+        // Tells the browser: DON'T blur the video if connection is slow.
+        // Instead, drop the framerate slightly but KEEP it sharp.
+        try {
+          // @ts-ignore - degradationPreference is supported in modern browsers
+          sender.degradationPreference = "maintain-resolution";
+          await sender.setParameters(parameters);
+          
+          // Content Hint: tells the encoder we want SHARP details
+          if ("contentHint" in sender.track) {
+            (sender.track as any).contentHint = "detail";
+          }
+        } catch (e) {
+          ((..._args: any[]) => {})("[WebRTC] Quality optimization failed:", e);
+        }
+      }
+    }
   }
 
   private async _tryAddIce(candidate: RTCIceCandidateInit) {
@@ -257,9 +294,9 @@ export class WebRTCService {
             audio: audioConstraints,
             video: {
               facingMode: { ideal: this.currentFacingMode },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              frameRate: { ideal: 30 },
+              width: { min: 640, ideal: 1920, max: 1920 },
+              height: { min: 480, ideal: 1080, max: 1080 },
+              frameRate: { ideal: 60, min: 30 },
             },
           }
         : { audio: audioConstraints };
@@ -291,12 +328,21 @@ export class WebRTCService {
       offerToReceiveAudio: true,
       offerToReceiveVideo: type === "video",
     });
-    await this.pc!.setLocalDescription(offer);
+    // 3. Munge SDP: H.264 Priority + Bitrate
+    let mungedSdp = offer.sdp || "";
+    mungedSdp = this._prioritizeH264(mungedSdp);
+    mungedSdp = this._increaseBitrate(mungedSdp, 4000);
+
+    const highQualityOffer = {
+      ...offer,
+      sdp: mungedSdp,
+    };
+    await this.pc!.setLocalDescription(highQualityOffer);
 
     const socket = socketService.getSocket();
     socket?.emit("call:offer", {
       to: targetUserId,
-      sdp: offer,
+      sdp: highQualityOffer,
       callType: type,
       callerName: metadata?.callerName,
       callerColor: metadata?.callerColor,
@@ -327,12 +373,22 @@ export class WebRTCService {
     await this._processPendingIce();
 
     const answer = await this.pc!.createAnswer();
-    await this.pc!.setLocalDescription(answer);
+    
+    // 3. Munge SDP: H.264 Priority + Bitrate
+    let mungedSdp = answer.sdp || "";
+    mungedSdp = this._prioritizeH264(mungedSdp);
+    mungedSdp = this._increaseBitrate(mungedSdp, 4000);
+
+    const highQualityAnswer = {
+      ...answer,
+      sdp: mungedSdp,
+    };
+    await this.pc!.setLocalDescription(highQualityAnswer);
 
     const socket = socketService.getSocket();
     socket?.emit("call:answer", {
       to: fromUserId,
-      sdp: answer,
+      sdp: highQualityAnswer,
     });
 
     return stream;
@@ -487,6 +543,75 @@ export class WebRTCService {
 
   public isInCall(): boolean {
     return this.pc !== null && !this._isCleaning;
+  }
+
+  /**
+   * Move H.264 to the top of the codec list.
+   * This enables hardware acceleration on most mobile devices.
+   */
+  private _prioritizeH264(sdp: string): string {
+    const lines = sdp.split("\r\n");
+    const mVideoIndex = lines.findIndex(l => l.indexOf("m=video") === 0);
+    if (mVideoIndex === -1) return sdp;
+
+    // Find the H.264 payload types
+    const rtpmapLines = lines.filter(l => l.includes("a=rtpmap:") && l.includes("H264/90000"));
+    if (rtpmapLines.length === 0) return sdp;
+
+    const h264Payloads = rtpmapLines.map(l => l.split(":")[1].split(" ")[0]);
+    
+    // Update m=video line (e.g. m=video 9 UDP/TLS/RTP/SAVPF 96 97 98...)
+    let mLineParts = lines[mVideoIndex].split(" ");
+    let payloads = mLineParts.slice(3);
+    
+    // Move H264 payloads to the front
+    h264Payloads.forEach(pt => {
+        const idx = payloads.indexOf(pt);
+        if (idx !== -1) {
+            payloads.splice(idx, 1);
+            payloads.unshift(pt);
+        }
+    });
+
+    lines[mVideoIndex] = mLineParts.slice(0, 3).concat(payloads).join(" ");
+    return lines.join("\r\n");
+  }
+
+  /**
+   * Munge SDP to force a specific bitrate for video/audio.
+   * This overrides the browser's default conservative limits.
+   */
+  private _increaseBitrate(sdp: string, bitrate: number): string {
+    let lines = sdp.split("\r\n");
+    let videoLineIndex = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].indexOf("m=video") === 0) {
+            videoLineIndex = i;
+            break;
+        }
+    }
+
+    if (videoLineIndex !== -1) {
+        // Add b=AS (Application Specific) and TIAS (Transport Independent Application Specific)
+        // for standard-compliant bitrate control
+        lines.splice(videoLineIndex + 1, 0, `b=AS:${bitrate}`);
+        lines.splice(videoLineIndex + 2, 0, `b=TIAS:${bitrate * 1000}`);
+    }
+
+    // Also increase audio bitrate if needed
+    let audioLineIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].indexOf("m=audio") === 0) {
+            audioLineIndex = i;
+            break;
+        }
+    }
+    if (audioLineIndex !== -1) {
+        lines.splice(audioLineIndex + 1, 0, "b=AS:128"); // 128 kbps for crystal clear audio
+    }
+
+    return lines.join("\r\n");
   }
 
   // ─── Cleanup ─────────────────────────────────────────────────────────────────

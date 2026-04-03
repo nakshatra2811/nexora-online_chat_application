@@ -388,14 +388,22 @@ function ChatsPageContent() {
     const query = manualPhone.trim();
     if (!query) return;
     setIsSyncing(true);
-    setSyncNonMatches([]); // Clear previous sync results
+    setSyncMatches([]);
+    setSyncNonMatches([]); 
+
     try {
       const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(query)}`);
       if (res && res.user) {
         setSyncMatches([res.user]);
         addToSearchHistory(res.user.username);
       } else {
-        setSyncMatches([]);
+        // Not found as username — check if it's a phone number for invitation
+        const numeric = query.replace(/\D/g, "");
+        if (numeric.length >= 10) {
+          setSyncNonMatches([numeric]);
+        } else {
+          setSyncMatches([]);
+        }
       }
     } catch (e) {
       ((..._args: any[]) => { })("Manual add failed:", e);
@@ -868,7 +876,7 @@ function ChatsPageContent() {
   }, [sentRequests]);
 
   useEffect(() => {
-    if (!showGlobalSearch || globalSearchQuery.trim().length < 2) {
+    if (!showGlobalSearch || globalSearchQuery.trim().length < 1) {
       setGlobalSearchResults([]);
       setGlobalSearchLoading(false);
       return;
@@ -884,7 +892,7 @@ function ChatsPageContent() {
       } finally {
         setGlobalSearchLoading(false);
       }
-    }, 350);
+    }, 200);
     return () => clearTimeout(t);
   }, [globalSearchQuery, showGlobalSearch]);
 
@@ -3719,40 +3727,30 @@ function ChatsPageContent() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ type: "spring", damping: 32, stiffness: 350, mass: 0.8 }}
-              className="w-full h-full sm:h-auto sm:max-h-[85vh] sm:max-w-xl sm:mx-auto sm:mt-16 sm:rounded-[2.5rem] overflow-hidden shadow-[0_32px_120px_rgba(0,0,0,0.5)] relative flex flex-col"
+              className="w-full h-full sm:h-full sm:max-w-none overflow-hidden relative flex flex-col"
               style={{
-                background: isDark ? "rgba(18, 18, 30, 0.95)" : "rgba(255, 255, 255, 0.98)",
-                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                borderWidth: "1px"
+                background: isDark ? "rgba(10, 10, 18, 1)" : "rgba(255, 255, 255, 1)",
+                zIndex: 301
               }}
               onClick={e => e.stopPropagation()}
             >
               {/* Search Header */}
-              <div className="flex items-center gap-3 px-4 py-5 sm:px-6 border-b sticky top-0 z-20 backdrop-blur-3xl"
-                style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", background: isDark ? "rgba(18, 18, 30, 0.5)" : "rgba(255, 255, 255, 0.5)" }}>
-                <button onClick={() => setShowGlobalSearch(false)} className="sm:hidden p-2 -ml-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+              <div className="flex items-center gap-3 px-4 py-6 sm:px-8 border-b sticky top-0 z-50 backdrop-blur-3xl"
+                style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", background: isDark ? "rgba(10, 10, 18, 0.8)" : "rgba(255, 255, 255, 0.8)" }}>
+                <button onClick={() => setShowGlobalSearch(false)} className="p-2 -ml-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
                   <ArrowLeft className="w-6 h-6" />
                 </button>
-                <div className="hidden sm:flex w-10 h-10 rounded-2xl items-center justify-center shrink-0 shadow-lg" style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
-                  <Search className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 relative flex items-center group">
-                  <Search className="sm:hidden w-5 h-5 text-[var(--text-muted)] absolute left-3 transition-colors group-focus-within:text-[#6c5ce7]" />
+                <div className="flex-1">
                   <input
                     autoFocus
                     type="text"
                     placeholder="Find people on Nexora..."
                     value={globalSearchQuery}
                     onChange={e => setGlobalSearchQuery(e.target.value)}
-                    className="w-full bg-black/5 dark:bg-white/5 sm:bg-transparent rounded-2xl sm:rounded-none py-3 sm:py-2 pl-11 sm:pl-0 pr-4 sm:pr-0 outline-none text-base sm:text-lg font-black transition-all focus:ring-2 focus:ring-[#6c5ce7]/20 sm:focus:ring-0"
+                    className="w-full bg-transparent outline-none text-xl sm:text-2xl font-black transition-all"
                     style={{ color: "var(--text-primary)" }}
                   />
                 </div>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowGlobalSearch(false)}
-                  className="hidden sm:flex w-9 h-9 rounded-xl items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                  style={{ color: "var(--text-muted)" }}>
-                  <X className="w-5 h-5" />
-                </motion.button>
               </div>
 
               {/* Results Container */}
@@ -3769,7 +3767,7 @@ function ChatsPageContent() {
                       <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest text-[var(--text-muted)]">Scanning global directory</span>
                     </div>
                   </div>
-                ) : globalSearchQuery.length < 2 ? (
+                ) : globalSearchQuery.length < 1 ? (
                   <div className="flex flex-col items-center justify-center py-20 px-8 gap-8">
                     <div className="relative">
                       <div className="w-24 h-24 rounded-[2.5rem] flex items-center justify-center rotate-12 shadow-[0_20px_50px_rgba(108,92,231,0.3)] relative z-10 overflow-hidden"
@@ -4359,15 +4357,18 @@ function ChatsPageContent() {
       {/* ── Contact Sync & Find Modal ── */}
       <AnimatePresence>
         {showSyncModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative w-full max-w-md max-h-[85vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border border-white/10" style={{ background: "var(--bg-surface-solid)" }}>
-              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-indigo-500/10">
-                <div>
-                  <h3 className="text-xl font-black uppercase tracking-widest text-primary">Find Friends</h3>
+            <motion.div initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }} transition={{ type: "spring", damping: 32, stiffness: 350, mass: 0.8 }} className="relative w-full h-full flex flex-col overflow-hidden shadow-2xl" 
+                style={{ background: isDark ? "rgba(10, 10, 18, 1)" : "rgba(255, 255, 255, 1)" }}>
+              <div className="p-6 sm:p-8 border-b border-white/5 flex items-center gap-4 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 backdrop-blur-3xl">
+                <button onClick={() => setShowSyncModal(false)} className="p-2 -ml-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                  <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="flex-1">
+                  <h3 className="text-xl font-black uppercase tracking-widest text-[#6c5ce7]">Find Friends</h3>
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">Snap-Style Contact Sync</p>
                 </div>
-                <button onClick={() => setShowSyncModal(false)} className="p-2 rounded-full hover:bg-white/10 transition-colors"><X className="w-5 h-5" /></button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
@@ -4464,10 +4465,10 @@ function ChatsPageContent() {
                             </div>
                           </div>
                           <button onClick={() => {
-                            setSharePhone(phone);
-                            setShowShareModal(true);
-                          }} className="px-4 py-1.5 rounded-xl bg-white/10 text-white text-[10px] font-black uppercase hover:bg-pink-500 transition-all">
-                            Invite
+                            const msg = encodeURIComponent(`Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\n${window.location.origin}/auth?mode=signup`);
+                            window.open(`https://wa.me/${phone.replace(/\D/g, "")}?text=${msg}`, "_blank");
+                          }} className="px-4 py-1.5 rounded-xl bg-green-500/20 text-green-400 text-[10px] font-black uppercase hover:bg-green-500 hover:text-white transition-all flex items-center gap-1.5 shadow-lg shadow-green-500/10">
+                            <WhatsAppIcon className="w-3 h-3" /> WhatsApp
                           </button>
                         </div>
                       ))}
