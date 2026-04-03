@@ -190,8 +190,8 @@ let pgPool;
                 color TEXT NOT NULL,
                 created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 phone_number TEXT DEFAULT 'Not Set',
-                phone_hash TEXT
-            );
+                phone_hash TEXT,
+                last_visit INTEGER
 
             CREATE TABLE IF NOT EXISTS connection_requests (
                 id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
@@ -304,6 +304,8 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL"); } catch (e) { }
         // Migration for bio
         try { await db.run("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL"); } catch (e) { }
+        // Migration for last_visit
+        try { await db.run("ALTER TABLE users ADD COLUMN last_visit INTEGER"); } catch (e) { }
         // Migration for wallpaper in connections
         try { await db.run("ALTER TABLE connections ADD COLUMN wallpaper TEXT"); } catch (e) { }
 
@@ -1036,6 +1038,11 @@ io.on('connection', (socket) => {
         // 1. Broadcast online status to others
         socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
 
+        // Update last visit just in case server restarts while online
+        try {
+            db.run('UPDATE users SET last_visit = ? WHERE username = ?', [Date.now(), normalizedId]);
+        } catch(e) {}
+
         // 3. Deliver any queued offline messages
         deliverQueuedMessages(normalizedId, socket);
     });
@@ -1425,7 +1432,11 @@ io.on('connection', (socket) => {
             // Check if this was the last device for this user
             const userRoom = io.sockets.adapter.rooms.get(userId);
             if (!userRoom || userRoom.size === 0) {
-                io.emit('user_status', { userId, status: 'offline' });
+                const now = Date.now();
+                try {
+                    db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, userId]);
+                } catch(e) {}
+                io.emit('user_status', { userId, status: 'offline', last_visit: now });
                 ((..._args) => { })(`[-] Registered Identity Fully Logged Off: ${userId}`);
             }
         }
@@ -2349,7 +2360,7 @@ app.get('/api/users/profile', async (req, res) => {
     const username = (req.query.username || '').toLowerCase();
     try {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, last_visit FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         if (!user) return res.status(404).json({ error: "User not found" });
 
         // Decrypt sensitive info for the client
@@ -2533,7 +2544,7 @@ app.get('/api/connections', async (req, res) => {
                     avatarUrl: encryptField('https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg')
                 };
             } else {
-                userData = await db.get(`SELECT id, username, full_name as name, color, avatar_url as avatarUrl FROM users WHERE LOWER(username) = ?`, [peer]);
+                userData = await db.get(`SELECT id, username, full_name as name, color, avatar_url as avatarUrl, last_visit FROM users WHERE LOWER(username) = ?`, [peer]);
             }
 
             if (userData) {
@@ -2547,7 +2558,8 @@ app.get('/api/connections', async (req, res) => {
                     wallpaper: c.wallpaper,
                     online: (room && room.size > 0) || peer === 'nexora_31',
                     preview: peer === 'nexora_31' ? 'Official Announcements' : 'Secure tunnel established',
-                    unread: 0
+                    unread: 0,
+                    lastVisit: userData.last_visit
                 });
             }
         }

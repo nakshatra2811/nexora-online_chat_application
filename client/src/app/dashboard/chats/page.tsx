@@ -20,7 +20,7 @@ import { deriveKeyFromPassword, encryptMessage, decryptMessage, generateECDHKeyP
 import { syntheticRingtone } from "@/lib/ringtone";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
-import { formatToIndianTime } from "@/lib/time";
+import { formatToIndianTime, formatLastSeen, formatLastSeenShort } from "@/lib/time";
 import { pushService } from "@/lib/push";
 import { useCall } from "@/components/Call/CallProvider";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
@@ -88,6 +88,7 @@ export interface Thread {
   avatarUrl?: string;
   wallpaper?: string;
   lastMessageTime?: number; // Unix ms timestamp of last message — used for sorting
+  lastVisit?: number;
 }
 
 function ChatsPageContent() {
@@ -1444,13 +1445,15 @@ function ChatsPageContent() {
       });
 
       // 7. Online/offline status
-      socket.on("user_status", (data: { userId: string; status: 'online' | 'offline' }) => {
+      socket.on("user_status", (data: { userId: string; status: 'online' | 'offline'; last_visit?: number }) => {
         setLiveOnlineUsers(prev => {
           if (data.status === 'online') return Array.from(new Set([...prev, data.userId]));
           return prev.filter(u => u !== data.userId);
         });
         setThreads(prev => prev.map(t =>
-          t.username === data.userId ? { ...t, online: data.status === 'online' } : t
+          t.username?.toLowerCase() === data.userId?.toLowerCase() 
+            ? { ...t, online: data.status === 'online', lastVisit: data.last_visit || t.lastVisit } 
+            : t
         ));
       });
 
@@ -2860,6 +2863,11 @@ function ChatsPageContent() {
                       <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
                         style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
+                    {!isLockedDisplay && !(thread.online || liveOnlineUsers.includes(thread.username)) && thread.lastVisit && (
+                        <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20 flex items-center justify-center">
+                            <span className="text-[6.5px] font-black text-[#6c5ce7] uppercase tracking-tighter leading-none">{formatLastSeenShort(thread.lastVisit)}</span>
+                        </div>
+                    )}
                     {mutedThreads.includes(thread.id) && (
                       <div className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20">
                         <BellOff className="w-2.5 h-2.5 text-orange-400" />
@@ -3037,17 +3045,17 @@ function ChatsPageContent() {
                     </div>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <div className={`h-1.5 w-1.5 rounded-full ${activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "bg-green-500 shadow-[0_0_5px_#2ed573]" : "bg-gray-500"}`} />
-                      <span className="text-[9px] md:text-[10px] uppercase font-black tracking-wider truncate" style={{ color: activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "#2ed573" : "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span className="text-[10px] md:text-[11px] font-medium opacity-70 truncate" style={{ color: activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "#2ed573" : "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
                         {peerTyping[activeThread.username] ? (
                           <>
-                            TYPING
+                            typing
                             <span className="flex items-center gap-[2px] mt-[1px]">
                               <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '0ms' }} />
                               <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '150ms' }} />
                               <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '300ms' }} />
                             </span>
                           </>
-                        ) : (activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "Active Protocol" : "Offline")}
+                        ) : (activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "online" : (activeThread.lastVisit ? `last visited ${formatLastSeen(activeThread.lastVisit)}` : "last visited recently"))}
                       </span>
                     </div>
                   </div>
@@ -4372,7 +4380,7 @@ function ChatsPageContent() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {searchHistory.map(h => (
-                        <motion.button key={h} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { setShowSyncModal(false); setShowGlobalSearch(true); setGlobalSearchQuery(h); }} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-primary hover:bg-white/10 transition-all">
+                        <motion.button key={h} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={async () => { setManualPhone(h); setIsSyncing(true); setSyncNonMatches([]); try { const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(h)}`); if (res && res.user) { setSyncMatches([res.user]); addToSearchHistory(res.user.username); } else { setSyncMatches([]); } } catch {} finally { setIsSyncing(false); } }} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-primary hover:bg-white/10 transition-all">
                           @{h}
                         </motion.button>
                       ))}
@@ -4443,7 +4451,7 @@ function ChatsPageContent() {
                     <h4 className="text-[11px] font-black uppercase tracking-widest text-pink-500 flex items-center gap-2">
                       <Mail className="w-3.5 h-3.5" /> Not on Nexora
                     </h4>
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
                       {syncNonMatches.map(phone => (
                         <div key={phone} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-pink-500/30 transition-all">
                           <div className="flex items-center gap-3">
