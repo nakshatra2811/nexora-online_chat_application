@@ -2319,13 +2319,27 @@ app.get('/api/users/search', async (req, res) => {
     try {
         if (!db) return res.json({ users: [] });
         ((..._args) => { })(`[SEARCH] Query: "${q}" by User: "${me}"`);
+        const exactPrefix = `${q}%`;
+        const exactContains = `%${q}%`;
+        const fuzzyQ = '%' + q.split('').join('%') + '%';
+        
         const users = await db.all(`
             SELECT username, full_name AS fullName, color, avatar_url AS avatarUrl
             FROM users 
-            WHERE (LOWER(username) LIKE ? OR LOWER(full_name) LIKE ?) 
+            WHERE (
+                LOWER(username) LIKE ? OR 
+                LOWER(full_name) LIKE ? OR
+                LOWER(username) LIKE ? OR 
+                LOWER(full_name) LIKE ?
+            ) 
               AND LOWER(username) != LOWER(?)
+            ORDER BY 
+              CASE WHEN LOWER(username) LIKE ? THEN 1 
+                   WHEN LOWER(username) LIKE ? THEN 2 
+                   ELSE 3 END,
+              username ASC
             LIMIT 20
-        `, [`%${q}%`, `%${q}%`, me]);
+        `, [exactContains, exactContains, fuzzyQ, fuzzyQ, me, exactPrefix, exactContains]);
 
         const mappedUsers = users.map(u => ({
             ...u,

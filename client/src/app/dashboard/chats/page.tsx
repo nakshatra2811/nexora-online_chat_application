@@ -74,6 +74,7 @@ interface ChatMessage {
   connectRequest?: { to: string; via: "sms" | "whatsapp" | "email"; status: "pending" | "sent" };
   isViewOnce?: boolean;
   viewOnceOpened?: boolean;
+  peerViewed?: boolean;
   isSystemNotice?: boolean;
 }
 
@@ -1687,7 +1688,7 @@ function ChatsPageContent() {
       });
 
       socket.on("dm:view_once_ack", (data: { from: string; msgId: string }) => {
-        setMessages(prev => prev.map(m => m.id === data.msgId ? { ...m, isViewOnce: true, viewedOnce: true, attachment: undefined, text: "📷 Photo viewed" } : m));
+        setMessages(prev => prev.map(m => m.id === data.msgId ? { ...m, isViewOnce: true, peerViewed: true } : m));
       });
 
       // ═══ INCOMING LOCATION ═══
@@ -3017,13 +3018,7 @@ function ChatsPageContent() {
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
                     onClick={() => {
-                        // Priority 1: Clear search params to close chat while staying in dashboard
-                        if (window.location.search.includes('u=') || window.location.search.includes('username=')) {
-                            router.replace('/dashboard/chats', { scroll: false });
-                        } else {
-                            // Priority 2: Standard back navigation
-                            router.back();
-                        }
+                        router.push('/dashboard/chats');
                     }}
                     className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
@@ -3310,28 +3305,31 @@ function ChatsPageContent() {
                             {m.attachment.type.startsWith("image/") ? (
                               m.isViewOnce ? (
                                 m.viewOnceOpened ? (
-                                  <div className="p-4 border border-dashed border-white/20 rounded-xl bg-black/5 opacity-50 flex items-center justify-center italic text-xs">
-                                    <EyeOff className="w-4 h-4 mr-2" /> Photo Viewed
+                                  <div className="w-48 h-48 rounded-[2rem] border-2 border-dashed border-[#00d4ff]/30 bg-[#00d4ff]/5 flex flex-col items-center justify-center cursor-not-allowed">
+                                    <EyeOff className="w-8 h-8 text-[#00d4ff]/50 mb-2" />
+                                    <span className="text-[#00d4ff]/60 text-[10px] font-black uppercase tracking-[0.2em]">{m.isSelf ? (m.peerViewed ? "Opened by Peer" : "Opened") : "Opened"}</span>
                                   </div>
                                 ) : (
                                   <div
-                                    className="relative max-w-full h-[150px] bg-black/20 overflow-hidden flex items-center justify-center group/vo"
+                                    className="relative w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer shadow-xl hover:scale-[1.02] transition-transform group/vo overflow-hidden border-2 border-white/10"
+                                    style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
                                     onClick={() => {
-                                      // Tell other user it was viewed
+                                      // Tell other user it was viewed if we are the receiver
                                       const socket = socketService.getSocket();
                                       if (socket && activeThread?.username && !m.isSelf) {
                                         socket.emit("dm:view_once_ack", { to: activeThread.username, msgId: m.id });
                                       }
                                       setImageViewer({ url: m.attachment!.url, name: m.attachment!.name });
-                                      // Remove attachment from state entirely after view
+                                      // Remove attachment from state entirely after view locally
                                       setMessages(prev => prev.map(msg => msg.id === m.id ? { ...msg, viewOnceOpened: true, text: "📷 Photo Viewed", attachment: undefined } : msg));
                                     }}
                                   >
-                                    <img src={m.attachment.url} alt="Hidden" className="absolute inset-0 w-full h-full object-cover blur-xl opacity-60" />
-                                    <div className="z-10 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 group-hover/vo:scale-105 transition-transform">
-                                      <Eye className="w-4 h-4 text-white" />
-                                      <span className="text-white text-xs font-bold">Tap to view</span>
+                                    <div className="absolute inset-0 bg-white/10 blur-xl group-hover/vo:bg-white/20 transition-colors" />
+                                    <div className="w-14 h-14 rounded-[1rem] bg-white/20 backdrop-blur-md flex items-center justify-center mb-3 shadow-inner relative z-10 border border-white/20">
+                                      <Camera className="w-6 h-6 text-white drop-shadow-md" />
                                     </div>
+                                    <span className="text-white text-xs font-black tracking-[0.1em] uppercase relative z-10 drop-shadow-md">Tap to View</span>
+                                    <span className="text-white/80 text-[9px] font-bold mt-1 uppercase relative z-10">Snap • 1 View Only</span>
                                   </div>
                                 )
                               ) : (
