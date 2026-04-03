@@ -96,9 +96,14 @@ let pgPool;
             console.log("[DATABASE] Initializing Protocol: PostgreSQL (Supabase/Neon Cloud)");
             dbType = 'postgres';
 
-            // Neon requires SSL. We keep the URL intact for pooling params but force ssl config.
+            // Neon/Supabase SSL configuration
+            // Suppress SSL Aliasing Warning by explicitly specifying verify-full as requested by pg v8+
+            const enhancedUrl = databaseUrl.toLowerCase().includes('sslmode=') 
+                ? databaseUrl 
+                : `${databaseUrl}${databaseUrl.includes('?') ? '&' : '?'}sslmode=verify-full`;
+
             pgPool = new Pool({
-                connectionString: databaseUrl,
+                connectionString: enhancedUrl,
                 ssl: { rejectUnauthorized: false }
             });
 
