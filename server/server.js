@@ -102,8 +102,16 @@ let pgPool;
                 ssl: { rejectUnauthorized: false }
             });
 
-            // Re-verify connection immediately
-            pgPool.connect().then(() => console.log("[DATABASE] Handshake Successful: Neon Cloud Verified.")).catch(err => console.error("[DATABASE] Connection Refused by Neon:", err));
+            // CRITICAL: Prevent process crash on idle connection errors (fixes 'Connection terminated unexpectedly')
+            pgPool.on('error', (err) => {
+                console.error('[DATABASE] Core Protocol Error (Pool):', err.message);
+                // The pool will handle reconnection for new queries
+            });
+
+            // Re-verify connection immediately without leaking client
+            pgPool.query('SELECT NOW()')
+                .then(() => console.log("[DATABASE] Handshake Successful: Neon Cloud Verified."))
+                .catch(err => console.error("[DATABASE] Connection Refused by Neon:", err));
 
             // Mock sqlite methods for pg
             db = {
@@ -1056,7 +1064,7 @@ io.on('connection', (socket) => {
     ((..._args) => { })(`[+] Node Connected: ${socket.id}`);
 
     // User registers their identity — Joins a private room for cross-device sync
-    socket.on('register', (userId) => {
+    socket.on('register', async (userId) => {
         if (!userId) return;
         const normalizedId = userId.toLowerCase();
         socketToUser.set(socket.id, normalizedId);
@@ -1070,7 +1078,7 @@ io.on('connection', (socket) => {
 
         // Update last visit just in case server restarts while online
         try {
-            db.run('UPDATE users SET last_visit = ? WHERE username = ?', [Date.now(), normalizedId]);
+            await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [Date.now(), normalizedId]);
         } catch(e) {}
 
         // 3. Deliver any queued offline messages
@@ -1454,7 +1462,7 @@ io.on('connection', (socket) => {
 
 
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         const userId = socketToUser.get(socket.id);
         if (userId) {
             socketToUser.delete(socket.id);
@@ -1464,7 +1472,7 @@ io.on('connection', (socket) => {
             if (!userRoom || userRoom.size === 0) {
                 const now = Date.now();
                 try {
-                    db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, userId]);
+                    await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, userId]);
                 } catch(e) {}
                 io.emit('user_status', { userId, status: 'offline', last_visit: now });
                 ((..._args) => { })(`[-] Registered Identity Fully Logged Off: ${userId}`);
