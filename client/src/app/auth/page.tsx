@@ -384,7 +384,7 @@ function AuthContent() {
           </div>
 
           <div className="space-y-6 relative z-10">
-            <div className="grid gap-4">
+            <div className="grid gap-4 max-h-[35vh] overflow-y-auto custom-scrollbar pr-2">
               <div className="p-4 rounded-2xl bg-black/5 dark:bg-white/5 border border-white/5 space-y-2">
                 <div className="flex items-center gap-2 text-[#6c5ce7]">
                   <Lock className="w-4 h-4" />
