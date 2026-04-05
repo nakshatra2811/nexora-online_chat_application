@@ -1297,6 +1297,7 @@ function BlogTab() {
   const { isDark } = useTheme();
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingPost, setEditingPost] = useState<any | null>(null);
 
   useEffect(() => {
     adminFetch("/api/blogs").then(data => {
@@ -1311,12 +1312,14 @@ function BlogTab() {
   };
 
   const handleCreate = () => {
-    const fresh = [...posts, { 
+    const fresh = { 
       id: Date.now(), title: "New Draft Post", excerpt: "Start writing here...", 
       status: "Draft", date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), 
       author: "Admin", category: "News", image: "https://images.unsplash.com/photo-1620021976092-23f0d4ca0411?auto=format&fit=crop&q=80&w=2000" 
-    }];
-    savePosts(fresh);
+    };
+    const freshPosts = [...posts, fresh];
+    savePosts(freshPosts);
+    setEditingPost(fresh);
   };
 
   const handleDelete = (id: number) => {
@@ -1327,27 +1330,38 @@ function BlogTab() {
     savePosts(posts.map(x => x.id === id ? { ...x, status: x.status === "Published" ? "Draft" : "Published" } : x));
   };
 
+  const saveEdit = () => {
+    if (!editingPost) return;
+    savePosts(posts.map(x => x.id === editingPost.id ? editingPost : x));
+    setEditingPost(null);
+  };
+
   if (loading) return <div className="text-center py-20 animate-pulse text-gray-500">Loading Blog CMS...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>Blog CMS</h2>
         <button onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 font-bold text-xs rounded-xl text-white shadow" style={{ background: "#ff006e" }}>
+          className="flex items-center gap-2 px-4 py-2 font-bold text-xs rounded-xl text-white shadow transition-all hover:opacity-80" style={{ background: "#ff006e" }}>
           <FilePlus2 className="w-4 h-4" /> Create Post
         </button>
       </div>
       <div className="overflow-y-auto custom-scrollbar rounded-2xl" style={{ maxHeight: "calc(100vh - 220px)" }}>
         <div className="grid gap-3 pr-1">
         {posts.map(p => (
-           <div key={p.id} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
-             <div>
-               <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{p.title}</p>
-               <p className="text-[10px] uppercase font-bold tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>{p.date} • {p.author} • {p.category}</p>
+           <div key={p.id} className="p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+             <div className="flex items-center gap-4">
+               <img src={p.image} alt="Blog thumbnail" className="w-16 h-16 rounded-lg object-cover" />
+               <div>
+                 <p className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{p.title}</p>
+                 <p className="text-[10px] uppercase font-bold tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>{p.date} • {p.author} • {p.category}</p>
+                 <p className="text-xs mt-1 max-w-md truncate" style={{ color: "var(--text-secondary)" }}>{p.excerpt}</p>
+               </div>
              </div>
              <div className="flex items-center gap-3">
-               <button onClick={() => toggleStatus(p.id)} className="text-[10px] font-bold px-2 py-0.5 rounded border hover:opacity-80 transition-opacity" style={{ color: p.status === "Published" ? "#2ed573" : "#ffbe0b", borderColor: "transparent", background: "rgba(0,0,0,0.1)" }}>{p.status}</button>
+               <button onClick={() => toggleStatus(p.id)} className="text-[10px] font-bold px-2 py-1 rounded border hover:opacity-80 transition-opacity whitespace-nowrap" style={{ color: p.status === "Published" ? "#2ed573" : "#ffbe0b", borderColor: "transparent", background: "rgba(0,0,0,0.1)" }}>{p.status}</button>
+               <button className="p-2 rounded-xl border hover:bg-black/5 transition-colors" style={{ borderColor: "var(--border-subtle)", color: "#00d4ff" }} onClick={() => setEditingPost(p)}><FileEdit className="w-4 h-4" /></button>
                <button className="p-2 rounded-xl border hover:bg-black/5 transition-colors" style={{ borderColor: "var(--border-subtle)", color: "#ff006e" }} onClick={() => handleDelete(p.id)}><Trash2 className="w-4 h-4" /></button>
              </div>
            </div>
@@ -1355,6 +1369,53 @@ function BlogTab() {
         {posts.length === 0 && <div className="text-center py-10 text-sm text-gray-500">No blog posts yet.</div>}
         </div>
       </div>
+
+      {editingPost && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md" onClick={() => setEditingPost(null)}>
+          <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} onClick={e => e.stopPropagation()}
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar rounded-[2rem] p-7 shadow-2xl border"
+            style={{ background: isDark ? "rgba(16,16,30,0.98)" : "rgba(255,255,255,0.98)", borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }}>
+            <h3 className="text-xl font-black mb-6" style={{ color: "var(--text-primary)" }}>Edit Blog Post</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-muted)" }}>Title</label>
+                <input type="text" value={editingPost.title} onChange={e => setEditingPost({...editingPost, title: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-muted)" }}>Author</label>
+                  <input type="text" value={editingPost.author} onChange={e => setEditingPost({...editingPost, author: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-muted)" }}>Category</label>
+                  <input type="text" value={editingPost.category} onChange={e => setEditingPost({...editingPost, category: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-muted)" }}>Image URL</label>
+                <input type="text" value={editingPost.image} onChange={e => setEditingPost({...editingPost, image: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-muted)" }}>Excerpt / Content</label>
+                <textarea value={editingPost.excerpt} onChange={e => setEditingPost({...editingPost, excerpt: e.target.value})} rows={5}
+                  className="w-full px-4 py-3 rounded-xl outline-none text-sm resize-y" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }} />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setEditingPost(null)} className="flex-1 py-3 rounded-xl font-bold transition-colors"
+                style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-primary)" }}>Cancel</button>
+              <button onClick={saveEdit} className="flex-1 py-3 rounded-xl font-bold text-white shadow-lg"
+                style={{ background: "#ff006e" }}>Save Changes</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
