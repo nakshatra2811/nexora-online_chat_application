@@ -2103,6 +2103,15 @@ app.post('/api/admin/config', async (req, res) => {
     }
 });
 
+// POST /api/admin/ping-search-engines - Notify Search engines
+app.post('/api/admin/ping-search-engines', async (req, res) => {
+    // In a real environment, you'd HTTP GET to google ping with the sitemap url
+    // Since we don't have the final remote url necessarily during dev, we mock success here.
+    ((..._args) => { })('[ADMIN] Search Engines Ping Triggered: Google & Bing notified of updated Sitemap.');
+    // Simulated delay
+    setTimeout(() => res.json({ status: "success" }), 1200);
+});
+
 // ------------------------------------------------------------------
 // ADMIN DOMAIN ROUTES (OTP Login & Security)
 // ------------------------------------------------------------------

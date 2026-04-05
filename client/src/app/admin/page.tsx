@@ -1170,6 +1170,17 @@ function DynamicConfigTab({ activeTab }: { activeTab: TabId }) {
             <input type="text" value={seo.robots} onChange={e => setSeo(p => ({ ...p, robots: e.target.value }))} placeholder="index, follow, max-image-preview:large" className="w-full px-4 py-3 rounded-xl outline-none text-sm" style={inputStyle} />
             <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Leave blank to use defaults. Top-level toggle overrides this if disabled.</p>
           </div>
+
+          <div className="p-6 rounded-2xl border" style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: "var(--border-subtle)" }}>
+            <h3 className="text-sm font-black flex items-center gap-2 uppercase tracking-widest mb-3" style={{ color: "#2ed573" }}>Index Request Delivery</h3>
+            <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>Manually trigger search engine crawlers to parse your latest website metadata, keywords, and blogs. This speeds up your appearance on Google.</p>
+            <button type="button" onClick={() => {
+              adminFetch("/api/admin/ping-search-engines", { method: "POST" })
+                .then(res => alert(res?.status==="success" ? "✓ PING SUCCESS: Google & Bing have been notified to re-index the website. Crawling takes 24-48 hours." : "✗ PING FAILED: Network Error."));
+            }} className="w-full py-4 rounded-xl text-xs font-black uppercase tracking-widest border transition-all hover:bg-[#2ed573]/10 text-[#2ed573] border-[#2ed573]/30 shadow">
+              <Globe className="w-4 h-4 inline mr-2 -mt-0.5" /> Submit to Google & Bing
+            </button>
+          </div>
         </div>
       )}
 

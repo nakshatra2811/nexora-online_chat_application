@@ -181,6 +181,8 @@ function ChatsPageContent() {
 
 
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const QUICK_EMOJIS = ["😀", "😂", "🥰", "😎", "🤔", "😅", "🔥", "👍", "❤️", "🙌", "💀", "👀", "✨", "🎉", "💯", "🙏"];
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
   const [showPollCreator, setShowPollCreator] = useState(false);
@@ -3631,8 +3633,28 @@ function ChatsPageContent() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.15 }}
-                    className="flex-1 neumorphic-input rounded-2xl flex items-center px-4 py-2.5 h-11"
+                    className="flex-1 neumorphic-input rounded-2xl flex items-center px-2 py-2.5 h-11 relative"
                   >
+                    <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 mr-1 text-[var(--text-muted)] hover:text-[#ff006e] transition-colors rounded-full transition-all">
+                      <Smile className="w-5 h-5" />
+                    </button>
+
+                    <AnimatePresence>
+                      {showEmojiPicker && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                          className="absolute bottom-[130%] left-0 bg-white dark:bg-[#161622] rounded-2xl p-3 shadow-2xl border dark:border-white/10 z-[100] grid grid-cols-4 gap-2 min-w-[180px] glass-panel"
+                        >
+                          <div className="col-span-4 text-[9px] font-black uppercase text-center tracking-widest text-[var(--text-muted)] mb-1">Quick Emojis</div>
+                          {QUICK_EMOJIS.map(em => (
+                            <button key={em} onClick={(e) => { e.stopPropagation(); setInputValue(prev => prev + em); setShowEmojiPicker(false); }} className="text-2xl hover:scale-125 transition-transform p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl">{em}</button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     <input
                       type="text"
                       value={inputValue}
@@ -3641,7 +3663,7 @@ function ChatsPageContent() {
                         if (e.key === "Enter") { e.preventDefault(); handleSendMessage(); }
                       }}
                       placeholder="Type message..."
-                      className="w-full bg-transparent outline-none text-sm font-medium"
+                      className="w-full bg-transparent outline-none text-sm font-medium pr-3"
                       style={{ color: "var(--text-primary)" }}
                     />
                   </motion.div>
