@@ -2205,9 +2205,35 @@ app.get('/api/blogs', (req, res) => {
     try {
         const blogsPath = path.join(__dirname, '../client/src/config/blogs.json');
         const blogs = JSON.parse(fs.readFileSync(blogsPath, 'utf-8'));
-        res.json({ blogs });
+        // Ensure every blog has a slug
+        const withSlugs = blogs.map(b => ({
+            ...b,
+            slug: b.slug || b.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        }));
+        res.json({ blogs: withSlugs });
     } catch (err) {
         res.json({ blogs: [] });
+    }
+});
+
+// GET /api/blogs/slug/:slug — Get single blog by slug (for OG metadata)
+app.get('/api/blogs/slug/:slug', (req, res) => {
+    try {
+        const blogsPath = path.join(__dirname, '../client/src/config/blogs.json');
+        const blogs = JSON.parse(fs.readFileSync(blogsPath, 'utf-8'));
+        const slug = req.params.slug;
+        const blog = blogs.find(b => {
+            const bSlug = b.slug || b.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            return bSlug === slug;
+        });
+        if (!blog) return res.status(404).json({ error: 'Blog not found' });
+        const blogWithSlug = {
+            ...blog,
+            slug: blog.slug || blog.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        };
+        res.json({ blog: blogWithSlug });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to read blog' });
     }
 });
 
@@ -2215,8 +2241,13 @@ app.get('/api/blogs', (req, res) => {
 app.post('/api/blogs', (req, res) => {
     try {
         const { blogs } = req.body;
+        // Auto-add slug to each blog before saving
+        const withSlugs = blogs.map(b => ({
+            ...b,
+            slug: b.slug || (b.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        }));
         const blogsPath = path.join(__dirname, '../client/src/config/blogs.json');
-        fs.writeFileSync(blogsPath, JSON.stringify(blogs, null, 2), 'utf-8');
+        fs.writeFileSync(blogsPath, JSON.stringify(withSlugs, null, 2), 'utf-8');
         res.json({ status: "success", message: "Blogs updated." });
     } catch (err) {
         res.status(500).json({ error: "Failed to save blogs." });

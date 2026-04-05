@@ -50,7 +50,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const siteUrl = seo.siteUrl || "https://nexora31.vercel.app";
   const ogImage =
     seo.ogImage ||
-    "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
+    `${siteUrl}/icon.png`;
   const twitterHandle = seo.twitterHandle || "@nexoraapp";
   const indexing = seo.indexing !== false; // default: index
   const robots = indexing
@@ -58,6 +58,7 @@ export async function generateMetadata(): Promise<Metadata> {
     : "noindex, nofollow";
 
   return {
+    metadataBase: new URL(siteUrl),
     title: {
       default: title,
       template: seo.titleTemplate || `%s | Nexora`,
@@ -119,9 +120,12 @@ export async function generateMetadata(): Promise<Metadata> {
     // ── App / PWA ──
     manifest: "/manifest.json",
     icons: {
-      icon: "/logo.svg",
-      shortcut: "/logo.svg",
-      apple: "/logo.svg",
+      icon: [
+        { url: "/logo.svg", type: "image/svg+xml" },
+        { url: "/icon.png", type: "image/png", sizes: "512x512" },
+      ],
+      shortcut: "/icon.png",
+      apple: "/icon.png",
     },
 
     // ── Verification (Dynamically generated from Admin Panel) ──

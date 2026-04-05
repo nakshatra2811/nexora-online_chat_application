@@ -4413,11 +4413,11 @@ function ChatsPageContent() {
                 <div className="space-y-4">
                   <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 text-center">
                     <Users className="w-8 h-8 text-indigo-400 mx-auto mb-3" />
-                    <p className="text-sm font-bold mb-4">કોન્ટેક્ટ્સ સિંક કરીને તમારા મિત્રોને શોધો</p>
+                    <p className="text-sm font-bold mb-4">Sync your contacts and find your friends</p>
                     <button onClick={handleNativeSync} disabled={isSyncing} className="w-full py-3 rounded-xl bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50">
-                      {isSyncing ? "સિંકિંગ થઈ રહ્યું છે..." : "🚀 Sync Phone Contacts"}
+                      {isSyncing ? "Syncing..." : "🚀 Sync Phone Contacts"}
                     </button>
-                    <p className="text-[9px] mt-3 uppercase tracking-tighter opacity-40 font-bold">Privacy Protocol: નંબરો હેશ કરીને ચેક થશે, રિયલ નંબર સેવ નહિ થાય.</p>
+                    <p className="text-[9px] mt-3 uppercase tracking-tighter opacity-40 font-bold">Privacy Protocol: Numbers are hashed for matching; your actual contacts are never stored.</p>
                   </div>
 
                   <div className="relative">

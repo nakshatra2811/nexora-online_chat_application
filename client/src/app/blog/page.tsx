@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Clock, User, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, Clock, User, ChevronRight, Share2, Link2 } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "@/lib/theme";
 import { API_BASE_URL } from "@/lib/config";
 
 export default function BlogPage() {
   const { isDark } = useTheme();
+  const router = useRouter();
   const [blogs, setBlogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPost, setSelectedPost] = useState<any | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/blogs`)
@@ -76,7 +77,7 @@ export default function BlogPage() {
               whileHover={{ y: -8 }}
               className="flex flex-col group cursor-pointer rounded-[2rem] overflow-hidden border transition-all duration-300"
               style={{ background: isDark ? "rgba(255,255,255,0.02)" : "#fff", borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}
-              onClick={() => setSelectedPost(post)}
+              onClick={() => router.push(`/blog/${post.slug}`)}
            >
              {/* Thumbnail */}
              <div className="h-56 w-full overflow-hidden relative">
@@ -103,7 +104,10 @@ export default function BlogPage() {
                 </p>
                 
                 <div className="mt-auto pt-4 border-t flex items-center justify-between" style={{ borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                   <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#a29bfe" }}>Read Article</span>
+                   <div className="flex items-center gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(window.location.origin + '/blog/' + post.slug); }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Link2 className="w-4 h-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); /* Add share logic */ }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Share2 className="w-4 h-4" /></button>
+                   </div>
                    <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-[#6c5ce7]/10 group-hover:bg-[#6c5ce7] group-hover:text-white">
                       <ChevronRight className="w-4 h-4" />
                    </div>
@@ -112,54 +116,6 @@ export default function BlogPage() {
            </motion.div>
          ))}
       </section>
-
-      {/* Article Full View Modal */}
-      <AnimatePresence>
-        {selectedPost && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className={`fixed inset-0 z-50 overflow-y-auto custom-scrollbar flex flex-col backdrop-blur-xl bg-black/60`} 
-          >
-            <div className={`min-h-screen w-full`}>
-               {/* Modal Header */}
-               <div className="sticky top-0 z-50 w-full flex items-center justify-end px-6 py-4">
-                  <button onClick={() => setSelectedPost(null)} className="w-12 h-12 rounded-full flex items-center justify-center bg-black/50 text-white hover:bg-[#ff006e] transition-colors backdrop-blur-xl shadow-lg border border-white/10">
-                     <X className="w-6 h-6" />
-                  </button>
-               </div>
-               
-               {/* Modal Content */}
-               <motion.div 
-                 initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                 className={`max-w-4xl mx-auto w-full mb-20 rounded-[3rem] overflow-hidden shadow-2xl border ${isDark ? 'bg-[#101018]' : 'bg-white'}`}
-                 style={{ borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}
-               >
-                  <div className="h-64 sm:h-96 w-full relative">
-                     <img src={selectedPost.image} alt={selectedPost.title} className="w-full h-full object-cover" />
-                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                     <div className="absolute bottom-8 left-8 right-8">
-                        <div className="mb-4 inline-block px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest text-white border border-white/20" style={{ background: "rgba(108,92,231,0.5)", backdropFilter: "blur(10px)" }}>
-                           {selectedPost.category}
-                        </div>
-                        <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">{selectedPost.title}</h1>
-                     </div>
-                  </div>
-                  
-                  <div className="p-8 sm:p-16">
-                     <div className="flex items-center gap-6 pb-8 border-b mb-8 text-sm font-bold uppercase tracking-widest" style={{ borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)", color: "var(--text-muted)" }}>
-                        <span className="flex items-center gap-2 text-[#6c5ce7]"><User className="w-5 h-5" /> {selectedPost.author}</span>
-                        <span className="flex items-center gap-2"><Clock className="w-5 h-5" /> {selectedPost.date}</span>
-                     </div>
-                     
-                     <div className="prose prose-lg max-w-none text-base sm:text-lg leading-loose whitespace-pre-wrap" style={{ color: "var(--text-primary)", fontFamily: "inherit" }}>
-                        {selectedPost.excerpt}
-                     </div>
-                  </div>
-               </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
     </div>
   );
