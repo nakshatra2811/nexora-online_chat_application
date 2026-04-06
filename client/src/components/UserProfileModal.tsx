@@ -2,13 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  X, MessageSquare, Phone, Video, UserMinus, QrCode, Share2, 
-  Copy, Check, Shield, ShieldOff, MapPin, ChevronLeft, Mail 
+import {
+  X, MessageSquare, Phone, Video, UserMinus, QrCode, Share2,
+  Copy, Check, Shield, ShieldOff, MapPin, ChevronLeft, Mail
 } from "lucide-react";
-import { 
-  WhatsAppIcon, TelegramIcon, InstagramGradientIcon, DiscordIcon, 
-  SnapchatIcon 
+import {
+  WhatsAppIcon, TelegramIcon, InstagramGradientIcon, DiscordIcon,
+  SnapchatIcon
 } from "./SocialIcons";
 import { Avatar } from "./Avatar";
 import { LastSeenBadge } from "./LastSeenBadge";
@@ -105,12 +105,12 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
     setTimeout(() => setCopied(false), 2000);
   };
 
-    const shareApps = [
-      { name: "WhatsApp", icon: <WhatsAppIcon size={20} color="#25D366" />, color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with me on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
-      { name: "Telegram", icon: <TelegramIcon size={20} color="#2CA5E0" />, color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with me on Nexora — encrypted private chat.`)}` },
-      { name: "Instagram", icon: <InstagramGradientIcon size={20} />, color: "#E1306C", url: `https://instagram.com/direct/inbox/` },
-      { name: "Snapchat", icon: <SnapchatIcon size={20} color="#FFFC00" />, color: "#FFFC00", url: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(profileUrl)}` },
-    ];
+  const shareApps = [
+    { name: "WhatsApp", icon: <WhatsAppIcon size={20} color="#25D366" />, color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with me on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
+    { name: "Telegram", icon: <TelegramIcon size={20} color="#2CA5E0" />, color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with me on Nexora — encrypted private chat.`)}` },
+    { name: "Instagram", icon: <InstagramGradientIcon size={20} />, color: "#E1306C", url: `https://instagram.com/direct/inbox/` },
+    { name: "Snapchat", icon: <SnapchatIcon size={20} color="#FFFC00" />, color: "#FFFC00", url: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(profileUrl)}` },
+  ];
 
 
   const downloadQR = () => {
@@ -122,7 +122,7 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
 
   const shareQRToFriend = () => {
     if (typeof navigator !== "undefined" && navigator.share) {
-      navigator.share({ title: `${friend.name}'s Nexora QR`, url: profileUrl }).catch((..._args: any[]) => {});
+      navigator.share({ title: `${friend.name}'s Nexora QR`, url: profileUrl }).catch((..._args: any[]) => { });
     } else {
       copyLink();
     }
@@ -145,220 +145,220 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
         <div className="relative">
           {/* Cover gradient */}
           <div className="h-32 sm:h-48 relative" style={{ background: `linear-gradient(135deg, var(--c1), var(--c2))` }}>
-          <style>{`
+            <style>{`
             .user-modal-cover { --c1: ${friend.color.includes("ff006e") ? "#ff006e" : "#6c5ce7"}; --c2: ${friend.color.includes("ffbe0b") ? "#ffbe0b" : "#00d4ff"}; }
           `}</style>
-          <div className="user-modal-cover absolute inset-0"
-            style={{ background: `linear-gradient(135deg, ${friend.color.includes("ff006e") ? "#ff006e" : "#6c5ce7"}, ${friend.color.includes("ffbe0b") ? "#ffbe0b" : "#00d4ff"})`, opacity: 0.9 }} />
-          
-          {/* Close Button (Visible on all sizes now) */}
-          <button onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center justify-center z-50"
-            style={{ background: "rgba(0,0,0,0.35)", color: "white", border: "1px solid rgba(255,255,255,0.15)" }}>
-            <X className="w-5 h-5 drop-shadow-md" />
-          </button>
-          {/* Avatar */}
-          <div className="absolute -bottom-12 left-6 sm:left-10">
-            <motion.div
-              animate={{ boxShadow: ["0 0 0px rgba(108,92,231,0)", "0 0 30px rgba(108,92,231,0.5)", "0 0 0px rgba(108,92,231,0)"] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              className="relative z-10"
-            >
-              <div className="hidden sm:block">
-                <Avatar 
-                  src={friend.avatarUrl} 
-                  name={friend.name || friend.username} 
-                  color={friend.color} 
-                  size={128} 
-                  animate={true} 
-                  showBorder={true}
-                  className="ring-[6px] shadow-2xl"
-                  borderColor={isDark ? "rgba(16,16,28,1)" : "#fff"}
-                />
-              </div>
-              <div className="sm:hidden">
-                <Avatar 
-                  src={friend.avatarUrl} 
-                  name={friend.name || friend.username} 
-                  color={friend.color} 
-                  size={96} 
-                  animate={true} 
-                  showBorder={true}
-                  className="ring-[6px] shadow-2xl"
-                  borderColor={isDark ? "rgba(16,16,28,1)" : "#fff"}
-                />
-              </div>
-            </motion.div>
-            {friend.online && (
-              <motion.div 
-                animate={{ scale: [1, 1.2, 1], opacity: [1, 0.8, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#2ed573] border-4"
-                style={{ borderColor: isDark ? "#10101c" : "#fff", boxShadow: "0 0 15px rgba(46,213,115,0.6)" }} />
-            )}
+            <div className="user-modal-cover absolute inset-0"
+              style={{ background: `linear-gradient(135deg, ${friend.color.includes("ff006e") ? "#ff006e" : "#6c5ce7"}, ${friend.color.includes("ffbe0b") ? "#ffbe0b" : "#00d4ff"})`, opacity: 0.9 }} />
+
+            {/* Close Button (Visible on all sizes now) */}
+            <button onClick={onClose}
+              className="absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center justify-center z-50"
+              style={{ background: "rgba(0,0,0,0.35)", color: "white", border: "1px solid rgba(255,255,255,0.15)" }}>
+              <X className="w-5 h-5 drop-shadow-md" />
+            </button>
+            {/* Avatar */}
+            <div className="absolute -bottom-12 left-6 sm:left-10">
+              <motion.div
+                animate={{ boxShadow: ["0 0 0px rgba(108,92,231,0)", "0 0 30px rgba(108,92,231,0.5)", "0 0 0px rgba(108,92,231,0)"] }}
+                transition={{ duration: 2.5, repeat: Infinity }}
+                className="relative z-10"
+              >
+                <div className="hidden sm:block">
+                  <Avatar
+                    src={friend.avatarUrl}
+                    name={friend.name || friend.username}
+                    color={friend.color}
+                    size={128}
+                    animate={true}
+                    showBorder={true}
+                    className="ring-[6px] shadow-2xl"
+                    borderColor={isDark ? "rgba(16,16,28,1)" : "#fff"}
+                  />
+                </div>
+                <div className="sm:hidden">
+                  <Avatar
+                    src={friend.avatarUrl}
+                    name={friend.name || friend.username}
+                    color={friend.color}
+                    size={96}
+                    animate={true}
+                    showBorder={true}
+                    className="ring-[6px] shadow-2xl"
+                    borderColor={isDark ? "rgba(16,16,28,1)" : "#fff"}
+                  />
+                </div>
+              </motion.div>
+              {friend.online && (
+                <motion.div
+                  animate={{ scale: [1, 1.2, 1], opacity: [1, 0.8, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#2ed573] border-4"
+                  style={{ borderColor: isDark ? "#10101c" : "#fff", boxShadow: "0 0 15px rgba(46,213,115,0.6)" }} />
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="pt-16 sm:pt-20 px-6 sm:px-10 pb-8 flex flex-col gap-5 sm:gap-7">
-          {/* Name, username, bio */}
-          <div>
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-3xl sm:text-4xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>{friend.name}</h2>
-                <p className="text-base sm:text-lg font-bold text-[#6c5ce7] mt-0.5">@{friend.username}</p>
+          <div className="pt-16 sm:pt-20 px-6 sm:px-10 pb-8 flex flex-col gap-5 sm:gap-7">
+            {/* Name, username, bio */}
+            <div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-3xl sm:text-4xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>{friend.name}</h2>
+                  <p className="text-base sm:text-lg font-bold text-[#6c5ce7] mt-0.5">@{friend.username}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1 pt-1">
+                  <LastSeenBadge isOnline={friend.online} lastVisit={friend.lastVisit} username={friend.username} />
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1 pt-1">
-                <LastSeenBadge isOnline={friend.online} lastVisit={friend.lastVisit} username={friend.username} />
-              </div>
+              {friend.bio && (
+                <p className="text-sm mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{friend.bio}</p>
+              )}
             </div>
-            {friend.bio && (
-              <p className="text-sm mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{friend.bio}</p>
-            )}
-          </div>
 
-          {/* Meta info */}
-          <div className="grid grid-cols-2 gap-2">
-            {friend.joinedDate && (
-              <div className="flex items-center gap-2 p-2.5 rounded-xl text-xs"
-                style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: "var(--text-secondary)" }}>
-                <Shield className="w-3.5 h-3.5 text-[#6c5ce7] shrink-0" />
-                <div>
-                  <p className="text-[9px] uppercase tracking-wider font-bold" style={{ color: "var(--text-muted)" }}>Joined</p>
-                  <p className="font-semibold">{friend.joinedDate}</p>
+            {/* Meta info */}
+            <div className="grid grid-cols-2 gap-2">
+              {friend.joinedDate && (
+                <div className="flex items-center gap-2 p-2.5 rounded-xl text-xs"
+                  style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: "var(--text-secondary)" }}>
+                  <Shield className="w-3.5 h-3.5 text-[#6c5ce7] shrink-0" />
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider font-bold" style={{ color: "var(--text-muted)" }}>Joined</p>
+                    <p className="font-semibold">{friend.joinedDate}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-            {friend.friendSince && (
-              <div className="flex items-center gap-2 p-2.5 rounded-xl text-xs"
-                style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: "var(--text-secondary)" }}>
-                <MapPin className="w-3.5 h-3.5 text-[#2ed573] shrink-0" />
-                <div>
-                  <p className="text-[9px] uppercase tracking-wider font-bold" style={{ color: "var(--text-muted)" }}>Friends since</p>
-                  <p className="font-semibold">{friend.friendSince}</p>
+              )}
+              {friend.friendSince && (
+                <div className="flex items-center gap-2 p-2.5 rounded-xl text-xs"
+                  style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", color: "var(--text-secondary)" }}>
+                  <MapPin className="w-3.5 h-3.5 text-[#2ed573] shrink-0" />
+                  <div>
+                    <p className="text-[9px] uppercase tracking-wider font-bold" style={{ color: "var(--text-muted)" }}>Friends since</p>
+                    <p className="font-semibold">{friend.friendSince}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col gap-4">
-            <div className={`grid gap-3 ${friend.username === "nexora_31" ? "grid-cols-1" : "grid-cols-3"}`}>
-              {[
-                { label: "Message", icon: MessageSquare, color: "#6c5ce7", bg: isDark ? "rgba(108,92,231,0.15)" : "rgba(108,92,231,0.08)", action: onChat },
-                { label: "Voice", icon: Phone, color: "#2ed573", bg: isDark ? "rgba(46,213,115,0.15)" : "rgba(46,213,115,0.08)", action: onVoiceCall },
-                { label: "Video", icon: Video, color: "#00d4ff", bg: isDark ? "rgba(0,212,255,0.15)" : "rgba(0,212,255,0.08)", action: onVideoCall },
-              ]
-                .filter(btn => !(friend.username === 'nexora_31' && (btn.label === 'Voice' || btn.label === 'Video')))
-                .map(btn => (
-                <motion.button key={btn.label} whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
-                  onClick={btn.action}
-                  className="flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all border border-transparent hover:border-current"
-                  style={{ background: btn.bg, color: btn.color }}>
-                  <btn.icon className="w-6 h-6" />
-                  <span className="text-[11px] font-black uppercase tracking-widest">{btn.label}</span>
+            {/* Action buttons */}
+            <div className="flex flex-col gap-4">
+              <div className={`grid gap-3 ${friend.username === "nexora_31" ? "grid-cols-1" : "grid-cols-3"}`}>
+                {[
+                  { label: "Message", icon: MessageSquare, color: "#6c5ce7", bg: isDark ? "rgba(108,92,231,0.15)" : "rgba(108,92,231,0.08)", action: onChat },
+                  { label: "Voice", icon: Phone, color: "#2ed573", bg: isDark ? "rgba(46,213,115,0.15)" : "rgba(46,213,115,0.08)", action: onVoiceCall },
+                  { label: "Video", icon: Video, color: "#00d4ff", bg: isDark ? "rgba(0,212,255,0.15)" : "rgba(0,212,255,0.08)", action: onVideoCall },
+                ]
+                  .filter(btn => !(friend.username === 'nexora_31' && (btn.label === 'Voice' || btn.label === 'Video')))
+                  .map(btn => (
+                    <motion.button key={btn.label} whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
+                      onClick={btn.action}
+                      className="flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all border border-transparent hover:border-current"
+                      style={{ background: btn.bg, color: btn.color }}>
+                      <btn.icon className="w-6 h-6" />
+                      <span className="text-[11px] font-black uppercase tracking-widest">{btn.label}</span>
+                    </motion.button>
+                  ))}
+              </div>
+
+              {friend.username !== "nexora_31" && (
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={onBlock}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                  style={{ background: isDark ? "rgba(255,0,110,0.1)" : "rgba(255,0,110,0.05)", color: "#ff006e", border: "1px solid rgba(255,0,110,0.15)" }}>
+                  <UserMinus className="w-4 h-4" />
+                  Restrict Node Identity (Block)
                 </motion.button>
-              ))}
+              )}
             </div>
-            
-            {friend.username !== "nexora_31" && (
-              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                onClick={onBlock}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
-                style={{ background: isDark ? "rgba(255,0,110,0.1)" : "rgba(255,0,110,0.05)", color: "#ff006e", border: "1px solid rgba(255,0,110,0.15)" }}>
-                <UserMinus className="w-4 h-4" />
-                Restrict Node Identity (Block)
-              </motion.button>
-            )}
-          </div>
 
-          {/* QR + Share row */}
-          <div className="flex flex-wrap gap-2">
-            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-              onClick={() => setShowQR(!showQR)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-bold"
-              style={{ background: isDark ? "rgba(108,92,231,0.1)" : "rgba(108,92,231,0.07)", color: "#6c5ce7", border: `1px solid rgba(108,92,231,0.2)` }}>
-              <QrCode className="w-3.5 h-3.5" /> {showQR ? "Hide" : "Show"} QR
-            </motion.button>
-            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-              onClick={() => setShareMode(!shareMode)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-bold"
-              style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-secondary)", border: `1px solid var(--border-subtle)` }}>
-              <Share2 className="w-3.5 h-3.5" /> Share
-            </motion.button>
-            {onToggleLock && (
+            {/* QR + Share row */}
+            <div className="flex flex-wrap gap-2">
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                onClick={onToggleLock}
-                className="flex-[1.2] flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-bold transition-colors"
-                style={{ background: isChatLocked ? "rgba(255,0,110,0.1)" : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: isChatLocked ? "#ff006e" : "var(--text-secondary)", border: `1px solid ${isChatLocked ? "rgba(255,0,110,0.2)" : "var(--border-subtle)"}` }}>
-                {isChatLocked ? <Shield className="w-3.5 h-3.5" /> : <ShieldOff className="w-3.5 h-3.5" />} {isChatLocked ? "Unlock Chat" : "Lock Chat"}
+                onClick={() => setShowQR(!showQR)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-bold"
+                style={{ background: isDark ? "rgba(108,92,231,0.1)" : "rgba(108,92,231,0.07)", color: "#6c5ce7", border: `1px solid rgba(108,92,231,0.2)` }}>
+                <QrCode className="w-3.5 h-3.5" /> {showQR ? "Hide" : "Show"} QR
               </motion.button>
-            )}
-          </div>
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                onClick={() => setShareMode(!shareMode)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-bold"
+                style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: "var(--text-secondary)", border: `1px solid var(--border-subtle)` }}>
+                <Share2 className="w-3.5 h-3.5" /> Share
+              </motion.button>
+              {onToggleLock && (
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                  onClick={onToggleLock}
+                  className="flex-[1.2] flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[11px] font-bold transition-colors"
+                  style={{ background: isChatLocked ? "rgba(255,0,110,0.1)" : isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)", color: isChatLocked ? "#ff006e" : "var(--text-secondary)", border: `1px solid ${isChatLocked ? "rgba(255,0,110,0.2)" : "var(--border-subtle)"}` }}>
+                  {isChatLocked ? <Shield className="w-3.5 h-3.5" /> : <ShieldOff className="w-3.5 h-3.5" />} {isChatLocked ? "Unlock Chat" : "Lock Chat"}
+                </motion.button>
+              )}
+            </div>
 
-          {/* QR Panel */}
-          <AnimatePresence>
-            {showQR && qrUrl && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden">
-                <div className="flex flex-col items-center gap-3 py-3">
-                  <div className="p-3 rounded-2xl border-2" style={{ borderColor: "rgba(108,92,231,0.2)", background: "#fff" }}>
-                    <img src={qrUrl} alt="QR Code" className="w-36 h-36" />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-extrabold text-sm text-[#6c5ce7]">@{friend.username}</p>
-                    <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Joined {friend.joinedDate}</p>
-                  </div>
-                  <div className="flex gap-2 w-full">
-                    <motion.button whileTap={{ scale: 0.94 }} onClick={downloadQR}
-                      className="flex-1 py-2 rounded-xl text-xs font-bold"
-                      style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>
-                      ⬇ Download
-                    </motion.button>
-                    <motion.button whileTap={{ scale: 0.94 }} onClick={shareQRToFriend}
-                      className="flex-1 py-2 rounded-xl text-xs font-bold"
-                      style={{ background: "rgba(46,213,115,0.1)", color: "#2ed573" }}>
-                      ↗ Share QR
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Share panel */}
-          <AnimatePresence>
-            {shareMode && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden">
-                <div className="flex flex-col gap-3 py-2">
-                  {/* Copy link */}
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl border"
-                    style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", borderColor: "var(--border-subtle)" }}>
-                    <p className="flex-1 text-xs truncate font-mono" style={{ color: "var(--text-muted)" }}>{displayUrl}</p>
-                    <motion.button whileTap={{ scale: 0.9 }} onClick={copyLink}
-                      className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1"
-                      style={{ background: copied ? "rgba(46,213,115,0.1)" : "rgba(108,92,231,0.1)", color: copied ? "#2ed573" : "#6c5ce7" }}>
-                      {copied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
-                    </motion.button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {shareApps.map(app => (
-                      <motion.button key={app.name} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.92 }}
-                        onClick={() => window.open(app.url, "_blank")}
-                        className="flex flex-col items-center gap-2 py-3 rounded-2xl text-[10px] font-bold shadow-sm transition-all"
-                        style={{ background: `${app.color}08`, color: app.color, border: `1px solid ${app.color}20` }}>
-                        <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20 overflow-hidden" style={{ borderColor: `${app.color}40` }}>
-                          {app.icon}
-                        </div>
-                        <span className="tracking-wide uppercase">{app.name}</span>
+            {/* QR Panel */}
+            <AnimatePresence>
+              {showQR && qrUrl && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden">
+                  <div className="flex flex-col items-center gap-3 py-3">
+                    <div className="p-3 rounded-2xl border-2" style={{ borderColor: "rgba(108,92,231,0.2)", background: "#fff" }}>
+                      <img src={qrUrl} alt="QR Code" className="w-36 h-36" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-extrabold text-sm text-[#6c5ce7]">@{friend.username}</p>
+                      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Joined {friend.joinedDate}</p>
+                    </div>
+                    <div className="flex gap-2 w-full">
+                      <motion.button whileTap={{ scale: 0.94 }} onClick={downloadQR}
+                        className="flex-1 py-2 rounded-xl text-xs font-bold"
+                        style={{ background: "rgba(108,92,231,0.1)", color: "#6c5ce7" }}>
+                        ⬇ Download
                       </motion.button>
-                    ))}
+                      <motion.button whileTap={{ scale: 0.94 }} onClick={shareQRToFriend}
+                        className="flex-1 py-2 rounded-xl text-xs font-bold"
+                        style={{ background: "rgba(46,213,115,0.1)", color: "#2ed573" }}>
+                        ↗ Share QR
+                      </motion.button>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Share panel */}
+            <AnimatePresence>
+              {shareMode && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden">
+                  <div className="flex flex-col gap-3 py-2">
+                    {/* Copy link */}
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl border"
+                      style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", borderColor: "var(--border-subtle)" }}>
+                      <p className="flex-1 text-xs truncate font-mono" style={{ color: "var(--text-muted)" }}>{displayUrl}</p>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={copyLink}
+                        className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1"
+                        style={{ background: copied ? "rgba(46,213,115,0.1)" : "rgba(108,92,231,0.1)", color: copied ? "#2ed573" : "#6c5ce7" }}>
+                        {copied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                      </motion.button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {shareApps.map(app => (
+                        <motion.button key={app.name} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.92 }}
+                          onClick={() => window.open(app.url, "_blank")}
+                          className="flex flex-col items-center gap-2 py-3 rounded-2xl text-[10px] font-bold shadow-sm transition-all"
+                          style={{ background: `${app.color}08`, color: app.color, border: `1px solid ${app.color}20` }}>
+                          <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center shadow-inner bg-white/50 dark:bg-black/20 overflow-hidden" style={{ borderColor: `${app.color}40` }}>
+                            {app.icon}
+                          </div>
+                          <span className="tracking-wide uppercase">{app.name}</span>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
         </div>
       </motion.div>
     </div>
