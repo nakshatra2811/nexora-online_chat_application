@@ -3820,73 +3820,148 @@ function ChatsPageContent() {
                     <div className="px-4 py-1.5 mb-2">
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-30">Nodes Found ({globalSearchResults.length})</span>
                     </div>
-                    {globalSearchResults.map((user: any, idx: number) => {
-                      const alreadyRequested = sentRequests.includes(user.username);
-                      const alreadyConnected = threads.some((t: any) => t.username === user.username);
+                    {(() => {
+                      const friendMatches = globalSearchResults.filter((u: any) => u.isFriend);
+                      const otherMatches = globalSearchResults.filter((u: any) => !u.isFriend);
+                      let globalIdx = 0;
+
                       return (
-                        <motion.div key={user.username}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: idx * 0.04, ease: "easeOut" }}
-                          onClick={() => setSelectedProfileUser(user)}
-                          className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98]"
-                        >
-                          <div className="relative shrink-0 flex-none scale-100 group-hover:scale-105 transition-transform duration-300">
-                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-xl overflow-hidden ring-2 ring-transparent group-hover:ring-[#6c5ce7]/30 transition-all uppercase`}>
-                              {user.avatarUrl ? (
-                                <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                (user.fullName?.[0] || user.username?.[0] || "?").toUpperCase()
-                              )}
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--bg-surface)] flex items-center justify-center shadow-lg border-[3px] border-[var(--bg-surface)]">
-                              <div className="w-full h-full flex items-center justify-center">
-                                <div className="w-3.5 h-3.5 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573]" />
+                        <div className="space-y-6">
+                          {friendMatches.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="px-4 py-1.5 flex items-center gap-2">
+                                <Users className="w-3 h-3 text-[#6c5ce7] opacity-60" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6c5ce7]">Trusted Nodes ({friendMatches.length})</span>
                               </div>
-                            </div>
-                          </div>
+                              {friendMatches.map((user: any) => {
+                                const idx = globalIdx++;
+                                const alreadyConnected = threads.some((t: any) => t.username === user.username);
+                                return (
+                                  <motion.div key={user.username}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.04, ease: "easeOut" }}
+                                    onClick={() => setSelectedProfileUser(user)}
+                                    className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-[#6c5ce7]/5 dark:hover:bg-[#6c5ce7]/10 active:scale-[0.98] border border-transparent hover:border-[#6c5ce7]/20"
+                                  >
+                                    <div className="relative shrink-0 flex-none scale-100 group-hover:scale-105 transition-transform duration-300">
+                                      <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-xl overflow-hidden ring-2 ring-transparent group-hover:ring-[#6c5ce7]/30 transition-all uppercase`}>
+                                        {user.avatarUrl ? (
+                                          <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                          (user.fullName?.[0] || user.username?.[0] || "?").toUpperCase()
+                                        )}
+                                      </div>
+                                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--bg-surface)] flex items-center justify-center shadow-lg border-[3px] border-[var(--bg-surface)]">
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <div className="w-3.5 h-3.5 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573]" />
+                                        </div>
+                                      </div>
+                                    </div>
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
-                              {user.username === 'nexora_31' && (
-                                <span className="flex-none px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[7px] font-black uppercase tracking-tighter shadow-sm">Official</span>
-                              )}
-                            </div>
-                            <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
-                          </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
+                                        <span className="flex-none px-1.5 py-0.5 rounded-full bg-[#6c5ce7]/10 text-[#6c5ce7] border border-[#6c5ce7]/20 text-[7px] font-black uppercase tracking-tighter shadow-sm flex items-center gap-0.5">
+                                          <Check className="w-2 h-2" /> Friend
+                                        </span>
+                                      </div>
+                                      <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
+                                    </div>
 
-                          <div className="shrink-0 ml-2">
-                            {alreadyConnected ? (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
-                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
-                              >
-                                <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
-                              </button>
-                            ) : alreadyRequested ? (
-                              <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 transition-all">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
+                                    <div className="shrink-0 ml-2">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
+                                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
+                                      >
+                                        <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
+                                      </button>
+                                    </div>
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {otherMatches.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="px-4 py-1.5 flex items-center gap-2 mt-4">
+                                <Search className="w-3 h-3 text-[var(--text-muted)] opacity-60" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-30">Global Directory ({otherMatches.length})</span>
                               </div>
-                            ) : (
-                              <motion.button
-                                whileHover={{ scale: 1.05, y: -2 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
-                                className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
-                                style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}
-                              >
-                                <span className="relative z-10 flex items-center gap-2">
-                                  <Plus className="w-3.5 h-3.5" />
-                                  Connect
-                                </span>
-                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
-                              </motion.button>
-                            )}
-                          </div>
-                        </motion.div>
+                              {otherMatches.map((user: any) => {
+                                const idx = globalIdx++;
+                                const alreadyRequested = sentRequests.includes(user.username);
+                                const alreadyConnected = threads.some((t: any) => t.username === user.username);
+                                return (
+                                  <motion.div key={user.username}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.04, ease: "easeOut" }}
+                                    onClick={() => setSelectedProfileUser(user)}
+                                    className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98]"
+                                  >
+                                    <div className="relative shrink-0 flex-none scale-100 group-hover:scale-105 transition-transform duration-300">
+                                      <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr ${user.color || "from-purple-500 to-indigo-500"} flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-xl overflow-hidden ring-2 ring-transparent group-hover:ring-[#6c5ce7]/30 transition-all uppercase`}>
+                                        {user.avatarUrl ? (
+                                          <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                          (user.fullName?.[0] || user.username?.[0] || "?").toUpperCase()
+                                        )}
+                                      </div>
+                                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[var(--bg-surface)] flex items-center justify-center shadow-lg border-[3px] border-[var(--bg-surface)]">
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <div className="w-3.5 h-3.5 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573]" />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName}</p>
+                                        {user.username === 'nexora_31' && (
+                                          <span className="flex-none px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[7px] font-black uppercase tracking-tighter shadow-sm">Official</span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
+                                    </div>
+
+                                    <div className="shrink-0 ml-2">
+                                      {alreadyConnected ? (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
+                                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
+                                        >
+                                          <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
+                                        </button>
+                                      ) : alreadyRequested ? (
+                                        <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 transition-all">
+                                          <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
+                                        </div>
+                                      ) : (
+                                        <motion.button
+                                          whileHover={{ scale: 1.05, y: -2 }}
+                                          whileTap={{ scale: 0.95 }}
+                                          onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
+                                          className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
+                                          style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}
+                                        >
+                                          <span className="relative z-10 flex items-center gap-2">
+                                            <Plus className="w-3.5 h-3.5" />
+                                            Connect
+                                          </span>
+                                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
+                                        </motion.button>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       );
-                    })}
+                    })()}
                   </div>
                 )}
               </div>

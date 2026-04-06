@@ -40,7 +40,14 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       title,
       description,
       siteName: "Nexora",
-      images: [{ url: image, width: 1200, height: 630, alt: post.title }],
+      images: [
+        {
+          url: image.startsWith("http") ? image : `${siteUrl}${image.startsWith("/") ? "" : "/"}${image}`,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
       publishedTime: post.date,
       authors: [post.author],
     },
@@ -48,7 +55,13 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       card: "summary_large_image",
       title,
       description,
-      images: [image],
+      images: [image.startsWith("http") ? image : `${siteUrl}${image.startsWith("/") ? "" : "/"}${image}`],
+      creator: "@nexoraapp",
+    },
+    icons: {
+      icon: "/icon.png",
+      shortcut: "/icon.png",
+      apple: "/icon.png",
     },
     alternates: { canonical: url },
   };

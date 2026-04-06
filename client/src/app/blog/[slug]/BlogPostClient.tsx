@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Clock, User, Share2, Link2, Check } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "@/lib/theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ── Custom SVG Brand Icons ──
 function TwitterXIcon({ className }: { className?: string }) {
@@ -42,8 +42,16 @@ function FacebookIcon({ className }: { className?: string }) {
 export default function BlogPostClient({ post, slug }: { post: any; slug: string }) {
   const { isDark } = useTheme();
   const [copied, setCopied] = useState(false);
+  
+  // Use current origin if available, fallback to hardcoded production URL
+  const [siteUrl, setSiteUrl] = useState("https://nexora31.vercel.app");
+  
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSiteUrl(window.location.origin);
+    }
+  }, []);
 
-  const siteUrl = "https://nexora31.vercel.app";
   const postUrl = `${siteUrl}/blog/${slug}`;
   const shareText = post ? `${post.title} — Read on Nexora Blog` : "Check this out on Nexora Blog";
 

@@ -22,11 +22,15 @@ export const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774
  */
 export async function nexoraFetch(endpoint: string, options: RequestInit = {}, retries = 1) {
   try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexora_token') : null;
+    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       cache: 'no-store',
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeader,
         ...options.headers,
       },
       // Added moderate timeout for local network sanity

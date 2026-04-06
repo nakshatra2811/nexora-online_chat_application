@@ -143,6 +143,7 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
               <ChevronLeft className="w-8 h-8" />
             </button>
             <h2 className="text-xl font-black absolute left-1/2 -translate-x-1/2" style={{ color: "var(--text-primary)" }}>Find Friends</h2>
+            <p className="text-[10px] absolute left-1/2 -translate-x-1/2 top-11 font-bold opacity-40 uppercase tracking-widest whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Find friends by syncing contacts</p>
             <div className="w-10"></div>
           </div>
           

@@ -28,11 +28,43 @@ const path = require('path');
 const webpush = require('web-push');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
 // ------------------------------------------------------------------
-// PII ENCRYPTION ENGINE (Zero-Leak Strategy)
+// PII ENCRYPTION ENGINE & JWT AUTHENTICATION
 // ------------------------------------------------------------------
 const DATABASE_SECRET = process.env.DATABASE_SECRET || 'nexora_private_protocol_internal_encryption_key_31';
+
+// JWT System
+function generateToken(user) {
+    return jwt.sign(
+        { id: user.id, username: user.username, role: user.role },
+        DATABASE_SECRET,
+        { expiresIn: '30d' }
+    );
+}
+
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) return res.status(401).json({ error: "Access Denied: Missing Protocol Token." });
+    
+    jwt.verify(token, DATABASE_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: "Access Denied: Invalid Protocol Token." });
+        req.user = user;
+        next();
+    });
+}
+
+function isAdmin(req, res, next) {
+    if (req.user && req.user.role === 'Admin') {
+        next();
+    } else {
+        res.status(403).json({ error: "Access Denied: Administrative Clearance Required." });
+    }
+}
+
 const algorithm = 'aes-256-cbc';
 const key = crypto.createHash('sha256').update(DATABASE_SECRET).digest();
 
@@ -209,7 +241,9 @@ let pgPool;
                 created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 phone_number TEXT DEFAULT 'Not Set',
                 phone_hash TEXT,
-                last_visit ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'}
+                last_visit ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'},
+                google_uid TEXT,
+                avatar_url TEXT
             );
 
             CREATE TABLE IF NOT EXISTS connection_requests (
@@ -330,6 +364,8 @@ let pgPool;
         }
         // Migration for wallpaper in connections
         try { await db.run("ALTER TABLE connections ADD COLUMN wallpaper TEXT"); } catch (e) { }
+        // Migration for Google OAuth (google_uid links Firebase UID to account)
+        try { await db.run("ALTER TABLE users ADD COLUMN google_uid TEXT DEFAULT NULL"); } catch (e) { }
 
         // Migration for Avatar System (Modernization)
         // Clear old static logo from existing users so they get the new premium dynamic avatars
@@ -1518,9 +1554,10 @@ app.get('/api/users/public/:username', async (req, res) => {
 });
 
 // SYNC CONTACTS (Phase: Identity Validation from local address book)
-app.post('/api/users/sync-contacts', async (req, res) => {
+app.post('/api/users/sync-contacts', authenticateToken, async (req, res) => {
     try {
-        const { contacts, me } = req.body;
+        const { contacts } = req.body;
+        const me = req.user.username;
         if (!contacts || !Array.isArray(contacts)) {
             return res.status(400).json({ error: "Invalid payload format." });
         }
@@ -1593,8 +1630,10 @@ app.post('/api/auth/login', async (req, res) => {
                     });
                 }
 
+                const token = generateToken(user);
                 return res.json({
                     status: "success",
+                    token: token,
                     role: user.role,
                     fullName: decryptField(user.full_name),
                     email: user.email,
@@ -1613,9 +1652,311 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// ------------------------------------------------------------------
+// AUTHENTICATION PROTOCOL (Unified Identity & Secure Handshake)
+// ------------------------------------------------------------------
+const authStore = new Map(); // identifier -> { otp, expiry, verified, type, ... }
+
+// Helper: Verify Google Token (Zero-Trust Security)
+async function verifyGoogleToken(idToken) {
+    if (!admin.apps.length) return null;
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        return decodedToken;
+    } catch (e) {
+        console.error("[GOOGLE AUTH] Token verification failed:", e.message);
+        return null;
+    }
+}
+
+// NEW: User Suggestions Engine (Discovery Protocol)
+app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
+    const { username } = req.user;
+    if (!username) return res.status(400).json({ error: "Context missing" });
+
+    try {
+        if (!db) return res.status(500).json({ error: "Database offline" });
+        const myUser = username.toLowerCase();
+
+        // 1. Get my current connections & pending requests to exclude them
+        const myConnections = await db.all(
+            'SELECT user_a, user_b FROM connections WHERE user_a = ? OR user_b = ?',
+            [myUser, myUser]
+        );
+        const myRequestLog = await db.all(
+            'SELECT from_username, to_username FROM connection_requests WHERE from_username = ? OR to_username = ?',
+            [myUser, myUser]
+        );
+
+        const excluded = new Set([myUser, 'nexora_31', 'me']);
+        myConnections.forEach(c => {
+            excluded.add(c.user_a.toLowerCase());
+            excluded.add(c.user_b.toLowerCase());
+        });
+        myRequestLog.forEach(r => {
+            excluded.add(r.from_username.toLowerCase());
+            excluded.add(r.to_username.toLowerCase());
+        });
+
+        // 2. Mutual Friends Logic
+        // Get list of my friends' usernames
+        const myFriends = Array.from(excluded).filter(u => u !== myUser && u !== 'nexora_31' && u !== 'me');
+        
+        let suggestions = [];
+
+        if (myFriends.length > 0) {
+            // Find friends of my friends with mutual friend counts in a single query
+            const placeholders = myFriends.map(() => '?').join(',');
+            const potentialMutuals = await db.all(`
+                SELECT 
+                    u.username, u.full_name, u.avatar_url, u.color,
+                    COUNT(*) as mutual_count
+                FROM connections c
+                JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_b ELSE c.user_a END)
+                WHERE (LOWER(c.user_a) IN (${placeholders}) OR LOWER(c.user_b) IN (${placeholders}))
+                  AND LOWER(u.username) NOT IN (${myFriends.map(() => '?').join(',')}, ?)
+                GROUP BY u.username, u.full_name, u.avatar_url, u.color
+                ORDER BY mutual_count DESC
+                LIMIT 10
+            `, [...myFriends, ...myFriends, ...myFriends, myUser]);
+            
+            for (const m of potentialMutuals) {
+                if (!excluded.has(m.username.toLowerCase())) {
+                    suggestions.push({
+                        ...m,
+                        full_name: decryptField(m.full_name),
+                        mutualCount: m.mutual_count
+                    });
+                }
+            }
+        }
+
+        // 3. Fallback to random users if suggestions are low
+        if (suggestions.length < 5) {
+            const randomUsers = await db.all(`
+                SELECT username, full_name, avatar_url, color 
+                FROM users 
+                WHERE LOWER(username) NOT IN (${Array.from(excluded).map(() => '?').join(',')})
+                LIMIT ?
+            `, [...Array.from(excluded), 10 - suggestions.length]);
+
+            for (const u of randomUsers) {
+                if (!suggestions.find(s => s.username === u.username)) {
+                    suggestions.push({
+                        ...u,
+                        full_name: decryptField(u.full_name),
+                        mutualCount: 0
+                    });
+                }
+            }
+        }
+
+        res.json({ suggestions: suggestions.slice(0, 10) });
+    } catch (err) {
+        console.error("[SUGGESTIONS] Error:", err);
+        res.status(500).json({ error: "Failed to generate suggestions" });
+    }
+});
+
+// NEW: Smart Global Search Engine (Identity Discovery)
+app.get('/api/users/search', authenticateToken, async (req, res) => {
+    const { q } = req.query;
+    const { username } = req.user;
+    if (!q || !username) return res.json({ users: [] });
+
+    try {
+        if (!db) return res.status(500).json({ error: "Database offline" });
+        const query = `%${q.toLowerCase()}%`;
+        const myUser = username.toLowerCase();
+
+        // Find matches, with a flag for friends
+        // We join with connections to prioritize existing friends
+        const results = await db.all(`
+            SELECT 
+                u.username, u.full_name, u.avatar_url, u.color,
+                CASE WHEN c.id IS NOT NULL THEN 1 ELSE 0 END as is_friend
+            FROM users u
+            LEFT JOIN connections c ON 
+                (LOWER(c.user_a) = ? AND LOWER(c.user_b) = LOWER(u.username)) OR
+                (LOWER(c.user_b) = ? AND LOWER(c.user_a) = LOWER(u.username))
+            WHERE (LOWER(u.username) LIKE ? OR LOWER(u.full_name) LIKE ?)
+              AND LOWER(u.username) != ?
+            ORDER BY is_friend DESC, u.username ASC
+            LIMIT 15
+        `, [myUser, myUser, query, query, myUser]);
+
+        const formatted = results.map(u => ({
+            ...u,
+            fullName: decryptField(u.full_name)
+        }));
+
+        res.json({ users: formatted });
+    } catch (err) {
+        console.error("[SEARCH] Error:", err);
+        res.status(500).json({ error: "Search protocol failed" });
+    }
+});
+
+// Check Username Availability
+app.get('/api/auth/check-username', async (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.status(400).json({ error: "Username required" });
+    try {
+        if (!db) return res.status(500).json({ error: "Database not ready" });
+        const user = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)', [username.trim(), username.trim()]);
+        res.json({ available: !user });
+    } catch (err) {
+        res.status(500).json({ error: "Server error during check" });
+    }
+});
+
+// Google OAuth Login (Identity Recognized/Not Found)
+app.post('/api/auth/google-login', async (req, res) => {
+    const { idToken, email } = req.body;
+    if (!idToken) return res.status(400).json({ error: "Invalid payload: Identity token required." });
+
+    const decodedToken = await verifyGoogleToken(idToken);
+    if (!decodedToken) return res.status(401).json({ error: "Invalid identity source. Google Auth failed." });
+
+    const googleUid = decodedToken.uid;
+    const verifiedEmail = (decodedToken.email || email || '').toLowerCase().trim();
+
+    try {
+        if (!db) return res.status(500).json({ error: "Identity db offline" });
+        
+        const user = await db.get('SELECT * FROM users WHERE google_uid = ? OR LOWER(email) = ?', [googleUid, verifiedEmail]);
+        
+        if (!user) {
+            return res.json({ status: "not_found", message: "Identity not recognized. Complete profile setup." });
+        }
+        
+        if (user.status === 'Suspended') return res.status(403).json({ error: "Protocol Breach: Account suspended." });
+
+        // Link uid if necessary
+        if (!user.google_uid) await db.run('UPDATE users SET google_uid = ? WHERE id = ?', [googleUid, user.id]);
+
+        nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => {});
+
+        const token = generateToken(user);
+        res.json({
+            status: "success",
+            token: token,
+            role: user.role,
+            fullName: decryptField(user.full_name),
+            email: user.email,
+            username: user.username,
+            phoneNumber: decryptField(user.phone_number),
+            color: user.color,
+            accountStatus: user.status,
+            message: "Google Identity synchronized."
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Internal Auth Relay failure." });
+    }
+});
+
+// Google OAuth Signup (Finalize Profile)
+app.post('/api/auth/complete-google-signup', async (req, res) => {
+    const { username, idToken, fullName, avatarUrl } = req.body;
+    
+    const decodedToken = await verifyGoogleToken(idToken);
+    if (!decodedToken) return res.status(401).json({ error: "Identity verification failed." });
+
+    const googleUid = decodedToken.uid;
+    const email = (decodedToken.email || '').toLowerCase().trim();
+
+    try {
+        if (!db) return res.status(500).json({ error: "Storage node offline" });
+        const finalUsername = username.trim();
+
+        const existing = await db.get('SELECT id FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [finalUsername.toLowerCase(), email]);
+        if (existing) return res.status(400).json({ error: "Identity overlap detected. Username or Email already exists." });
+
+        const COLORS = ['#6c5ce7', '#a29bfe', '#00cec9', '#fab1a0', '#ff7675', '#fd79a8', '#fdcb6e'];
+        const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+        const placeholder = await bcrypt.hash(googleUid + Date.now(), 10);
+
+        await db.run(
+            'INSERT INTO users (full_name, email, username, password, role, color, phone_number, google_uid, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [encryptField(fullName || finalUsername), email, finalUsername, placeholder, 'Standard', color, 'Not Set', googleUid, avatarUrl || null]
+        );
+
+        nexoraMailProtocol('welcome', email, { username: finalUsername }).catch(() => {});
+
+        const newUserObj = { id: existing ? existing.id : this.lastID, username: finalUsername, role: 'Standard' }; // simplified user object for token
+        const token = generateToken(newUserObj);
+
+        res.status(201).json({
+            status: "success",
+            token: token,
+            user: { username: finalUsername, email, fullName, role: 'Standard', color, phoneNumber: 'Not Set' },
+            message: "Google Profile initialized."
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Identity initialization failure." });
+    }
+});
+
+// Send OTP (Login Phase)
+app.post('/api/auth/send-login-otp', async (req, res) => {
+    let { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: "Identity required" });
+    identifier = identifier.toLowerCase().trim();
+
+    try {
+        const user = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [identifier, identifier]);
+        if (!user) return res.json({ status: "success", message: "If registered, an OTP has been dispatched." });
+        if (user.status === 'Suspended') return res.status(403).json({ error: "Account suspended." });
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        authStore.set(`login:${user.email}`, { otp, expiry: Date.now() + 10 * 60 * 1000, username: user.username });
+
+        await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
+        res.json({ status: "success", message: "OTP transmitted securely.", email: user.email });
+    } catch (err) {
+        res.status(500).json({ error: "Relay failed to transmit OTP." });
+    }
+});
+
+// Verify OTP (Login Phase)
+app.post('/api/auth/verify-login-otp', async (req, res) => {
+    let { identifier, otp } = req.body;
+    const id = identifier?.toLowerCase().trim();
+    // Try both identifier as is and search in db if it was username
+    let email = id;
+    const user = await db.get('SELECT email, username, role, full_name, phone_number, color, status FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [id, id]);
+    if (user) email = user.email;
+
+    const record = authStore.get(`login:${email}`);
+    if (!record || Date.now() > record.expiry || record.otp !== otp.toString().trim()) {
+        return res.status(400).json({ error: "Verification Segment Invalid or Expired." });
+    }
+
+    authStore.delete(`login:${email}`);
+    try {
+        if (!user) return res.status(404).json({ error: "Identity lost." });
+        nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => {});
+        
+        const token = generateToken(user);
+        res.json({
+            status: "success",
+            token: token,
+            role: user.role,
+            fullName: decryptField(user.full_name),
+            email: user.email,
+            username: user.username,
+            phoneNumber: decryptField(user.phone_number),
+            color: user.color,
+            accountStatus: user.status
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Auth relay failed." });
+    }
+});
+
 // GET /api/auth/me - Fetch current user status/profile (Minified for performance)
-app.get('/api/auth/me', async (req, res) => {
-    const username = req.query.u;
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+    const { username } = req.user;
     if (!username) return res.status(400).json({ error: "Context missing" });
 
     try {
@@ -1628,18 +1969,7 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
-// NEW: Account Recovery Endpoint (Phase 6)
-app.get('/api/auth/check-username', async (req, res) => {
-    const { username } = req.query;
-    if (!username) return res.status(400).json({ error: "Username required" });
-    try {
-        if (!db) return res.status(500).json({ error: "Database not ready" });
-        const user = await db.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)', [username.trim(), username.trim()]);
-        res.json({ available: !user });
-    } catch (err) {
-        res.status(500).json({ error: "Server error during check" });
-    }
-});
+
 
 let currentAnnouncement = "Nexora Protocol: All links established. Deeply encrypted.";
 
@@ -1657,80 +1987,54 @@ app.post('/api/admin/announcement', (req, res) => {
     }
 });
 
-// OTP Store: email -> { otp, expiry, verified }
-const otpStore = new Map();
-
+// Send Recovery OTP
 app.post('/api/auth/recovery', async (req, res) => {
     let { email } = req.body;
-    if (!email) return res.status(400).json({ error: "Email required" });
-    email = email.trim();
+    if (!email) return res.status(400).json({ error: "Recovery Error: Email required." });
+    email = email.trim().toLowerCase();
+
     try {
-        if (!db) return res.status(500).json({ error: "Database not ready" });
-        // Only send to registered emails
-        const user = await db.get('SELECT email FROM users WHERE LOWER(email) = LOWER(?)', [email]);
-        if (!user) {
-            // Return success anyway to prevent email enumeration
-            return res.json({ status: "success", message: "If this email is registered, a code has been sent." });
-        }
+        const user = await db.get('SELECT email FROM users WHERE LOWER(email) = ?', [email]);
+        if (!user) return res.json({ status: "success", message: "If this identity is registered, an anchor reset code has been transmitted." });
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+        authStore.set(`recovery:${email}`, { otp, expiry: Date.now() + 20 * 60 * 1000, verified: false });
 
-        // Store OTP
-        otpStore.set(email.toLowerCase(), { otp, expiry, verified: false });
-
-
-        await nexoraMailProtocol('otp', email, { otp: otp });
-        res.json({ status: "success", message: "Recovery code transmitted to your email." });
+        await nexoraMailProtocol('otp', email, { otp });
+        res.json({ status: "success", message: "Recovery code transmitted to secure mail." });
     } catch (err) {
-        ((..._args) => { })("Recovery mail error:", err);
-        res.status(500).json({ error: "Failed to transmit recovery code." });
+        res.status(500).json({ error: "Failed to transmit recovery protocol." });
     }
 });
 
-// Verify OTP
+// Verify OTP (Universal)
 app.post('/api/auth/verify-otp', (req, res) => {
     let { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
-    email = email.trim();
+    const key = `recovery:${email?.trim().toLowerCase()}`;
+    const record = authStore.get(key);
 
-    const record = otpStore.get(email.toLowerCase());
-    if (!record) {
-        return res.status(400).json({ error: "No OTP found for this email. Please request a new code." });
+    if (record && Date.now() < record.expiry && record.otp === otp.toString().trim()) {
+        authStore.set(key, { ...record, verified: true });
+        return res.json({ status: "verified" });
     }
-    if (Date.now() > record.expiry) {
-        otpStore.delete(email.toLowerCase());
-        return res.status(400).json({ error: "OTP expired. Please request a new code." });
-    }
-    if (record.otp !== otp.toString().trim()) {
-        return res.status(400).json({ error: "Incorrect verification code. Please try again." });
-    }
-
-    // Mark as verified so reset can proceed
-    otpStore.set(email.toLowerCase(), { ...record, verified: true });
-    res.json({ status: "verified" });
+    res.status(400).json({ error: "Verification Segment Invalid or Expired." });
 });
 
-// Reset Password (after OTP verified)
+// Reset Password (Final Handshake)
 app.post('/api/auth/reset-password', async (req, res) => {
     const { email, newPassword } = req.body;
-    if (!email || !newPassword) return res.status(400).json({ error: "Email and new password required" });
-    if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters." });
+    const key = `recovery:${email?.toLowerCase().trim()}`;
+    const record = authStore.get(key);
 
-    const record = otpStore.get(email.toLowerCase());
-    if (!record || !record.verified) {
-        return res.status(403).json({ error: "OTP not verified. Please complete verification first." });
-    }
+    if (!record || !record.verified) return res.status(403).json({ error: "Identity not verified. Recovery protocol failed." });
+
     try {
-        if (!db) return res.status(500).json({ error: "Database not ready" });
-        const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
         await db.run('UPDATE users SET password = ? WHERE LOWER(email) = LOWER(?)', [hashedPassword, email]);
-        otpStore.delete(email.toLowerCase()); // Clear OTP after use
-        res.json({ status: "success", message: "Password reset successfully. Your identity is now secured." });
+        authStore.delete(key);
+        res.json({ status: "success", message: "Password anchor reset successfully. Your identity is now secured." });
     } catch (err) {
-        ((..._args) => { })("Reset password error:", err);
-        res.status(500).json({ error: "Failed to reset password." });
+        res.status(500).json({ error: "Failed to finalize reset handshake." });
     }
 });
 
@@ -1807,9 +2111,13 @@ app.post('/api/auth/signup', async (req, res) => {
 
         // Attempt to send welcome email to ALL new users (Non-blocking)
         nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch((..._args) => { });
+        
+        const tokenUserObj = { id: this.lastID || null, username: finalUsername, role: role };
+        const token = generateToken(tokenUserObj);
 
         res.status(201).json({
             status: "success",
+            token: token,
             user: newUser,
             message: "User identity initialized."
         });
@@ -1818,6 +2126,8 @@ app.post('/api/auth/signup', async (req, res) => {
         res.status(500).json({ status: "error", error: "Server Error: Failed to process signup." });
     }
 });
+
+
 
 app.post('/api/admin/approve', async (req, res) => {
     const { username, email, customSubject, customHtml } = req.body;
@@ -2382,26 +2692,33 @@ app.get('/api/users/search', async (req, res) => {
         const fuzzyQ = '%' + q.split('').join('%') + '%';
         
         const users = await db.all(`
-            SELECT username, full_name AS fullName, color, avatar_url AS avatarUrl
-            FROM users 
+            SELECT u.username, u.full_name AS fullName, u.color, u.avatar_url AS avatarUrl,
+                   (EXISTS (
+                       SELECT 1 FROM connections c 
+                       WHERE (LOWER(c.user_a) = LOWER(?) AND LOWER(c.user_b) = LOWER(u.username))
+                          OR (LOWER(c.user_b) = LOWER(?) AND LOWER(c.user_a) = LOWER(u.username))
+                   )) as isFriend
+            FROM users u
             WHERE (
-                LOWER(username) LIKE ? OR 
-                LOWER(full_name) LIKE ? OR
-                LOWER(username) LIKE ? OR 
-                LOWER(full_name) LIKE ?
+                LOWER(u.username) LIKE ? OR 
+                LOWER(u.full_name) LIKE ? OR
+                LOWER(u.username) LIKE ? OR 
+                LOWER(u.full_name) LIKE ?
             ) 
-              AND LOWER(username) != LOWER(?)
+              AND LOWER(u.username) != LOWER(?)
             ORDER BY 
-              CASE WHEN LOWER(username) LIKE ? THEN 1 
-                   WHEN LOWER(username) LIKE ? THEN 2 
+              isFriend DESC,
+              CASE WHEN LOWER(u.username) LIKE ? THEN 1 
+                   WHEN LOWER(u.username) LIKE ? THEN 2 
                    ELSE 3 END,
-              username ASC
+              u.username ASC
             LIMIT 20
-        `, [exactContains, exactContains, fuzzyQ, fuzzyQ, me, exactPrefix, exactContains]);
+        `, [me, me, exactContains, exactContains, fuzzyQ, fuzzyQ, me, exactPrefix, exactContains]);
 
         const mappedUsers = users.map(u => ({
             ...u,
             fullName: decryptField(u.fullName),
+            isFriend: !!u.isFriend,
             online: true
         }));
         res.json({ users: mappedUsers });
@@ -2412,8 +2729,9 @@ app.get('/api/users/search', async (req, res) => {
 });
 
 // NEW: Zero-Knowledge Contact Sync (using pre-hashed phone numbers from client)
-app.post('/api/connections/sync', async (req, res) => {
-    const { hashes, username: me } = req.body;
+app.post('/api/connections/sync', authenticateToken, async (req, res) => {
+    const { hashes } = req.body;
+    const me = req.user.username;
     if (!hashes || !Array.isArray(hashes)) return res.json({ matches: [] });
 
     try {
@@ -2456,7 +2774,7 @@ app.post('/api/connections/sync', async (req, res) => {
 });
 
 // NEW: Endpoint to get specific user profile and check username
-app.get('/api/users/profile', async (req, res) => {
+app.get('/api/users/profile', authenticateToken, async (req, res) => {
     const username = (req.query.username || '').toLowerCase();
     try {
         if (!db || !username) return res.status(400).json({ error: "Invalid username" });
@@ -2475,8 +2793,9 @@ app.get('/api/users/profile', async (req, res) => {
 });
 
 // Update user bio
-app.patch('/api/users/bio', async (req, res) => {
-    const { username, bio } = req.body;
+app.patch('/api/users/bio', authenticateToken, async (req, res) => {
+    const { bio } = req.body;
+    const username = req.user.username;
     if (!username) return res.status(400).json({ error: "Username required" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -2489,8 +2808,9 @@ app.patch('/api/users/bio', async (req, res) => {
 });
 
 // Upload / Update profile picture
-app.post('/api/users/avatar', async (req, res) => {
-    const { username, avatarBase64 } = req.body;
+app.post('/api/users/avatar', authenticateToken, async (req, res) => {
+    const { avatarBase64 } = req.body;
+    const username = req.user.username;
     if (!username || !avatarBase64) return res.status(400).json({ error: "username and avatarBase64 required" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -2518,8 +2838,9 @@ app.post('/api/users/avatar', async (req, res) => {
 
 // Use database for connection requests stores
 // Send a connection request
-app.post('/api/connections/request', async (req, res) => {
-    const { from, fromName, fromColor, to } = req.body;
+app.post('/api/connections/request', authenticateToken, async (req, res) => {
+    const { fromName, fromColor, to } = req.body;
+    const from = req.user.username;
     if (!from || !to) return res.status(400).json({ error: 'from and to required' });
 
     try {
@@ -2591,8 +2912,8 @@ app.post('/api/connections/request', async (req, res) => {
 });
 
 // Get pending connection requests for a user
-app.get('/api/connections/requests', async (req, res) => {
-    const username = (req.query.username || '').toLowerCase();
+app.get('/api/connections/requests', authenticateToken, async (req, res) => {
+    const username = req.user.username;
     if (!username) return res.json({ requests: [] });
     try {
         if (!db) return res.json({ requests: [] });
@@ -2618,8 +2939,9 @@ app.get('/api/connections/requests', async (req, res) => {
 });
 
 // Get established connections for a user
-app.get('/api/connections', async (req, res) => {
-    const username = (req.query.username || '').toLowerCase();
+app.get('/api/connections', authenticateToken, async (req, res) => {
+    const username = req.user.username;
+    // (Existing placeholder check removed as it's now handled by the JWT identity)
     if (!username) return res.json({ connections: [] });
     try {
         if (!db) return res.json({ connections: [] });
@@ -2670,8 +2992,8 @@ app.get('/api/connections', async (req, res) => {
 });
 
 // Get sent connection requests for a user (for notification panel)
-app.get('/api/connections/sent', async (req, res) => {
-    const username = (req.query.username || '').toLowerCase();
+app.get('/api/connections/sent', authenticateToken, async (req, res) => {
+    const username = req.user.username;
     if (!username) return res.json({ requests: [] });
     try {
         if (!db) return res.json({ requests: [] });
@@ -2692,8 +3014,9 @@ app.get('/api/connections/sent', async (req, res) => {
 });
 
 // Accept or decline a request
-app.post('/api/connections/respond', async (req, res) => {
-    const { username, requestId, action } = req.body; // action: 'accept' | 'decline'
+app.post('/api/connections/respond', authenticateToken, async (req, res) => {
+    const { requestId, action } = req.body; // action: 'accept' | 'decline'
+    const username = req.user.username;
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
 
@@ -2743,8 +3066,8 @@ app.post('/api/connections/respond', async (req, res) => {
 });
 
 // Notifications API
-app.get('/api/notifications', async (req, res) => {
-    const username = (req.query.username || '').toLowerCase();
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    const username = req.user.username;
     if (!username) return res.json({ notifications: [] });
     try {
         if (!db) return res.json({ notifications: [] });
@@ -2772,8 +3095,8 @@ app.post('/api/notifications/read', async (req, res) => {
     }
 });
 
-app.post('/api/notifications/clear', async (req, res) => {
-    const { username } = req.query;
+app.post('/api/notifications/clear', authenticateToken, async (req, res) => {
+    const username = req.user.username;
     if (!username) return res.status(400).json({ error: "Username required" });
     try {
         if (!db) return res.status(500).json({ success: false });
@@ -2789,8 +3112,8 @@ app.post('/api/notifications/clear', async (req, res) => {
 // ------------------------------------------------------------------
 
 // Get stories from friends (those connected to the user)
-app.get('/api/stories', async (req, res) => {
-    const username = (req.query.username || '').toLowerCase();
+app.get('/api/stories', authenticateToken, async (req, res) => {
+    const username = req.user.username;
     if (!username) return res.json({ stories: [] });
     try {
         if (!db) return res.status(500).json({ stories: [] });
@@ -2835,8 +3158,9 @@ app.get('/api/stories', async (req, res) => {
 });
 
 // Post a new story
-app.post('/api/stories', async (req, res) => {
-    const { username, mediaUrl, mediaType, caption } = req.body;
+app.post('/api/stories', authenticateToken, async (req, res) => {
+    const { mediaUrl, mediaType, caption } = req.body;
+    const username = req.user.username;
     if (!username || !mediaUrl) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -2855,8 +3179,9 @@ app.post('/api/stories', async (req, res) => {
 });
 
 // Mark story as viewed
-app.post('/api/stories/view', async (req, res) => {
-    const { storyId, username } = req.body;
+app.post('/api/stories/view', authenticateToken, async (req, res) => {
+    const { storyId } = req.body;
+    const username = req.user.username;
     if (!storyId || !username) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -2873,8 +3198,9 @@ app.post('/api/stories/view', async (req, res) => {
 });
 
 // Like story
-app.post('/api/stories/like', async (req, res) => {
-    const { storyId, username } = req.body;
+app.post('/api/stories/like', authenticateToken, async (req, res) => {
+    const { storyId } = req.body;
+    const username = req.user.username;
     if (!storyId || !username) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -2925,8 +3251,9 @@ app.post('/api/stories/like', async (req, res) => {
 });
 
 // Reply to story (Sends a notification to the owner)
-app.post('/api/stories/reply', async (req, res) => {
-    const { storyId, username, targetUsername, message } = req.body;
+app.post('/api/stories/reply', authenticateToken, async (req, res) => {
+    const { storyId, targetUsername, message } = req.body;
+    const username = req.user.username;
     if (!storyId || !username || !targetUsername || !message) return res.status(400).json({ error: "Missing required fields" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -3006,9 +3333,9 @@ app.get('/api/stories/stats', async (req, res) => {
 });
 
 // Delete a story
-app.delete('/api/stories/:id', async (req, res) => {
+app.delete('/api/stories/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { username } = req.query;
+    const username = req.user.username;
     if (!id || !username) return res.status(400).json({ error: "Missing ID or username" });
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -3042,7 +3369,7 @@ async function logAdminAction(admin_username, action, target, details) {
 }
 
 // POST /api/admin/broadcast — Real Email Broadcast
-app.post('/api/admin/broadcast', async (req, res) => {
+app.post('/api/admin/broadcast', authenticateToken, isAdmin, async (req, res) => {
     const { subject, html } = req.body;
     if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required." });
 
@@ -3081,7 +3408,7 @@ app.post('/api/admin/broadcast', async (req, res) => {
 });
 
 // GET /api/admin/analytics — Real Growth Data
-app.get('/api/admin/analytics', async (req, res) => {
+app.get('/api/admin/analytics', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(503).json({ error: "DB initializing" });
 
@@ -3102,7 +3429,7 @@ app.get('/api/admin/analytics', async (req, res) => {
 });
 
 // GET /api/admin/audit-logs
-app.get('/api/admin/audit-logs', async (req, res) => {
+app.get('/api/admin/audit-logs', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(503).json({ error: "DB initializing" });
         const logs = await db.all('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100');
@@ -3113,7 +3440,7 @@ app.get('/api/admin/audit-logs', async (req, res) => {
 });
 
 // GET /api/admin/media — Real Asset Gallery
-app.get('/api/admin/media', async (req, res) => {
+app.get('/api/admin/media', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(503).json({ error: "DB initializing" });
         const assets = await db.all('SELECT * FROM media_assets ORDER BY created_at DESC');
@@ -3124,7 +3451,7 @@ app.get('/api/admin/media', async (req, res) => {
 });
 
 // POST /api/admin/media — Add asset
-app.post('/api/admin/media', async (req, res) => {
+app.post('/api/admin/media', authenticateToken, isAdmin, async (req, res) => {
     const { url, name, size, type } = req.body;
     try {
         await db.run('INSERT INTO media_assets (url, name, size, type) VALUES (?, ?, ?, ?)', [url, name, size, type]);
@@ -3135,7 +3462,7 @@ app.post('/api/admin/media', async (req, res) => {
 });
 
 // DELETE /api/admin/media/:id — Remove asset
-app.delete('/api/admin/media/:id', async (req, res) => {
+app.delete('/api/admin/media/:id', authenticateToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -3148,7 +3475,7 @@ app.delete('/api/admin/media/:id', async (req, res) => {
 });
 
 // GET /api/admin/stats — Dashboard overview stats
-app.get('/api/admin/stats', async (req, res) => {
+app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         const totalUsers = await db.get('SELECT COUNT(*) as count FROM users');
@@ -3170,7 +3497,7 @@ app.get('/api/admin/stats', async (req, res) => {
 });
 
 // GET /api/admin/users — List all users with decrypted PII
-app.get('/api/admin/users', async (req, res) => {
+app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         const users = await db.all('SELECT id, full_name, email, username, role, status, color, created_at, phone_number, avatar_url, bio FROM users ORDER BY created_at DESC');
@@ -3196,7 +3523,7 @@ app.get('/api/admin/users', async (req, res) => {
 });
 
 // PATCH /api/admin/users/:username/role — Change user role
-app.patch('/api/admin/users/:username/role', async (req, res) => {
+app.patch('/api/admin/users/:username/role', authenticateToken, isAdmin, async (req, res) => {
     const { username } = req.params;
     const { role } = req.body;
     if (!role) return res.status(400).json({ error: "Role required" });
@@ -3211,7 +3538,7 @@ app.patch('/api/admin/users/:username/role', async (req, res) => {
 });
 
 // PATCH /api/admin/users/:username/status — Change user status (Active/Suspended)
-app.patch('/api/admin/users/:username/status', async (req, res) => {
+app.patch('/api/admin/users/:username/status', authenticateToken, isAdmin, async (req, res) => {
     const { username } = req.params;
     const { status } = req.body;
     if (!status) return res.status(400).json({ error: "Status required" });
@@ -3251,7 +3578,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
 });
 
 // DELETE /api/admin/users/:username — Delete user and all associated data
-app.delete('/api/admin/users/:username', async (req, res) => {
+app.delete('/api/admin/users/:username', authenticateToken, isAdmin, async (req, res) => {
     const { username } = req.params;
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -3279,7 +3606,7 @@ app.delete('/api/admin/users/:username', async (req, res) => {
 });
 
 // PATCH /api/admin/users/:username/password — Reset user password
-app.patch('/api/admin/users/:username/password', async (req, res) => {
+app.patch('/api/admin/users/:username/password', authenticateToken, isAdmin, async (req, res) => {
     const { username } = req.params;
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
@@ -3301,7 +3628,7 @@ app.patch('/api/admin/users/:username/password', async (req, res) => {
 // ------------------------------------------------------------------
 
 // GET /api/admin/email-templates — Get all customizable templates
-app.get('/api/admin/email-templates', (req, res) => {
+app.get('/api/admin/email-templates', authenticateToken, isAdmin, (req, res) => {
     const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
     const CLIENT_URL = process.env.CLIENT_URL || 'https://nexora31.vercel.app';
 
@@ -3342,7 +3669,7 @@ app.get('/api/admin/email-templates', (req, res) => {
 });
 
 // PUT /api/admin/email-templates/:type — Update a specific template
-app.put('/api/admin/email-templates/:type', (req, res) => {
+app.put('/api/admin/email-templates/:type', authenticateToken, isAdmin, (req, res) => {
     const { type } = req.params;
     const { subject, html } = req.body;
     const validTypes = ['welcome', 'otp', 'login_alert'];
@@ -3355,7 +3682,7 @@ app.put('/api/admin/email-templates/:type', (req, res) => {
 });
 
 // DELETE /api/admin/email-templates/:type — Reset template to default
-app.delete('/api/admin/email-templates/:type', (req, res) => {
+app.delete('/api/admin/email-templates/:type', authenticateToken, isAdmin, (req, res) => {
     const { type } = req.params;
     emailTemplateOverrides.delete(type);
     ((..._args) => { })(`[ADMIN] Email template '${type}' reset to default.`);
@@ -3363,7 +3690,7 @@ app.delete('/api/admin/email-templates/:type', (req, res) => {
 });
 
 // GET /api/admin/connections — List all connections
-app.get('/api/admin/connections', async (req, res) => {
+app.get('/api/admin/connections', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         const connections = await db.all(`
@@ -3388,7 +3715,7 @@ app.get('/api/admin/connections', async (req, res) => {
 });
 
 // DELETE /api/admin/connections/:id — Remove a connection
-app.delete('/api/admin/connections/:id', async (req, res) => {
+app.delete('/api/admin/connections/:id', authenticateToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
@@ -3401,7 +3728,7 @@ app.delete('/api/admin/connections/:id', async (req, res) => {
 });
 
 // ── NEW: DIRECT MESSAGE BROADCAST (Snapchat Style) ──
-app.post('/api/admin/broadcast-chat', async (req, res) => {
+app.post('/api/admin/broadcast-chat', authenticateToken, isAdmin, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: "Message content required" });
     if (broadcastState.isRunning) return res.status(400).json({ error: "A broadcast is already in progress." });
@@ -3430,7 +3757,7 @@ app.post('/api/admin/broadcast-chat', async (req, res) => {
     }
 });
 
-app.post('/api/admin/broadcast-chat/stop', (req, res) => {
+app.post('/api/admin/broadcast-chat/stop', authenticateToken, isAdmin, (req, res) => {
     if (broadcastState.isRunning) {
         broadcastState.isRunning = false;
         res.json({ status: "success", message: "Broadcast sequence terminated." });
@@ -3439,7 +3766,7 @@ app.post('/api/admin/broadcast-chat/stop', (req, res) => {
     }
 });
 
-app.get('/api/admin/broadcast-chat/status', (req, res) => {
+app.get('/api/admin/broadcast-chat/status', authenticateToken, isAdmin, (req, res) => {
     res.json(broadcastState);
 });
 
@@ -3458,7 +3785,7 @@ app.get('/api/blogs', async (req, res) => {
 });
 
 // POST /api/blogs - Replace all blogs (simple array overwrite based on frontend logic)
-app.post('/api/blogs', async (req, res) => {
+app.post('/api/blogs', authenticateToken, isAdmin, async (req, res) => {
     const { blogs } = req.body;
     if (!blogs || !Array.isArray(blogs)) return res.status(400).json({ error: "Invalid blogs data" });
 
@@ -3483,8 +3810,9 @@ app.post('/api/blogs', async (req, res) => {
 // ------------------------------------------------------------------
 
 // POST /api/report - Submit a new abuse report with evidence
-app.post('/api/report', async (req, res) => {
-    const { reporter, target, reason, category, evidence } = req.body;
+app.post('/api/report', authenticateToken, async (req, res) => {
+    const { target, reason, category, evidence } = req.body;
+    const reporter = req.user.username;
     if (!reporter || !target || !category) return res.status(400).json({ error: "Missing required fields" });
 
     try {
@@ -3510,7 +3838,7 @@ app.post('/api/report', async (req, res) => {
 });
 
 // GET /api/admin/reports - Fetch all reports (Admin Only)
-app.get('/api/admin/reports', async (req, res) => {
+app.get('/api/admin/reports', authenticateToken, isAdmin, async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         const reports = await db.all('SELECT * FROM reports ORDER BY id DESC');
@@ -3522,7 +3850,7 @@ app.get('/api/admin/reports', async (req, res) => {
 });
 
 // PATCH /api/admin/reports/:id/status - Update report status
-app.patch('/api/admin/reports/:id/status', async (req, res) => {
+app.patch('/api/admin/reports/:id/status', authenticateToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     if (!status) return res.status(400).json({ error: "Status required" });

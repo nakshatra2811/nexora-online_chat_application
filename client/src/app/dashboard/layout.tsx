@@ -58,6 +58,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [appForgotStep, setAppForgotStep] = useState<"answer" | "newpin">("answer");
   const [appForgotError, setAppForgotError] = useState("");
   const [accountStatus, setAccountStatus] = useState("Active");
+  
+  // Advanced Global Search System
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearch, setShowSearch] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await nexoraFetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+        if (res && res.users) {
+          setSearchResults(res.users);
+        }
+      } catch (err) {
+        console.error("Search failed", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 150); // Fast triggers on first hex/char
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchPanelRef.current && !searchPanelRef.current.contains(e.target as Node)) {
+        setShowSearch(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
@@ -105,10 +144,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     useEffect(() => {
       if (!isMounted) return;
       const checkStatus = async () => {
-        const username = localStorage.getItem("nexora_signup_username") || "";
-        if (!username) return;
         try {
-          const data = await nexoraFetch(`/api/auth/me?u=${encodeURIComponent(username.toLowerCase())}`);
+          const data = await nexoraFetch(`/api/auth/me`);
           if (data?.status) {
             setAccountStatus(data.status);
             // Protocol Auto-Kill: If account is suspended during a session check, force logout immediately.
@@ -150,9 +187,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setIsLoadingNotifs(true);
       try {
         const [received, sent, notifs] = await Promise.all([
-          nexoraFetch(`/api/connections/requests?username=${encodeURIComponent(username)}`),
-          nexoraFetch(`/api/connections/sent?username=${encodeURIComponent(username)}`),
-          nexoraFetch(`/api/notifications?username=${encodeURIComponent(username)}`)
+          nexoraFetch(`/api/connections/requests`),
+          nexoraFetch(`/api/connections/sent`),
+          nexoraFetch(`/api/notifications`)
         ]);
 
         if (received?.requests) setPendingRequests(received.requests);
@@ -460,6 +497,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const handleLogout = () => {
+    localStorage.removeItem("nexora_token");
     document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
     router.push("/");
   };
@@ -637,6 +675,96 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
               </div>
             </motion.div>
+
+            {/* Smart Search Protocol (Desktop) */}
+            <div className="relative ml-4 group" ref={searchPanelRef}>
+                <div className="relative flex items-center">
+                   <div className="absolute left-3.5 pointer-events-none opacity-40">
+                      <Search className="w-3.5 h-3.5" style={{ color: "var(--text-primary)" }} />
+                   </div>
+                   <input
+                     ref={searchInputRef}
+                     type="text"
+                     value={searchQuery}
+                     onChange={(e) => { setSearchQuery(e.target.value); setShowSearch(true); }}
+                     onFocus={() => setShowSearch(true)}
+                     placeholder="Search users..."
+                     className="pl-10 pr-4 py-2 rounded-xl text-[12.5px] font-bold w-[220px] focus:w-[320px] transition-all duration-500 outline-none border"
+                     style={{ 
+                        background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+                        borderColor: showSearch ? "#6c5ce7" : "transparent",
+                        color: "var(--text-primary)"
+                     }}
+                   />
+                </div>
+
+                <AnimatePresence>
+                  {showSearch && (searchQuery.length > 0 || isSearching) && (
+                    <motion.div
+                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                       animate={{ opacity: 1, y: 0, scale: 1 }}
+                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                       className="absolute top-full mt-3 w-[320px] rounded-2xl shadow-2xl overflow-hidden z-[500]"
+                       style={{ 
+                          background: isDark ? "rgba(14,14,24,0.98)" : "rgba(255,255,255,0.98)",
+                          border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)"}`,
+                          backdropFilter: "blur(40px)"
+                       }}
+                    >
+                       <div className="p-3 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Global Discovery Results</span>
+                       </div>
+                       
+                       <div className="max-h-[380px] overflow-y-auto custom-scrollbar">
+                          {isSearching ? (
+                            <div className="p-8 flex justify-center">
+                               <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                                 className="w-5 h-5 border-2 border-t-indigo-500 border-r-indigo-500 border-b-transparent border-l-transparent rounded-full" />
+                            </div>
+                          ) : searchResults.length === 0 ? (
+                            <div className="p-8 text-center">
+                               <p className="text-xs font-bold opacity-30">No users found for "{searchQuery}"</p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col p-1.5">
+                               {searchResults.map((user) => (
+                                 <motion.div
+                                   key={user.username}
+                                   whileHover={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                                   onClick={() => {
+                                      triggerAction(`/dashboard/profile?u=${user.username}`);
+                                      setShowSearch(false);
+                                      setSearchQuery("");
+                                   }}
+                                   className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all active:scale-[0.98]"
+                                 >
+                                   <Avatar src={user.avatar_url} name={user.username} color={user.color} size={36} showBorder={false} />
+                                   <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                         <p className="text-[13px] font-bold truncate leading-none">{user.fullName}</p>
+                                         {user.is_friend === 1 && (
+                                            <span className="text-[9px] font-black uppercase text-[#6c5ce7] bg-[#6c5ce7]/10 px-1.5 py-0.5 rounded-full shrink-0">Friend</span>
+                                         )}
+                                      </div>
+                                      <p className="text-[11px] opacity-40 mt-1 font-semibold truncate leading-none">@{user.username}</p>
+                                   </div>
+                                 </motion.div>
+                               ))}
+                            </div>
+                          )}
+                       </div>
+
+                       <div className="p-3 border-t bg-black/5 dark:bg-white/5" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                          <button 
+                            onClick={() => { router.push(`/dashboard/discover?q=${searchQuery}`); setShowSearch(false); }}
+                            className="w-full py-2 rounded-xl text-[11px] font-black uppercase tracking-widest text-[#6c5ce7] hover:bg-[#6c5ce7]/10 transition-all">
+                             View all discovery results
+                          </button>
+                       </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+            </div>
           </div>
 
           {/* Center Navigation Protocol */}

@@ -7,6 +7,7 @@ import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone, Eye, EyeOff, XCirc
 import { useTheme } from "@/lib/theme";
 import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
 import { nexoraFetch, APP_NAME, APP_LOGO } from "@/lib/config";
+import { signInWithGoogle } from "@/lib/firebase";
 
 function AuthContent() {
   const router = useRouter();
@@ -35,13 +36,21 @@ function AuthContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotOTP, setForgotOTP] = useState("");
-  const [forgotNewPassword, setForgotNewPassword] = useState("");
   const [forgotError, setForgotError] = useState("");
   const [isSendingRecovery, setIsSendingRecovery] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [connectedUser, setConnectedUser] = useState<any | null>(null);
   const [fetchingTarget, setFetchingTarget] = useState(false);
+
+  // New states for OTP Login
+  const [loginMethod, setLoginMethod] = useState<"otp" | "password">("otp");
+  const [loginOTP, setLoginOTP] = useState("");
+  const [isLoginOtpSent, setIsLoginOtpSent] = useState(false);
+  const [forgotNewPassword, setForgotNewPassword] = useState("");
+  
+  // New state for Google OAuth Signup
+  const [googleUserInfo, setGoogleUserInfo] = useState<{ email: string, displayName: string, uid: string, photoURL: string | null, idToken: string } | null>(null);
 
   // Real-time Username Availability Check (Database)
   useEffect(() => {
@@ -168,6 +177,67 @@ function AuthContent() {
     setIsSendingRecovery(false);
   };
 
+  const handleGoogleAuth = async () => {
+    try {
+      const result = await signInWithGoogle();
+      if (!result) return;
+      setIsLoading(true);
+
+      const data = await nexoraFetch("/api/auth/google-login", {
+        method: "POST",
+        body: JSON.stringify({ email: result.email, googleUid: result.uid, idToken: result.idToken })
+      });
+
+      if (data && data.status === "not_found") {
+        setGoogleUserInfo(result);
+        setIsLogin(false);
+        setUsername("");
+        setFullName(result.displayName);
+        setEmail(result.email);
+      } else if (data && data.status === "success") {
+        const role = data.role || "Standard";
+        if (data.token) localStorage.setItem("nexora_token", data.token);
+        document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`;
+        localStorage.setItem("nexora_assigned_role", role);
+        localStorage.setItem("nexora_signup_username", data.username);
+        localStorage.setItem("nexora_signup_name", data.fullName);
+        localStorage.setItem("nexora_signup_email", data.email);
+        localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
+        localStorage.setItem("nexora_signup_color", data.color);
+        localStorage.removeItem("nexora_user_profile");
+        localStorage.removeItem("nexora_active_thread_id");
+
+        setSuccessOverlay({ show: true, isLogin: true, name: data.fullName || result.displayName });
+        setTimeout(() => router.push("/dashboard/chats"), 2200);
+      } else {
+        alert(data?.error || "Google Auth failed.");
+      }
+    } catch (e) {
+      alert("Google Auth Error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendLoginOtp = async () => {
+    if (!username) { alert("Enter Username or Email"); return; }
+    setIsLoading(true);
+    try {
+      const data = await nexoraFetch("/api/auth/send-login-otp", {
+        method: "POST",
+        body: JSON.stringify({ identifier: username })
+      });
+      if (data && data.status === "success") {
+        setIsLoginOtpSent(true);
+      } else {
+        alert(data?.error || "Failed to dispatch OTP");
+      }
+    } catch (e) {
+      alert("Network Error");
+    }
+    setIsLoading(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
@@ -175,6 +245,37 @@ function AuthContent() {
 
     try {
       if (isLogin) {
+        if (loginMethod === "otp" && isLoginOtpSent) {
+            const data = await nexoraFetch("/api/auth/verify-login-otp", {
+              method: "POST",
+              body: JSON.stringify({ identifier: username, otp: loginOTP })
+            });
+            if (data && data.status === "success") {
+              const role = data.role || "Standard";
+              if (data.token) localStorage.setItem("nexora_token", data.token);
+              document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`;
+              localStorage.setItem("nexora_assigned_role", role);
+              localStorage.setItem("nexora_signup_username", data.username);
+              localStorage.setItem("nexora_signup_name", data.fullName);
+              localStorage.setItem("nexora_signup_email", data.email);
+              localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
+              localStorage.setItem("nexora_signup_color", data.color);
+              localStorage.removeItem("nexora_user_profile");
+              localStorage.removeItem("nexora_active_thread_id");
+              setSuccessOverlay({ show: true, isLogin: true, name: data.fullName || data.username });
+              setTimeout(() => router.push("/dashboard/chats"), 2200);
+              return;
+            } else {
+              alert(data?.error || "Invalid OTP");
+              setIsLoading(false);
+              return;
+            }
+        } else if (loginMethod === "otp" && !isLoginOtpSent) {
+            await handleSendLoginOtp();
+            setIsLoading(false);
+            return;
+        }
+
         const data = await nexoraFetch("/api/auth/login", {
           method: "POST",
           body: JSON.stringify({ username, password })
@@ -184,6 +285,7 @@ function AuthContent() {
           alert(data.message || "Authentication failed: Invalid credentials.");
         } else if (data && data.status === "success") {
           const role = data.role || "Standard";
+          if (data.token) localStorage.setItem("nexora_token", data.token);
           document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`; // 30 days persistence
           localStorage.setItem("nexora_assigned_role", role);
           localStorage.setItem("nexora_signup_username", data.username);
@@ -200,7 +302,7 @@ function AuthContent() {
           alert("Authentication failed: Server unreachable.");
         }
       } else {
-        if (password !== confirmPassword) {
+        if (!googleUserInfo && password !== confirmPassword) {
           alert("Protocol Breach: Passports must match perfectly.");
           setIsLoading(false);
           return;
@@ -222,16 +324,26 @@ function AuthContent() {
     setIsLoading(true);
 
     try {
-      const data = await nexoraFetch("/api/auth/signup", {
+      const endpoint = googleUserInfo ? "/api/auth/complete-google-signup" : "/api/auth/signup";
+      const payload = googleUserInfo ? {
+        username,
+        email: email,
+        fullName,
+        googleUid: googleUserInfo.uid,
+        idToken: googleUserInfo.idToken,
+        avatarUrl: googleUserInfo.photoURL
+      } : {
+        username,
+        password,
+        email,
+        fullName,
+        phoneNumber,
+        isAuthorized: false
+      };
+
+      const data = await nexoraFetch(endpoint, {
         method: "POST",
-        body: JSON.stringify({
-          username,
-          password,
-          email,
-          fullName,
-          phoneNumber,
-          isAuthorized: false
-        })
+        body: JSON.stringify(payload)
       });
 
       if (data && data._httpError) {
@@ -247,6 +359,7 @@ function AuthContent() {
         } else if (data.status === "success" && data.user) {
           const u = data.user;
           const role = u.role || "Standard";
+          if (data.token) localStorage.setItem("nexora_token", data.token);
           document.cookie = `nexora_role=${role}; path=/; SameSite=Lax; max-age=2592000`; // 30 days persistence
           localStorage.setItem("nexora_assigned_role", role);
           localStorage.setItem("nexora_signup_username", u.username);
@@ -652,7 +765,31 @@ function AuthContent() {
             {/* Secure Account Extension Header Removed */}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {!isLogin && (
+              {/* Login Method Toggle */}
+              {isLogin && (
+                <div className="flex bg-black/5 dark:bg-white/5 rounded-xl p-1 mb-6 border border-black/5 dark:border-white/5">
+                  <button type="button" onClick={() => setLoginMethod("otp")} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${loginMethod === "otp" ? "bg-[#6c5ce7] text-white shadow-lg" : "text-gray-500 hover:text-gray-400"}`}>OTP Code</button>
+                  <button type="button" onClick={() => setLoginMethod("password")} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${loginMethod === "password" ? "bg-[#6c5ce7] text-white shadow-lg" : "text-gray-500 hover:text-gray-400"}`}>Password</button>
+                </div>
+              )}
+
+              {/* Google OAuth Button */}
+              {!isLogin && !googleUserInfo && (
+                <div className="mb-6">
+                  <button type="button" onClick={handleGoogleAuth} disabled={isLoading} className="flex w-full items-center justify-center gap-3 rounded-xl px-4 py-3.5 font-bold transition-all active:scale-95 border border-white/5 bg-white shadow-[0_4px_14px_0_rgba(0,0,0,0.1)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] text-gray-800 dark:bg-[#1a1a1e] dark:text-white dark:border-[#2a2a2e]">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
+                    Continue with Google
+                  </button>
+                  <div className="my-6 flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                    <div className="h-px flex-1 bg-gray-500/20"></div>
+                    <span>OR standard method</span>
+                    <div className="h-px flex-1 bg-gray-500/20"></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Only show these standard fields if NOT google signup */}
+              {!isLogin && !googleUserInfo && (
                 <div className="space-y-4">
                   <div className="neumorphic-input flex items-center rounded-xl px-4 py-3">
                     <User className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
@@ -680,7 +817,7 @@ function AuthContent() {
                     value={username} 
                     onChange={(e) => setUsername(e.target.value)} 
                     className="ml-3 w-full bg-transparent outline-none pr-8" 
-                    placeholder={isLogin ? "Username or Email" : "Username"} 
+                    placeholder={isLogin ? "Username or Email" : "Choose a Unique Handle"} 
                     style={{ color: "var(--text-primary)" }} 
                   />
                   <div className="absolute right-4 flex items-center">
@@ -698,6 +835,28 @@ function AuthContent() {
                 )}
               </div>
 
+              {isLogin && loginMethod === "otp" && (
+                <div className="space-y-4">
+                  {isLoginOtpSent && (
+                    <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
+                      <Lock className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
+                      <input 
+                        type="text" 
+                        required 
+                        value={loginOTP} 
+                        onChange={(e) => setLoginOTP(e.target.value)} 
+                        className="ml-3 w-full bg-transparent outline-none tracking-[0.2em] font-black" 
+                        placeholder="ENTER 6-DIGIT OTP" 
+                        maxLength={6}
+                        style={{ color: "var(--text-primary)" }} 
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(!isLogin && !googleUserInfo) || (isLogin && loginMethod === "password") ? (
+                <>
               <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
                 <Lock className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
                 <input 
@@ -743,17 +902,19 @@ function AuthContent() {
                   )}
                 </div>
               )}
+              </>
+              ) : null}
 
-              {isLogin && (
+              {isLogin && loginMethod === "password" && (
                 <div className="flex justify-end pr-2">
                   <button type="button" onClick={() => setIsForgot(true)} className="text-xs font-bold text-[#6c5ce7] hover:opacity-70 transition-opacity">Forgot password?</button>
                 </div>
               )}
 
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} type="submit" disabled={isLoading}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold text-white shadow-lg disabled:opacity-60"
+                className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold text-white shadow-lg ${isLoading ? 'opacity-60' : ''}`}
                 style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                {isLoading ? <><ButtonLoader /> <span>{isLogin ? "Establishing Tunnel..." : "Generating Vault..."}</span></> : (isLogin ? "Enter Void" : "Sign Up")}
+                {isLoading ? <><ButtonLoader /> <span>{isLogin ? "Establishing Tunnel..." : "Generating Vault..."}</span></> : (isLogin ? (loginMethod === "otp" && !isLoginOtpSent ? "Send OTP" : "Enter Void") : "Sign Up")}
               </motion.button>
             </form>
           </div>

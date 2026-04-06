@@ -78,10 +78,29 @@ export default function StoriesPage() {
   const [blockedThreads, setBlockedThreads] = useState<number[]>([]);
   const [threads, setThreads] = useState<any[]>([]);
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const fetchSuggestions = async () => {
+    const username = localStorage.getItem("nexora_signup_username") || "";
+    if (!username) return;
+    setLoadingSuggestions(true);
+    try {
+      const res = await nexoraFetch(`/api/users/suggestions?username=${username}`);
+      if (res && res.suggestions) {
+        setSuggestions(res.suggestions);
+      }
+    } catch (err) {
+      console.error("Failed to fetch suggestions", err);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
 
   useEffect(() => {
     const username = localStorage.getItem("nexora_signup_username") || "";
     setMyUsername(username);
+    fetchSuggestions(); // Fetch suggestions on mount
     const blocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
     setBlockedThreads(blocked);
     const savedNicknames = localStorage.getItem("nexora_nicknames");
@@ -139,6 +158,29 @@ export default function StoriesPage() {
     });
     setSelectedProfileUser(null);
     alert("Node communication restored.");
+  };
+
+  const handleAddFriend = async (targetUsername: string) => {
+    const from = localStorage.getItem("nexora_signup_username") || "";
+    const fromName = localStorage.getItem("nexora_signup_fullname") || from;
+    const fromColor = localStorage.getItem("nexora_signup_color") || "#6c5ce7";
+    
+    if (!from) return;
+    try {
+      const res = await nexoraFetch("/api/connections/request", {
+        method: "POST",
+        body: JSON.stringify({ from, to: targetUsername, fromName, fromColor })
+      });
+      if (res && (res.status === "success" || res.status === "sent")) {
+        showToast(`Request sent to ${targetUsername}`);
+        // Remove from local suggestions list to avoid double clicks
+        setSuggestions(prev => prev.filter(s => s.username !== targetUsername));
+      } else {
+        showToast(res.error || "Failed to send request", "error");
+      }
+    } catch (err) {
+      showToast("Relay error during connection request", "error");
+    }
   };
 
   useEffect(() => {
@@ -876,6 +918,120 @@ export default function StoriesPage() {
             </p>
           </motion.div>
         ))}
+      </div>
+
+      {/* ─── Suggestions Grid (2x2) ─── */}
+      <div className="mt-12 mb-8 relative z-10 px-2">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[#6c5ce7]/10">
+              <Users className="w-5 h-5" style={{ color: "#6c5ce7" }} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+                Suggestions
+              </h2>
+              <p className="text-[10px] uppercase font-bold tracking-widest" style={{ color: "var(--text-muted)" }}>
+                Expand your network
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {loadingSuggestions ? (
+            <div className="grid grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-44 rounded-[2rem] bg-white/5 animate-pulse border border-white/5" />
+              ))}
+            </div>
+          ) : suggestions.length > 0 ? (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="grid grid-cols-2 gap-4"
+            >
+              {suggestions.slice(0, 3).map((s, i) => (
+                <motion.div 
+                  key={s.username} 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  whileHover={{ y: -5, scale: 1.02 }}
+                  className="relative p-5 rounded-[2rem] border border-white/5 shadow-xl flex flex-col items-center text-center group overflow-hidden"
+                  style={{ 
+                    background: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)",
+                    backdropFilter: "blur(20px)"
+                  }}
+                >
+                  <div className={`absolute -top-10 -right-10 w-24 h-24 rounded-full opacity-10 blur-3xl bg-gradient-to-br ${s.color || 'from-[#6c5ce7] to-[#00d4ff]'}`} />
+                  
+                  <div className="relative mb-3">
+                    <Avatar 
+                      src={s.avatar_url} 
+                      name={s.full_name || s.username} 
+                      color={s.color} 
+                      size={64} 
+                      className="ring-4 ring-white/10 group-hover:ring-[#6c5ce7]/40 transition-all duration-300" 
+                    />
+                    {s.mutualCount > 0 && (
+                      <div className="absolute -bottom-1 -right-1 bg-[#6c5ce7] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#1a1a2e]">
+                        {s.mutualCount}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="w-full flex-grow flex flex-col">
+                    <h4 className="font-extrabold text-[13px] truncate w-full mb-0.5" style={{ color: "var(--text-primary)" }}>
+                      {s.full_name || s.username}
+                    </h4>
+                    <p className="text-[10px] font-bold mb-3" style={{ color: "var(--text-muted)" }}>
+                      {s.mutualCount > 0 ? `${s.mutualCount} mutual` : `@${s.username}`}
+                    </p>
+
+                    <button
+                      onClick={() => handleAddFriend(s.username)}
+                      className="mt-auto px-4 py-2 rounded-full bg-[#6c5ce7] text-white text-[10px] font-black tracking-wider uppercase shadow-lg shadow-[#6c5ce7]/20 hover:shadow-[#6c5ce7]/40 active:scale-95 transition-all w-full"
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+
+              {/* Slot 4: See More */}
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                whileHover={{ y: -5, scale: 1.02 }}
+                onClick={() => router.push('/dashboard/discover')}
+                className="relative p-5 rounded-[2rem] border border-white/5 shadow-xl flex flex-col items-center justify-center text-center cursor-pointer group overflow-hidden"
+                style={{ 
+                  background: "linear-gradient(135deg, rgba(108,92,231,0.05), rgba(0,212,255,0.05))",
+                  backdropFilter: "blur(20px)"
+                }}
+              >
+                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center mb-3 group-hover:bg-[#6c5ce7]/20 transition-colors">
+                  <RefreshCcw className="w-6 h-6" style={{ color: "#6c5ce7" }} />
+                </div>
+                <h4 className="font-extrabold text-[14px] mb-1" style={{ color: "var(--text-primary)" }}>
+                  See More
+                </h4>
+                <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
+                  Discover contacts
+                </p>
+                <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus className="w-4 h-4 text-[#6c5ce7]" />
+                </div>
+              </motion.div>
+            </motion.div>
+          ) : (
+            <div className="p-10 text-center rounded-[2rem] bg-white/5 border border-white/5">
+               <p className="text-xs font-bold opacity-30 uppercase tracking-widest">No suggestions currently available</p>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ─── Fullscreen Story Viewer ─── */}
