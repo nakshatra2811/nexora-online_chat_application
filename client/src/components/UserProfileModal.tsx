@@ -11,6 +11,7 @@ import {
   SnapchatIcon 
 } from "./SocialIcons";
 import { Avatar } from "./Avatar";
+import { LastSeenBadge } from "./LastSeenBadge";
 
 // ─── Unique QR per username (same canvas logic but seeded on username) ───
 function generateUniqueQR(username: string, size = 160): string {
@@ -64,6 +65,7 @@ interface Friend {
   joinedDate?: string;
   friendSince?: string;
   avatarUrl?: string;
+  lastVisit?: number | string | null;
 }
 
 interface UserProfileModalProps {
@@ -205,19 +207,8 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                 <h2 className="text-3xl sm:text-4xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>{friend.name}</h2>
                 <p className="text-base sm:text-lg font-bold text-[#6c5ce7] mt-0.5">@{friend.username}</p>
               </div>
-              <div className="flex flex-col items-end gap-1 pt-1">
-                {friend.online ? (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider"
-                    style={{ background: "rgba(46,213,115,0.15)", color: "#2ed573", border: "1px solid rgba(46,213,115,0.2)" }}>
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2ed573] opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2ed573]"></span>
-                    </span>
-                    Live Now
-                  </div>
-                ) : (
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Offline</span>
-                )}
+              <div className="flex flex-col items-end gap-1 pt-1 overflow-hidden">
+                <LastSeenBadge isOnline={friend.online} lastVisit={friend.lastVisit} username={friend.username} />
               </div>
             </div>
             {friend.bio && (

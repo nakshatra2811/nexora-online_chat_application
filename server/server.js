@@ -1191,6 +1191,19 @@ io.on('connection', (socket) => {
         const normalizedId = userId.toLowerCase();
         socketToUser.set(socket.id, normalizedId);
 
+        const updateActivity = async (uid) => {
+            const now = Date.now();
+            try {
+                await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, uid]);
+                // io.emit('user_activity', { userId: uid, last_visit: now }); // Optionally broadcast online activity
+            } catch (e) { }
+        };
+
+        socket.on('user_activity', () => {
+            const uid = socketToUser.get(socket.id);
+            if (uid) updateActivity(uid);
+        });
+
         // Joining a room named after the userId allows us to emit to all of their devices
         socket.join(normalizedId);
         console.log(`[+] Registered: ${normalizedId} → Channel Sync Active`);

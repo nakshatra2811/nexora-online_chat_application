@@ -25,6 +25,7 @@ import { pushService } from "@/lib/push";
 import { useCall } from "@/components/Call/CallProvider";
 import { LoadingAnimation } from "@/components/LoadingAnimation";
 import { Avatar } from "@/components/Avatar";
+import { LastSeenBadge } from "@/components/LastSeenBadge";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
 import { ReportModal } from "@/components/ReportModal";
 
@@ -158,6 +159,15 @@ function ChatsPageContent() {
   const [myStoryPreview, setMyStoryPreview] = useState<boolean>(false);
   const [myStories, setMyStories] = useState<any[]>([]);
   const [friendsWithStories, setFriendsWithStories] = useState<string[]>([]);
+
+  // ─── ACTIVITY PROTOCOL: Heartbeat to sync last seen ───
+  useEffect(() => {
+    const activityInterval = setInterval(() => {
+      socketService.getSocket()?.emit("user_activity");
+    }, 1000 * 60 * 5); // Pulsing every 5 mins for performance
+
+    return () => clearInterval(activityInterval);
+  }, []);
 
   const quickPrefixes = ["Hey!", "WhatsApp?", "Connecting...", "Secure?", "Call me"];
 
@@ -3189,20 +3199,23 @@ function ChatsPageContent() {
                       </h3>
                       <span className="inline-flex text-[7px] md:text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center shadow-sm">Verified</span>
                     </div>
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className={`h-1.5 w-1.5 rounded-full ${activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "bg-green-500 shadow-[0_0_5px_#2ed573]" : "bg-gray-500"}`} />
-                      <span className="text-[10px] md:text-[11px] font-medium opacity-70 truncate" style={{ color: activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "#2ed573" : "var(--text-muted)", display: "flex", alignItems: "center", gap: "4px" }}>
-                        {peerTyping[activeThread.username] ? (
-                          <>
-                            typing
-                            <span className="flex items-center gap-[2px] mt-[1px]">
-                              <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '0ms' }} />
-                              <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '150ms' }} />
-                              <span className="w-[3px] h-[3px] rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </span>
-                          </>
-                        ) : (activeThread.online || liveOnlineUsers.includes(activeThread.username) ? "online" : (activeThread.lastVisit ? `last visited ${formatLastSeen(activeThread.lastVisit)}` : "last visited recently"))}
-                      </span>
+                    <div className="flex items-center gap-1.5 min-w-0 h-4">
+                      {peerTyping[activeThread.username] ? (
+                        <div className="flex items-center gap-1.5 text-[10px] md:text-[11px] font-bold text-[#2ed573]">
+                          <span className="uppercase tracking-widest">Typing</span>
+                          <span className="flex gap-[2px]">
+                            <span className="w-1 h-1 rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1 h-1 rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1 h-1 rounded-full bg-[#2ed573] animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </span>
+                        </div>
+                      ) : (
+                        <LastSeenBadge 
+                          isOnline={activeThread.online || liveOnlineUsers.includes(activeThread.username)} 
+                          lastVisit={activeThread.lastVisit} 
+                          username={activeThread.username}
+                        />
+                      )}
                     </div>
                   </div>
                 </>
@@ -4436,18 +4449,26 @@ function ChatsPageContent() {
                     )}
                   </div>
 
-                  <div className="text-center mb-8">
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
-                        {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
-                      </h2>
-                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30' : 'bg-purple-500/10 text-purple-500 border border-purple-500/10'}`}>
-                        {selectedProfileUser.username === 'nexora_31' ? 'Official Protocol' : 'Verified'}
-                      </span>
-                    </div>
-                    <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
-                      @{selectedProfileUser.username}
-                    </p>
+                    <div className="text-center mb-8">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+                          {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
+                        </h2>
+                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30' : 'bg-purple-500/10 text-purple-500 border border-purple-500/10'}`}>
+                          {selectedProfileUser.username === 'nexora_31' ? 'Official Protocol' : 'Verified'}
+                        </span>
+                      </div>
+                      <p className="text-base font-black opacity-30 tracking-tight mb-2" style={{ color: "var(--text-muted)" }}>
+                        @{selectedProfileUser.username}
+                      </p>
+                      
+                      <div className="flex justify-center h-5">
+                         <LastSeenBadge 
+                           isOnline={selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)} 
+                           lastVisit={selectedProfileUser.lastVisit || selectedProfileUser.last_visit} 
+                           username={selectedProfileUser.username}
+                         />
+                      </div>
 
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
                       <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/10'} shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis`}>
