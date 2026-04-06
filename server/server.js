@@ -512,23 +512,42 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 // CONFIGURATIONS (Supabase + Gmail SMTP + Cloudinary)
 // ------------------------------------------------------------------
 // Initialize Firebase Admin (Optional based on your setup style)
-if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
+if (process.env.FIREBASE_PROJECT_ID && (process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY_B64)) {
     try {
-        admin.initializeApp({
-            credential: admin.credential.cert({
-                projectId: process.env.FIREBASE_PROJECT_ID,
-                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-                // Handle newlines in private key
-                privateKey: process.env.FIREBASE_PRIVATE_KEY
-                    ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/^"(.*)"$/, '$1').trim()
-                    : undefined,
-            })
-        });
-        console.log("[FIREBASE] Admin SDK connected successfully.");
+        let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+        
+        if (privateKey) {
+            privateKey = privateKey.replace(/^["'](.*)["']$/, '$1');
+            privateKey = privateKey.replace(/\\n/g, '\n');
+            if (privateKey && !privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+                privateKey = '-----BEGIN PRIVATE KEY-----\n' + privateKey;
+            }
+            if (privateKey && !privateKey.includes('-----END PRIVATE KEY-----')) {
+                privateKey = privateKey + '\n-----END PRIVATE KEY-----';
+            }
+        } else if (process.env.FIREBASE_PRIVATE_KEY_B64) {
+            privateKey = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_B64, 'base64').toString('utf8');
+        }
+
+        if (privateKey) {
+            admin.initializeApp({
+                credential: admin.credential.cert({
+                    projectId: process.env.FIREBASE_PROJECT_ID,
+                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                    privateKey: privateKey.trim(),
+                })
+            });
+            console.log("[FIREBASE] Admin SDK connected successfully.");
+        } else {
+            throw new Error("No private key available after parsing.");
+        }
     } catch (e) {
-        console.log("[FIREBASE] Initialization error:", e.message);
+        console.error("[FIREBASE] Initialization error:", e.message);
     }
+} else {
+    console.warn("[FIREBASE] Initialization skipped: Missing credentials in .env");
 }
+
 
 const emailTransporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -795,6 +814,27 @@ async function nexoraMailProtocol(type, to, data) {
                           © ${new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' })} Nexora • Systems Security Protocol
                         </td>
                       </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>`;
+    } else if (type === 'admin_otp') {
+        subject = "🔐 Nexora: Administrative Access Segment";
+        html = `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="margin:0; padding:0; background:#f8fafc; font-family:sans-serif;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+                <tr>
+                  <td align="center">
+                    <table width="600" style="background:#ffffff; border-radius:32px; border:1px solid #eef2f7; box-shadow:0 30px 60px rgba(108,92,231,0.1); overflow:hidden;">
+                      <tr><td align="center" style="padding:40px 0 20px;"><div style="width:70px; height:70px; background:#6c5ce7; border-radius:20px; display:inline-flex; align-items:center; justify-content:center;"><img src="${APP_LOGO}" style="width:50px;"></div></td></tr>
+                      <tr><td align="center" style="padding:10px 45px;"><h1 style="font-size:28px; font-weight:900; color:#1a1a2e;">Admin Identity Verification</h1><p style="color:#64748b; font-size:16px;">Secure link requested for terminal access. Use the authorization sequence below.</p></td></tr>
+                      <tr><td align="center" style="padding:30px 45px;"><div style="background:#f8fafc; border:3px solid #6c5ce7; border-radius:24px; padding:30px;"><div style="font-size:48px; font-weight:950; color:#6c5ce7; letter-spacing:12px; font-family:monospace;">${data.otp}</div></div><p style="margin-top:20px; color:#94a3b8; font-size:12px;">VALID FOR 15 MINUTES • COMMANDER CLEARANCE REQUIRED</p></td></tr>
+                      <tr><td align="center" style="padding:30px; background:#fafbfc; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8;">© ${new Date().getFullYear()} Nexora Global Security Protocol</td></tr>
                     </table>
                   </td>
                 </tr>
@@ -1854,7 +1894,8 @@ app.post('/api/auth/google-login', async (req, res) => {
             message: "Google Identity synchronized."
         });
     } catch (e) {
-        res.status(500).json({ error: "Internal Auth Relay failure." });
+        console.error("[GOOGLE LOGIN] Internal Auth Relay failure:", e.message);
+        res.status(500).json({ error: `Internal Auth Relay failure: ${e.message}` });
     }
 });
 
@@ -2455,16 +2496,23 @@ app.post('/api/admin/login', async (req, res) => {
         const otpKey = `admin_login_otp:${email.toLowerCase()}`;
         otpStore.set(otpKey, { otp, expiry, email: email.toLowerCase() });
 
-        // Send OTP via SMTP
-        const sent = await nexoraMailProtocol('otp', email, { otp });
+        // Log the OTP console for easier debugging/access if email fails
+        console.warn(`[ADMIN] OTP Generated for ${email}: ${otp}`);
+
+        // Send OTP via specialized Admin Mail Template
+        const sent = await nexoraMailProtocol('admin_otp', email, { otp });
         if (!sent) {
-            return res.status(500).json({ error: "Relay failure: Unable to transmit secure verification segment." });
+            console.error(`[ADMIN] SMTP Relay failure for ${email}. OTP was: ${otp}`);
+            return res.status(500).json({ 
+                error: "Relay failure: Unable to transmit secure verification segment.",
+                details: "Check SMTP configuration or monitor console for verification bypass."
+            });
         }
 
         return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP sent." });
     } catch (err) {
-        ((..._args) => { })("Admin Login Error:", err);
-        res.status(500).json({ error: "Internal Authentication Failure." });
+        console.error("Admin Login Error:", err.message);
+        res.status(500).json({ error: `Internal Authentication Failure: ${err.message}` });
     }
 });
 
