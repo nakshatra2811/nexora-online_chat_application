@@ -1435,6 +1435,7 @@ function ChatsPageContent() {
             poll: data.poll,
             contact: data.contact,
             replyTo: data.replyTo,
+            isViewOnce: data.isViewOnce,
           };
 
           const currentThread = activeThreadRef.current;
