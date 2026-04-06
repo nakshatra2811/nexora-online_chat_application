@@ -1640,6 +1640,7 @@ app.post('/api/auth/login', async (req, res) => {
                     username: user.username,
                     phoneNumber: decryptField(user.phone_number),
                     color: user.color,
+                    avatarUrl: user.avatar_url ? decryptField(user.avatar_url) : null,
                     accountStatus: user.status,
                     message: "Identity recognized. Protocol access granted."
                 });
@@ -1847,6 +1848,7 @@ app.post('/api/auth/google-login', async (req, res) => {
             username: user.username,
             phoneNumber: decryptField(user.phone_number),
             color: user.color,
+            avatarUrl: user.avatar_url ? decryptField(user.avatar_url) : null,
             accountStatus: user.status,
             message: "Google Identity synchronized."
         });
@@ -1947,6 +1949,7 @@ app.post('/api/auth/verify-login-otp', async (req, res) => {
             username: user.username,
             phoneNumber: decryptField(user.phone_number),
             color: user.color,
+            avatarUrl: user.avatar_url ? decryptField(user.avatar_url) : null,
             accountStatus: user.status
         });
     } catch (e) {
@@ -2106,7 +2109,8 @@ app.post('/api/auth/signup', async (req, res) => {
             fullName: fullName,
             role: role,
             color: color,
-            phoneNumber: phoneNumber || 'Not Set'
+            phoneNumber: phoneNumber || 'Not Set',
+            avatarUrl: null
         };
 
         // Attempt to send welcome email to ALL new users (Non-blocking)

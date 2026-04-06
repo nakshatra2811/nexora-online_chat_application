@@ -27,15 +27,27 @@ function AuthContent() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [savedAccount, setSavedAccount] = useState<{username: string, name: string, color: string, avatar?: string} | null>(null);
 
-  // Auto-Login: Free Fire Style redirect
+  // Quick Login Auto-Verify (Garena Style)
   useEffect(() => {
     const token = localStorage.getItem("nexora_token");
     if (token) {
-      // Small delay for better UX (shimmer effect)
-      setTimeout(() => router.push("/dashboard/chats"), 800);
+      setIsLoading(true);
+      nexoraFetch("/api/auth/me").then(data => {
+        if (data && !data.error) {
+          // Valid session, automatic redirect
+          setSuccessOverlay({ show: true, isLogin: true, name: localStorage.getItem("nexora_signup_name") || data.username });
+          setTimeout(() => router.push("/dashboard/chats"), 1800);
+        } else {
+          // Token expired or invalid, clear and stay on login
+          localStorage.removeItem("nexora_token");
+          setIsLoading(false);
+        }
+      }).catch(() => {
+        setIsLoading(false);
+      });
     }
 
-    // Check for saved account for Quick Login
+    // Hydrate saved account info for Quick Login
     const savedUsername = localStorage.getItem("nexora_signup_username");
     const savedName = localStorage.getItem("nexora_signup_name");
     const savedColor = localStorage.getItem("nexora_signup_color");
@@ -229,6 +241,7 @@ function AuthContent() {
         localStorage.setItem("nexora_signup_email", data.email);
         localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
         localStorage.setItem("nexora_signup_color", data.color);
+        localStorage.setItem("nexora_signup_avatar", data.avatarUrl || "");
         localStorage.removeItem("nexora_user_profile");
         localStorage.removeItem("nexora_active_thread_id");
 
@@ -285,6 +298,7 @@ function AuthContent() {
               localStorage.setItem("nexora_signup_email", data.email);
               localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
               localStorage.setItem("nexora_signup_color", data.color);
+              localStorage.setItem("nexora_signup_avatar", data.avatarUrl || "");
               localStorage.removeItem("nexora_user_profile");
               localStorage.removeItem("nexora_active_thread_id");
               setSuccessOverlay({ show: true, isLogin: true, name: data.fullName || data.username });
@@ -316,6 +330,7 @@ function AuthContent() {
           localStorage.setItem("nexora_signup_email", data.email);
           localStorage.setItem("nexora_signup_phone", data.phoneNumber || "Not Set");
           localStorage.setItem("nexora_signup_color", data.color);
+          localStorage.setItem("nexora_signup_avatar", data.avatarUrl || "");
           localStorage.removeItem("nexora_user_profile");
           localStorage.removeItem("nexora_active_thread_id"); // Clear last chat session
 
@@ -388,6 +403,7 @@ function AuthContent() {
           localStorage.setItem("nexora_signup_email", u.email);
           localStorage.setItem("nexora_signup_phone", u.phoneNumber || "Not Set");
           localStorage.setItem("nexora_signup_color", u.color);
+          localStorage.setItem("nexora_signup_avatar", u.avatarUrl || "");
           localStorage.removeItem("nexora_user_profile");
           localStorage.removeItem("nexora_active_thread_id");
 
@@ -779,19 +795,28 @@ function AuthContent() {
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
                 <button 
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setIsLoading(true);
-                    setTimeout(() => {
-                      const token = localStorage.getItem("nexora_token");
-                      if (token) {
-                        setSuccessOverlay({ show: true, isLogin: true, name: savedAccount.name });
-                        setTimeout(() => router.push("/dashboard/chats"), 1500);
-                      } else {
-                        setUsername(savedAccount.username);
-                        setLoginMethod("password");
-                        setIsLoading(false);
-                      }
-                    }, 1000);
+                    const token = localStorage.getItem("nexora_token");
+                    if (token) {
+                      // Attempt real-time session resumption
+                      try {
+                        const data = await nexoraFetch("/api/auth/me");
+                        if (data && !data.error) {
+                          setSuccessOverlay({ show: true, isLogin: true, name: savedAccount.name });
+                          setTimeout(() => router.push("/dashboard/chats"), 1500);
+                          return;
+                        }
+                      } catch (e) {}
+                      
+                      // Fallback: verification failed
+                      localStorage.removeItem("nexora_token");
+                    }
+                    
+                    // Direct to manual login with username pre-filled
+                    setUsername(savedAccount.username);
+                    setLoginMethod("password");
+                    setIsLoading(false);
                   }}
                   className="w-full group relative p-5 rounded-[2.5rem] border transition-all active:scale-95 overflow-hidden"
                   style={{ 
