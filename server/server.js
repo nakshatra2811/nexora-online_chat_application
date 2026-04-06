@@ -1773,14 +1773,17 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
             }
         }
 
-        // 3. Fallback to random users if suggestions are low
-        if (suggestions.length < 5) {
+        // 3. Fallback to random users to fill up suggestions list
+        const needed = Math.max(0, 30 - suggestions.length);
+        if (needed > 0) {
+            const excludedList = Array.from(excluded);
             const randomUsers = await db.all(`
                 SELECT username, full_name, avatar_url, color 
                 FROM users 
-                WHERE LOWER(username) NOT IN (${Array.from(excluded).map(() => '?').join(',')})
+                WHERE LOWER(username) NOT IN (${excludedList.map(() => '?').join(',')})
+                ORDER BY RANDOM()
                 LIMIT ?
-            `, [...Array.from(excluded), 10 - suggestions.length]);
+            `, [...excludedList, needed]);
 
             for (const u of randomUsers) {
                 if (!suggestions.find(s => s.username === u.username)) {
@@ -1969,7 +1972,7 @@ app.post('/api/auth/verify-login-otp', async (req, res) => {
     const id = identifier?.toLowerCase().trim();
     // Try both identifier as is and search in db if it was username
     let email = id;
-    const user = await db.get('SELECT email, username, role, full_name, phone_number, color, status FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [id, id]);
+    const user = await db.get('SELECT email, username, role, full_name, phone_number, color, status, avatar_url FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [id, id]);
     if (user) email = user.email;
 
     const record = authStore.get(`login:${email}`);

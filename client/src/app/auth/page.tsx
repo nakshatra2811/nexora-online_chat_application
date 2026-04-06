@@ -84,8 +84,10 @@ function AuthContent() {
   const [loginMethod, setLoginMethod] = useState<"otp" | "password">("otp");
   const [loginOTP, setLoginOTP] = useState("");
   const [isLoginOtpSent, setIsLoginOtpSent] = useState(false);
+  const [otpEmailHint, setOtpEmailHint] = useState("");
+  const [otpCountdown, setOtpCountdown] = useState(0);
   const [forgotNewPassword, setForgotNewPassword] = useState("");
-  
+
   // New state for Google OAuth Signup
   const [googleUserInfo, setGoogleUserInfo] = useState<{ email: string, displayName: string, uid: string, photoURL: string | null, idToken: string } | null>(null);
 
@@ -267,6 +269,20 @@ function AuthContent() {
       });
       if (data && data.status === "success") {
         setIsLoginOtpSent(true);
+        // Show masked email hint
+        if (data.email) {
+          const [local, domain] = data.email.split("@");
+          const masked = local.slice(0, 2) + "***@" + domain;
+          setOtpEmailHint(masked);
+        }
+        // Start 60s resend countdown
+        setOtpCountdown(60);
+        const timer = setInterval(() => {
+          setOtpCountdown(c => {
+            if (c <= 1) { clearInterval(timer); return 0; }
+            return c - 1;
+          });
+        }, 1000);
       } else {
         alert(data?.error || "Failed to dispatch OTP");
       }
@@ -761,9 +777,9 @@ function AuthContent() {
 
             {/* Toggle Login/Signup */}
             <div className="mb-8 flex rounded-full p-1 w-max mx-auto sm:mx-0" style={{ background: "var(--bg-surface-solid)", border: "1px solid var(--border-subtle)" }}>
-              <button onClick={() => { setIsLogin(true); }} className="rounded-full px-6 py-2 text-sm font-bold transition-all duration-300"
+              <button onClick={() => { setIsLogin(true); setIsLoginOtpSent(false); setLoginOTP(""); setOtpEmailHint(""); setOtpCountdown(0); }} className="rounded-full px-6 py-2 text-sm font-bold transition-all duration-300"
                 style={{ background: isLogin ? "var(--bg-surface-solid)" : "transparent", color: isLogin ? "#6c5ce7" : "var(--text-muted)" }}>Log In</button>
-              <button onClick={() => setIsLogin(false)} className="rounded-full px-6 py-2 text-sm font-bold transition-all duration-300"
+              <button onClick={() => { setIsLogin(false); setIsLoginOtpSent(false); setLoginOTP(""); setOtpEmailHint(""); setOtpCountdown(0); }} className="rounded-full px-6 py-2 text-sm font-bold transition-all duration-300"
                 style={{ background: !isLogin ? "var(--bg-surface-solid)" : "transparent", color: !isLogin ? "#6c5ce7" : "var(--text-muted)" }}>Sign Up</button>
             </div>
 
@@ -875,8 +891,8 @@ function AuthContent() {
               {/* Login Method Toggle */}
               {isLogin && (
                 <div className="flex bg-black/5 dark:bg-white/5 rounded-xl p-1 mb-6 border border-black/5 dark:border-white/5">
-                  <button type="button" onClick={() => setLoginMethod("otp")} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${loginMethod === "otp" ? "bg-[#6c5ce7] text-white shadow-lg" : "text-gray-500 hover:text-gray-400"}`}>OTP Code</button>
-                  <button type="button" onClick={() => setLoginMethod("password")} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${loginMethod === "password" ? "bg-[#6c5ce7] text-white shadow-lg" : "text-gray-500 hover:text-gray-400"}`}>Password</button>
+                  <button type="button" onClick={() => { setLoginMethod("otp"); setIsLoginOtpSent(false); setLoginOTP(""); setOtpEmailHint(""); setOtpCountdown(0); }} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${loginMethod === "otp" ? "bg-[#6c5ce7] text-white shadow-lg" : "text-gray-500 hover:text-gray-400"}`}>OTP Code</button>
+                  <button type="button" onClick={() => { setLoginMethod("password"); setIsLoginOtpSent(false); setLoginOTP(""); setOtpEmailHint(""); setOtpCountdown(0); }} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${loginMethod === "password" ? "bg-[#6c5ce7] text-white shadow-lg" : "text-gray-500 hover:text-gray-400"}`}>Password</button>
                 </div>
               )}
 
@@ -942,23 +958,45 @@ function AuthContent() {
                 )}
               </div>
 
-              {isLogin && loginMethod === "otp" && (
-                <div className="space-y-4">
-                  {isLoginOtpSent && (
-                    <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
-                      <Lock className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
-                      <input 
-                        type="text" 
-                        required 
-                        value={loginOTP} 
-                        onChange={(e) => setLoginOTP(e.target.value)} 
-                        className="ml-3 w-full bg-transparent outline-none tracking-[0.2em] font-black" 
-                        placeholder="ENTER 6-DIGIT OTP" 
-                        maxLength={6}
-                        style={{ color: "var(--text-primary)" }} 
-                      />
+              {isLogin && loginMethod === "otp" && isLoginOtpSent && (
+                <div className="space-y-3">
+                  {/* OTP Email hint */}
+                  {otpEmailHint && (
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold"
+                      style={{ background: "rgba(108,92,231,0.08)", border: "1px solid rgba(108,92,231,0.15)", color: "var(--text-secondary)" }}>
+                      <Shield className="w-3.5 h-3.5 text-[#6c5ce7] shrink-0" />
+                      OTP sent to <span className="text-[#6c5ce7] ml-1">{otpEmailHint}</span>
                     </div>
                   )}
+
+                  {/* OTP input */}
+                  <div className="neumorphic-input flex items-center rounded-xl px-4 py-3 relative">
+                    <Lock className="h-5 w-5 shrink-0" style={{ color: "var(--text-muted)" }} />
+                    <input
+                      type="text"
+                      required
+                      value={loginOTP}
+                      onChange={(e) => setLoginOTP(e.target.value.replace(/[^0-9]/g, ""))}
+                      className="ml-3 w-full bg-transparent outline-none tracking-[0.35em] font-black text-xl text-center"
+                      placeholder="○ ○ ○ ○ ○ ○"
+                      maxLength={6}
+                      style={{ color: "#6c5ce7" }}
+                    />
+                  </div>
+
+                  {/* Resend OTP */}
+                  <div className="flex justify-end pr-1">
+                    {otpCountdown > 0 ? (
+                      <p className="text-xs opacity-40" style={{ color: "var(--text-muted)" }}>
+                        Resend in <span className="font-black text-[#6c5ce7]">{otpCountdown}s</span>
+                      </p>
+                    ) : (
+                      <button type="button" onClick={handleSendLoginOtp} disabled={isLoading}
+                        className="text-xs font-bold text-[#6c5ce7] hover:opacity-70 transition-opacity">
+                        Resend OTP
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1021,7 +1059,16 @@ function AuthContent() {
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }} type="submit" disabled={isLoading}
                 className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-sm font-bold text-white shadow-lg ${isLoading ? 'opacity-60' : ''}`}
                 style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}>
-                {isLoading ? <><ButtonLoader /> <span>{isLogin ? "Establishing Tunnel..." : "Generating Vault..."}</span></> : (isLogin ? (loginMethod === "otp" && !isLoginOtpSent ? "Send OTP" : "Enter Void") : "Sign Up")}
+                {isLoading
+                  ? <><ButtonLoader /> <span>{isLogin ? "Establishing Tunnel..." : "Generating Vault..."}</span></>
+                  : isLogin && loginMethod === "otp" && !isLoginOtpSent
+                    ? "Send OTP →"
+                    : isLogin && loginMethod === "otp" && isLoginOtpSent
+                      ? "Verify & Sign In"
+                      : isLogin
+                        ? "Enter Nexora"
+                        : "Create Account"
+                }
               </motion.button>
             </form>
           </div>
