@@ -237,8 +237,8 @@ function ProfileModal({
   );
 }
 
-// ─── Main Discover Page ───────────────────────────────────────────────────────
-const PAGE_SIZE = 12;
+const INITIAL_COUNT = 3;
+const EXPANDED_COUNT = 10;
 
 export default function DiscoverPage() {
   const router = useRouter();
@@ -247,7 +247,7 @@ export default function DiscoverPage() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [requested, setRequested] = useState<Record<string, boolean>>({});
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_COUNT);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [isLive, setIsLive] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -258,8 +258,18 @@ export default function DiscoverPage() {
     try {
       const res = await nexoraFetch(`/api/users/suggestions`);
       if (res?.suggestions) {
-        const sorted = [...res.suggestions].sort((a, b) => (b.mutualCount || 0) - (a.mutualCount || 0));
-        setSuggestions(sorted);
+        const mutuals = [...res.suggestions].filter(u => (u.mutualCount || 0) > 0).sort((a, b) => b.mutualCount - a.mutualCount);
+        const randoms = [...res.suggestions].filter(u => !(u.mutualCount > 0));
+        
+        const mixed = [];
+        let mIdx = 0, rIdx = 0;
+        // Balanced mix: 1 mutual then 1 random iteratively
+        while(mIdx < mutuals.length || rIdx < randoms.length) {
+          if (mIdx < mutuals.length) mixed.push(mutuals[mIdx++]);
+          if (rIdx < randoms.length) mixed.push(randoms[rIdx++]);
+        }
+        
+        setSuggestions(mixed);
       }
     } catch (err) {
       console.error("Discovery failed", err);
@@ -396,7 +406,7 @@ export default function DiscoverPage() {
             type="text"
             placeholder="Search by name or @username..."
             value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setVisibleCount(PAGE_SIZE); }}
+            onChange={e => { setSearchQuery(e.target.value); setVisibleCount(INITIAL_COUNT); }}
             className="w-full pl-14 pr-6 py-4 rounded-[2rem] bg-white/5 border border-white/10 outline-none focus:border-[#6c5ce7]/50 focus:ring-4 focus:ring-[#6c5ce7]/5 transition-all text-sm font-bold tracking-tight shadow-xl"
             style={{ backdropFilter: "blur(20px)" }}
           />
@@ -437,7 +447,7 @@ export default function DiscoverPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className={visibleCount === INITIAL_COUNT ? "grid grid-cols-2 gap-4 max-w-2xl mx-auto" : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"}>
               <AnimatePresence>
                 {visibleSuggestions.map((user, i) => (
                   <motion.div
@@ -533,37 +543,44 @@ export default function DiscoverPage() {
                     </div>
                   </motion.div>
                 ))}
+
+                {/* ── SEE MORE 4TH CARD ── */}
+                {visibleCount === INITIAL_COUNT && filteredSuggestions.length > INITIAL_COUNT && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative group cursor-pointer h-full"
+                    onClick={() => setVisibleCount(EXPANDED_COUNT)}
+                  >
+                    <div
+                      className="relative p-5 rounded-[2rem] border border-white/5 overflow-hidden transition-all hover:border-[#6c5ce7]/30 hover:shadow-2xl hover:shadow-[#6c5ce7]/10 hover:-translate-y-1 duration-300 h-full flex flex-col justify-center items-center"
+                      style={{
+                        background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                        backdropFilter: "blur(40px)"
+                      }}
+                    >
+                      <div className="p-4 rounded-full bg-[#6c5ce7]/10 mb-4 group-hover:scale-110 transition-transform">
+                        <ChevronDown className="w-8 h-8 text-[#6c5ce7]" />
+                      </div>
+                      <h3 className="text-sm font-black uppercase tracking-widest text-[#6c5ce7] mb-1">
+                        See More
+                      </h3>
+                      <p className="text-[10px] font-bold opacity-40 text-center">
+                        +{filteredSuggestions.length - INITIAL_COUNT} nodes
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
 
-            {/* ── SEE MORE button ── */}
-            {hasMore && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex justify-center mt-8"
-              >
-                <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
-                  className="flex items-center gap-2.5 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-xl shadow-[#6c5ce7]/20 hover:shadow-[#6c5ce7]/40 transition-all"
-                  style={{ background: "linear-gradient(135deg, #6c5ce7, #a855f7)" }}
-                >
-                  <ChevronDown className="w-4 h-4" />
-                  See More
-                  <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px]">
-                    +{filteredSuggestions.length - visibleCount}
-                  </span>
-                </motion.button>
-              </motion.div>
-            )}
-
-            {/* Load count info */}
-            {!hasMore && filteredSuggestions.length > PAGE_SIZE && (
-              <p className="text-center text-xs font-bold opacity-20 uppercase tracking-widest mt-6 pb-4">
-                All {filteredSuggestions.length} nodes loaded
-              </p>
+            {/* Load count info for expanded view */}
+            {visibleCount === EXPANDED_COUNT && filteredSuggestions.length > EXPANDED_COUNT && (
+              <div className="flex justify-center mt-8">
+                <p className="text-center text-xs font-bold opacity-20 uppercase tracking-widest pb-4">
+                  Showing top {visibleSuggestions.length} nodes
+                </p>
+              </div>
             )}
           </>
         )}

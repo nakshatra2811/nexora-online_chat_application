@@ -1803,7 +1803,11 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                 };
             });
 
-            const placeholders = myFriendsOnly.map(() => '?').join(',');
+            const placeholders = myFriendsOnly.map((_, i) => dbType === 'postgres' ? `$${i + 1}` : '?').join(',');
+            const placeholders2 = myFriendsOnly.map((_, i) => dbType === 'postgres' ? `$${i + 1 + myFriendsOnly.length}` : '?').join(',');
+            const placeholders3 = myFriendsOnly.map((_, i) => dbType === 'postgres' ? `$${i + 1 + myFriendsOnly.length * 2}` : '?').join(',');
+            const placeholders4 = myFriendsOnly.map((_, i) => dbType === 'postgres' ? `$${i + 1 + myFriendsOnly.length * 3}` : '?').join(',');
+            const placeholders_excl = excludedList.map((_, i) => dbType === 'postgres' ? `$${i + 1 + myFriendsOnly.length * 4}` : '?').join(',');
 
             // Handle cross-database aggregation (Postgres vs SQLite)
             const aggFn = dbType === 'postgres' ? 'STRING_AGG' : 'GROUP_CONCAT';
@@ -1815,13 +1819,13 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                     COUNT(*) as mutual_count,
                     ${aggFn}(LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_a ELSE c.user_b END)${aggSuffix}) as mutual_user_list
                 FROM connections c
-                JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_b ELSE c.user_a END)
-                WHERE (LOWER(c.user_a) IN (${placeholders}) OR LOWER(c.user_b) IN (${placeholders}))
-                  AND LOWER(u.username) NOT IN (${excludedList.map(() => '?').join(',')})
+                JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders2}) THEN c.user_b ELSE c.user_a END)
+                WHERE (LOWER(c.user_a) IN (${placeholders3}) OR LOWER(c.user_b) IN (${placeholders4}))
+                  AND LOWER(u.username) NOT IN (${placeholders_excl})
                 GROUP BY u.username, u.full_name, u.avatar_url, u.color
                 ORDER BY mutual_count DESC
                 LIMIT 15
-            `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
+            `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
 
             suggestions = potentialMutuals.map(m => {
                 const mutList = m.mutual_user_list ? m.mutual_user_list.split(',') : [];
@@ -1841,22 +1845,22 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
         }
 
         // 3. Fallback/Discovery Logic: Always mix in some random users for discovery
-        // Aim for at least 15 suggestions total. If we have mutuals, we still add some randoms for "Discovery".
         const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
         const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
 
+        const randomPlaceholders = finalExcluded.map((_, i) => dbType === 'postgres' ? `$${i + 1}` : '?').join(',');
         let randomUsersQuery = `SELECT username, full_name, avatar_url, color FROM users`;
         if (finalExcluded.length > 0) {
-            randomUsersQuery += ` WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')}) AND status != 'Suspended'`;
+            randomUsersQuery += ` WHERE LOWER(username) NOT IN (${randomPlaceholders}) AND status != 'Suspended'`;
         } else {
             randomUsersQuery += ` WHERE status != 'Suspended'`;
         }
-        randomUsersQuery += ` ORDER BY RANDOM() LIMIT 15`;
+        randomUsersQuery += ` ORDER BY RANDOM() LIMIT 20`;
 
         const randomUsers = await db.all(randomUsersQuery, finalExcluded);
 
         for (const u of randomUsers) {
-            if (suggestions.length >= 20) break; // Hard cap at 20 suggestions
+            if (suggestions.length >= 25) break; 
             suggestions.push({
                 username: u.username,
                 full_name: decryptField(u.full_name),
@@ -1867,6 +1871,8 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
             });
         }
 
+        // Final safe-guard: If still empty (e.g. only 1 user exists), return empty array so UI handles gracefully
+        // but ensure we didn't miss valid suggestions
         res.json({ suggestions: suggestions });
     } catch (err) {
         console.error("[SUGGESTIONS] Error:", err);
