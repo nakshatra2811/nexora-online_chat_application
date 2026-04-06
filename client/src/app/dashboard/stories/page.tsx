@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical, RefreshCcw } from "lucide-react";
+import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2, Users, Phone, Video, Shield, Lock, ShieldOff, MoreVertical, RefreshCcw, ShieldCheck } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 import { Avatar } from "@/components/Avatar";
