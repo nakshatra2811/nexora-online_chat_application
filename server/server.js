@@ -3084,7 +3084,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 
     try {
         if (!db || !targetUsername) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, last_visit FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, COALESCE(last_visit, created_at) as last_visit FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
         if (!user) return res.status(404).json({ error: "User not found" });
 
         // PII Fields will be decrypted in cleanUser mapping below

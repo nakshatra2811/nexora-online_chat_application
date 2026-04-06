@@ -35,9 +35,9 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
       return;
     }
 
-    // Animation sequence for offline status
-    const timer1 = setTimeout(() => setPhase("scanning"), 2000);
-    const timer2 = setTimeout(() => setPhase("final"), 4500);
+    // High performance animation sequence
+    const timer1 = setTimeout(() => setPhase("scanning"), 600);
+    const timer2 = setTimeout(() => setPhase("final"), 1800);
 
     return () => {
       clearTimeout(timer1);
@@ -49,36 +49,40 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
     return (
       <div className={`flex items-center gap-1.5 ${className}`}>
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00d4ff] opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00d4ff]"></span>
         </span>
-        <span className="text-[10px] font-black uppercase tracking-widest text-green-500/80">Online</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-[#00d4ff] underline decoration-[#00d4ff]/20 underline-offset-4">Node Active</span>
       </div>
     );
   }
 
+  // If no lastVisit, show a more descriptive placeholder
   if (!lastVisit) {
     return (
-      <div className={`flex items-center gap-1.5 opacity-40 ${className}`}>
-        <Clock className="w-3 h-3" />
-        <span className="text-[10px] font-bold uppercase tracking-widest italic">Last seen recently</span>
+      <div className={`flex items-center gap-2 opacity-50 ${className}`}>
+        <Clock className="w-3.5 h-3.5 text-[#6c5ce7]" />
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase tracking-[0.1em]">Archive Active</span>
+          <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest -mt-0.5 whitespace-nowrap">Calibrating IST Pulse...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`relative h-5 flex items-center overflow-hidden min-w-[120px] ${className}`}>
+    <div className={`relative h-6 flex items-center overflow-hidden min-w-[150px] ${className}`}>
       <AnimatePresence mode="wait">
         {phase === "initial" && (
           <motion.div
             key="p1"
             initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 0.5, x: 0 }}
+            animate={{ opacity: 0.8, x: 0 }}
             exit={{ opacity: 0, x: 10 }}
             className="flex items-center gap-1.5"
           >
-            <Clock className="w-3 h-3" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Last visited</span>
+             <Clock className="w-3 h-3 text-[#6c5ce7]" />
+             <span className="text-[10px] font-black uppercase tracking-widest">Protocol Sync</span>
           </motion.div>
         )}
 
@@ -90,12 +94,12 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
             exit={{ opacity: 0 }}
             className="w-full flex items-center px-1"
           >
-            <div className="w-full h-[1px] bg-white/10 relative overflow-hidden">
+            <div className="w-full h-[2px] bg-white/5 relative rounded-full overflow-hidden">
                <motion.div 
                  initial={{ x: "-100%" }}
                  animate={{ x: "100%" }}
-                 transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                 className="absolute top-0 left-0 h-full w-1/3 bg-gradient-to-r from-transparent via-[#6c5ce7] to-transparent"
+                 transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                 className="absolute top-0 left-0 h-full w-1/2 bg-gradient-to-r from-transparent via-[#6c5ce7] to-transparent"
                />
             </div>
           </motion.div>
@@ -104,15 +108,15 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
         {phase === "final" && (
           <motion.div
             key="p3"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-1.5"
+            initial={{ opacity: 0, scale: 0.9, y: 3 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="flex items-center gap-2"
           >
-             <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase tracking-tight text-[#6c5ce7]">
-                  Visited at {exactTime}
+             <div className="flex flex-col border-l-2 border-[#6c5ce7]/30 pl-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-tight text-[#6c5ce7] flex items-center gap-1">
+                   LAST SEEN <span className="text-white/90">{exactTime}</span> <span className="text-[7px] opacity-40">IST</span>
                 </span>
-                <span className="text-[8px] font-bold opacity-30 uppercase tracking-widest -mt-0.5">
+                <span className="text-[9px] font-black opacity-30 uppercase tracking-[0.15em] -mt-0.5">
                   {formatLastSeen(lastVisit)}
                 </span>
              </div>

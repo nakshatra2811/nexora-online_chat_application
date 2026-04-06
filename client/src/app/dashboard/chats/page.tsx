@@ -3199,7 +3199,7 @@ function ChatsPageContent() {
                       </h3>
                       <span className="inline-flex text-[7px] md:text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-black uppercase tracking-tighter shrink-0 border border-purple-500/10 items-center justify-center shadow-sm">Verified</span>
                     </div>
-                    <div className="flex items-center gap-1.5 min-w-0 h-4">
+                    <div className="flex items-center gap-1.5 min-w-0 h-6">
                       {peerTyping[activeThread.username] ? (
                         <div className="flex items-center gap-1.5 text-[10px] md:text-[11px] font-bold text-[#2ed573]">
                           <span className="uppercase tracking-widest">Typing</span>
@@ -4462,7 +4462,7 @@ function ChatsPageContent() {
                         @{selectedProfileUser.username}
                       </p>
                       
-                      <div className="flex justify-center h-5">
+                      <div className="flex justify-center h-6">
                          <LastSeenBadge 
                            isOnline={selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)} 
                            lastVisit={selectedProfileUser.lastVisit || selectedProfileUser.last_visit} 

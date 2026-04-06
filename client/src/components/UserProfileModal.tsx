@@ -207,7 +207,7 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                 <h2 className="text-3xl sm:text-4xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>{friend.name}</h2>
                 <p className="text-base sm:text-lg font-bold text-[#6c5ce7] mt-0.5">@{friend.username}</p>
               </div>
-              <div className="flex flex-col items-end gap-1 pt-1 overflow-hidden">
+              <div className="flex flex-col items-end gap-1 pt-1">
                 <LastSeenBadge isOnline={friend.online} lastVisit={friend.lastVisit} username={friend.username} />
               </div>
             </div>
