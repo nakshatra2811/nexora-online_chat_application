@@ -1352,9 +1352,9 @@ function ChatsPageContent() {
 
   // Connect Request / Share Modal
   const [showShareModal, setShowShareModal] = useState(false);
-  const [activeSnap, setActiveSnap] = useState<ChatMessage | null>(null);
-  const [snapCountdown, setSnapCountdown] = useState(10);
-  const snapTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activeQuickImage, setActiveQuickImage] = useState<ChatMessage | null>(null);
+  const [quickImageCountdown, setQuickImageCountdown] = useState(10);
+  const quickImageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sharePhone, setSharePhone] = useState("");
   const [shareMessage, setShareMessage] = useState("Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\nhttps://nexora.app/auth?mode=signup");
   const [shareVia, setShareVia] = useState<"sms" | "whatsapp" | "email">("whatsapp");
@@ -1416,7 +1416,7 @@ function ChatsPageContent() {
         try {
           let decryptedText = "";
           if (data.fromStory || data.ciphertext === null || data.ciphertext === undefined) {
-            decryptedText = data.text || (data.poll ? "🗳️ New Poll" : data.attachment ? (data.attachment.type === 'location' ? '📍 Shared Location' : '📎 Media') : "Secure Message");
+            decryptedText = data.text || (data.poll ? "🗳️ New Poll" : data.attachment ? (data.attachment.type === 'location' ? '📍 Shared Location' : '🔵 Quick Image') : "Secure Message");
           } else {
             decryptedText = await decryptMessage(key, data.ciphertext, data.iv);
           }
@@ -1998,11 +1998,12 @@ function ChatsPageContent() {
 
       const msg: ChatMessage = {
         id: msgId, senderId: myUsernameRef.current,
-        text: isImage ? "" : `📎 ${file.name}`,
+        text: isImage ? "🔵 Quick Image" : `📎 ${file.name}`,
         timestamp, createdAt: Date.now(),
         isSelf: true, status: "delivered", reactions: {},
         attachment,
         replyTo: currentReplyId,
+        isViewOnce: isImage,
       };
 
       setMessages(prev => [...prev, msg]);
@@ -2022,7 +2023,8 @@ function ChatsPageContent() {
           attachment,
           msgId, timestamp,
           caption: msg.text,
-          replyTo: currentReplyId
+          replyTo: currentReplyId,
+          isViewOnce: isImage
         });
       }
     };
@@ -2053,19 +2055,16 @@ function ChatsPageContent() {
 
         const attachment = { name: file.name, type: file.type, url: fileDataUrl, size: file.size };
         const msg: ChatMessage = {
-          id: msgId,
-          senderId: myUsernameRef.current,
-          text: isImage ? "" : `📎 ${file.name}`,
-          timestamp,
-          createdAt: Date.now(),
-          isSelf: true,
-          status: "delivered",
-          reactions: {},
+          id: msgId, senderId: myUsernameRef.current,
+          text: isImage ? "🔵 Quick Image" : `📎 ${file.name}`,
+          timestamp, createdAt: Date.now(),
+          isSelf: true, status: "delivered", reactions: {},
           attachment,
+          isViewOnce: isImage
         };
 
         setMessages(prev => [...prev, msg]);
-        bumpThread(activeThread.username, { preview: msg.text || "📎 File", lastMessageTime: Date.now() });
+        bumpThread(activeThread.username, { preview: msg.text, lastMessageTime: Date.now() });
 
         const socket = socketService.getSocket();
         if (socket && activeThread?.username) {
@@ -2073,9 +2072,9 @@ function ChatsPageContent() {
             to: activeThread.username,
             from: myUsernameRef.current,
             attachment,
-            msgId,
-            timestamp,
+            msgId, timestamp,
             caption: msg.text,
+            isViewOnce: isImage
           });
         }
       };
@@ -2124,7 +2123,7 @@ function ChatsPageContent() {
     }
   }, [cameraView.stream, cameraView.active]);
 
-  const flipSnapCamera = async () => {
+  const flipQuickCamera = async () => {
     const newMode = cameraView.facingMode === "user" ? "environment" : "user";
     if (cameraView.stream) {
       cameraView.stream.getTracks().forEach(t => t.stop());
@@ -2154,7 +2153,7 @@ function ChatsPageContent() {
 
     const msg: ChatMessage = {
       id: msgId, senderId: myUsernameRef.current,
-      text: "📷 View Once Photo",
+      text: "🔵 Quick Image",
       timestamp,
       createdAt: Date.now(),
       isSelf: true, status: "delivered", reactions: {},
@@ -2166,7 +2165,7 @@ function ChatsPageContent() {
     setMessages(prev => [...prev, msg]);
     // Bump thread to top
     if (activeThread) {
-      bumpThread(activeThread.username, { preview: "📷 Photo" });
+      bumpThread(activeThread.username, { preview: "🔵 Quick Image" });
     }
 
     const socket = socketService.getSocket();
@@ -2174,7 +2173,7 @@ function ChatsPageContent() {
       socket.emit("dm:media", {
         to: activeThread.username,
         msgId, timestamp,
-        caption: "📷 View Once Photo",
+        caption: "🔵 Quick Image",
         attachment: attachment,
         isViewOnce: true
       });
@@ -3432,24 +3431,24 @@ function ChatsPageContent() {
                                 ) : (
                                   <div
                                     className="relative w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center cursor-pointer shadow-xl hover:scale-[1.02] transition-transform group/vo overflow-hidden border-2 border-white/10"
-                                    style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
+                                    style={{ background: m.isSelf ? "linear-gradient(135deg, #1e1e2e, #4b4b6a)" : "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
                                     onClick={() => {
-                                      // Tell other user it was viewed if we are the receiver
-                                      const socket = socketService.getSocket();
-                                      if (socket && activeThread?.username && !m.isSelf) {
-                                        socket.emit("dm:view_once_ack", { to: activeThread.username, msgId: m.id });
+                                      if (!m.isSelf) {
+                                        const socket = socketService.getSocket();
+                                        if (socket && activeThread?.username) {
+                                          socket.emit("dm:view_once_ack", { to: activeThread.username, msgId: m.id });
+                                        }
                                       }
                                       setImageViewer({ url: m.attachment!.url, name: m.attachment!.name });
-                                      // Remove attachment from state entirely after view locally
-                                      setMessages(prev => prev.map(msg => msg.id === m.id ? { ...msg, viewOnceOpened: true, text: "📷 Photo Viewed", attachment: undefined } : msg));
+                                      setMessages(prev => prev.map(msg => msg.id === m.id ? { ...msg, viewOnceOpened: true, text: "🔵 Quick Image Viewed", attachment: undefined } : msg));
                                     }}
                                   >
                                     <div className="absolute inset-0 bg-white/10 blur-xl group-hover/vo:bg-white/20 transition-colors" />
-                                    <div className="w-14 h-14 rounded-[1rem] bg-white/20 backdrop-blur-md flex items-center justify-center mb-3 shadow-inner relative z-10 border border-white/20">
-                                      <Camera className="w-6 h-6 text-white drop-shadow-md" />
+                                    <div className="w-14 h-14 rounded-[1rem] bg-white/10 backdrop-blur-md flex items-center justify-center mb-3 shadow-inner relative z-10 border border-white/10">
+                                      <div className="w-4 h-4 rounded-full bg-white/60 blur-[3px] animate-pulse" />
                                     </div>
-                                    <span className="text-white text-xs font-black tracking-[0.1em] uppercase relative z-10 drop-shadow-md">Tap to View</span>
-                                    <span className="text-white/80 text-[9px] font-bold mt-1 uppercase relative z-10">Snap • 1 View Only</span>
+                                    <span className="text-white text-xs font-black tracking-[0.1em] uppercase relative z-10 drop-shadow-md">{m.isSelf ? "Sent Quick Image" : "Tap to View Image"}</span>
+                                    <span className="text-white/60 text-[8px] font-bold mt-1 uppercase relative z-10">{m.isSelf ? "Only you can see this" : "Secure • 1 View Only"}</span>
                                   </div>
                                 )
                               ) : (
@@ -3650,12 +3649,12 @@ function ChatsPageContent() {
                     </AnimatePresence>
                   </div>
 
-                  {/* DEDICATED SNAPSHOT BUTTON */}
+                  {/* DEDICATED QUICK IMAGE BUTTON */}
                   <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                     onClick={handleCameraCapture}
-                    className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all neumorphic-btn text-[var(--text-secondary)]"
-                    title="Take Snapshot">
-                    <Camera className="w-5 h-5" />
+                    className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all neumorphic-btn text-[var(--text-secondary)] shadow-lg shadow-blue-500/10 border border-blue-500/10"
+                    title="Quick Image Protocol">
+                    <div className="w-4 h-4 rounded-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-pulse" />
                   </motion.button>
                 </div>
               )}
@@ -4213,9 +4212,9 @@ function ChatsPageContent() {
                 <X className="w-5 h-5" />
               </button>
               <span className="text-white font-black text-sm tracking-widest uppercase">
-                Camera
+                Quick Image
               </span>
-              <button onClick={flipSnapCamera} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center text-white hover:bg-white/20">
+              <button onClick={flipQuickCamera} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center text-white hover:bg-white/20">
                 <RefreshCcw className="w-5 h-5" />
               </button>
             </div>
@@ -4279,7 +4278,7 @@ function ChatsPageContent() {
                       className="flex-1 py-4 rounded-2xl font-black text-sm text-white shadow-xl flex items-center justify-center gap-2"
                       style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.4)" }}
                     >
-                      <Send className="w-4 h-4" /> Send Photo
+                      <Send className="w-4 h-4" /> Send Quick Image
                     </motion.button>
                   </>
                 )}
@@ -5153,6 +5152,7 @@ function ChatsPageContent() {
           )}
         </AnimatePresence>
       </AnimatePresence>
+      {/* End of Global Search */}
       {showReportModal && activeThread && (
         <ReportModal
           isOpen={showReportModal}
