@@ -411,25 +411,42 @@ function ChatsPageContent() {
   }, [showSyncModal, suggestedUsers.length]);
 
   // Real-time Global Search (Debounced) for "Smart Search" as requested
+  // ── Smart Search Engine (Discovery & Identity Protocol) ──
   useEffect(() => {
     const q = manualPhone.trim();
     if (q.length < 1) {
       if (syncMatches.length > 0) setSyncMatches([]);
+      if (syncNonMatches.length > 0) setSyncNonMatches([]);
       return;
     }
+    
     const timer = setTimeout(async () => {
       setIsSyncing(true);
       try {
+        // 1. Discovery Search (Members & Mutuals)
         const res = await nexoraFetch(`/api/users/global-search?q=${encodeURIComponent(q)}`);
         if (res && res.users) {
           setSyncMatches(res.users);
+          
+          // Identity Recognition: If exact match found, add to history
+          const exactMatch = res.users.find((u: any) => u.username.toLowerCase() === q.toLowerCase());
+          if (exactMatch) addToSearchHistory(exactMatch.username);
+        }
+
+        // 2. Protocol Invite (Phone Check)
+        const numeric = q.replace(/\D/g, "");
+        if (numeric.length >= 10) {
+          setSyncNonMatches([numeric]);
+        } else {
+          setSyncNonMatches([]);
         }
       } catch (e) {
-        console.error("Global search failed:", e);
+        console.error("[DISCOVERY] Smart search failed:", e);
       } finally {
         setIsSyncing(false);
       }
-    }, 400);
+    }, 450); // Balanced debounce for premium feel
+
     return () => clearTimeout(timer);
   }, [manualPhone]);
 
@@ -438,7 +455,7 @@ function ChatsPageContent() {
     if (!query) return;
     setIsSyncing(true);
     setSyncMatches([]);
-    setSyncNonMatches([]); 
+    setSyncNonMatches([]);
 
     try {
       const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(query)}`);
@@ -1269,7 +1286,7 @@ function ChatsPageContent() {
     }
     const q = chatSearchQuery.toLowerCase();
     const matching = messages
-      .filter(m => m.text.toLowerCase().includes(q))
+      .filter(m => m.text && m.text.toLowerCase().includes(q))
       .map(m => m.id);
     setChatSearchResults(matching);
     setChatSearchIndex(matching.length > 0 ? 0 : -1);
@@ -1433,13 +1450,13 @@ function ChatsPageContent() {
               const key = `nexora_msgs_${senderThread.id}`;
               const raw = localStorage.getItem(key) || "[]";
               let threadMsgs: any[] = [];
-              try { 
+              try {
                 if (raw.startsWith("anc:")) {
                   // Vault encryption detected
                   const decrypted = await decryptStorageData(raw, vaultKey!);
                   threadMsgs = decrypted || [];
                 } else {
-                  threadMsgs = JSON.parse(raw); 
+                  threadMsgs = JSON.parse(raw);
                 }
               } catch (e) { threadMsgs = []; }
 
@@ -1501,8 +1518,8 @@ function ChatsPageContent() {
           return prev.filter(u => u !== data.userId);
         });
         setThreads(prev => prev.map(t =>
-          t.username?.toLowerCase() === data.userId?.toLowerCase() 
-            ? { ...t, online: data.status === 'online', lastVisit: data.last_visit || t.lastVisit } 
+          t.username?.toLowerCase() === data.userId?.toLowerCase()
+            ? { ...t, online: data.status === 'online', lastVisit: data.last_visit || t.lastVisit }
             : t
         ));
       });
@@ -2064,7 +2081,7 @@ function ChatsPageContent() {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
 
-  // keep the placeholder — original closing brace stays below
+    // keep the placeholder — original closing brace stays below
   };
 
   const handleCameraCapture = () => {
@@ -2723,12 +2740,12 @@ function ChatsPageContent() {
                     {pendingRequests.map((req) => (
                       <div key={req.id} className="p-3 rounded-xl flex items-center justify-between gap-2" style={{ background: "transparent", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}` }}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <Avatar 
-                            src={req.avatarUrl} 
-                            name={req.fromName} 
-                            color={req.fromColor} 
-                            size={40} 
-                            animate={false} 
+                          <Avatar
+                            src={req.avatarUrl}
+                            name={req.fromName}
+                            color={req.fromColor}
+                            size={40}
+                            animate={false}
                             showBorder={false}
                           />
                           <div className="flex-1 min-w-0 pr-2">
@@ -2782,34 +2799,35 @@ function ChatsPageContent() {
                         namePart = match[1];
                         restPart = ` ${match[2]}${match[3]}`;
                       }
-                      
+
                       return (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                        key={notif.id}
-                        className="group flex flex-col gap-1.5 p-3 rounded-xl border relative transition-all"
-                        style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)" }}
-                      >
-                        <div className="flex items-center gap-2.5" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
-                          <Avatar 
-                             name={notif.from_username} 
-                             size={32} 
-                             color={notif.type?.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} 
-                             animate={false} showBorder={false} />
-                          <div className="flex-1 min-w-0 pr-6 cursor-pointer">
-                            <p className="text-[11px] leading-tight" style={{ color: "var(--text-primary)" }}>
-                              <span className="font-bold">{namePart}</span>{restPart}
-                            </p>
-                            <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase">{notif.time}</p>
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                          key={notif.id}
+                          className="group flex flex-col gap-1.5 p-3 rounded-xl border relative transition-all"
+                          style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)" }}
+                        >
+                          <div className="flex items-center gap-2.5" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
+                            <Avatar
+                              name={notif.from_username}
+                              size={32}
+                              color={notif.type?.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'}
+                              animate={false} showBorder={false} />
+                            <div className="flex-1 min-w-0 pr-6 cursor-pointer">
+                              <p className="text-[11px] leading-tight" style={{ color: "var(--text-primary)" }}>
+                                <span className="font-bold">{namePart}</span>{restPart}
+                              </p>
+                              <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase">{notif.time}</p>
+                            </div>
                           </div>
-                        </div>
-                        <button className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all"
-                          onClick={() => {
-                            setNotifications(prev => prev.filter(n => n.id !== notif.id));
-                            nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
-                          }}><X className="w-3 h-3" /></button>
-                      </motion.div>
-                    )})
+                          <button className="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                            onClick={() => {
+                              setNotifications(prev => prev.filter(n => n.id !== notif.id));
+                              nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
+                            }}><X className="w-3 h-3" /></button>
+                        </motion.div>
+                      )
+                    })
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -2822,11 +2840,11 @@ function ChatsPageContent() {
               onClick={() => { router.push('/dashboard/stories?user=me'); }}
               className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
               <div className="relative">
-                <Avatar 
-                  src={myProfile.avatarUrl} 
-                  name={myProfile.name || "Me"} 
-                  color={myProfile.color} 
-                  size={56} 
+                <Avatar
+                  src={myProfile.avatarUrl}
+                  name={myProfile.name || "Me"}
+                  color={myProfile.color}
+                  size={56}
                   className={myStoryPreview ? 'ring-[3px] ring-[#ff006e] ring-offset-2' : 'ring-2 ring-transparent'}
                   animate={true}
                   showBorder={false}
@@ -2864,16 +2882,16 @@ function ChatsPageContent() {
                     onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
                     className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                     <div className="relative">
-                <Avatar 
-                  src={user.avatarUrl} 
-                  name={nicknames[user.username] || user.name || user.username} 
-                  color={user.color || 'from-[#6c5ce7] to-[#00d4ff]'} 
-                  size={56} 
-                  className={hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2' : ''}
-                  animate={true}
-                  showBorder={hasStory}
-                  onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
-                />
+                      <Avatar
+                        src={user.avatarUrl}
+                        name={nicknames[user.username] || user.name || user.username}
+                        color={user.color || 'from-[#6c5ce7] to-[#00d4ff]'}
+                        size={56}
+                        className={hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2' : ''}
+                        animate={true}
+                        showBorder={hasStory}
+                        onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
+                      />
                       {isUserOnline && !hasStory && (
                         <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
                           style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
@@ -2889,7 +2907,12 @@ function ChatsPageContent() {
           {threads
             .filter(t => !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id))
             .filter(t => !t.name.includes("Clearance"))
-            .filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            .filter(t => {
+              const q = searchQuery.toLowerCase();
+              return t.name.toLowerCase().includes(q) || 
+                     t.username.toLowerCase().includes(q) || 
+                     (t.preview && t.preview.toLowerCase().includes(q));
+            })
             .sort((a, b) => {
               const aPinned = pinnedThreads.includes(a.id) ? 1 : 0;
               const bPinned = pinnedThreads.includes(b.id) ? 1 : 0;
@@ -2926,11 +2949,11 @@ function ChatsPageContent() {
                   className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all relative group/thread"
                   style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
                   <div className="relative shrink-0">
-                    <Avatar 
-                      src={thread.avatarUrl} 
-                      name={nicknames[thread.username] || thread.name || thread.username} 
-                      color={thread.color} 
-                      size={44} 
+                    <Avatar
+                      src={thread.avatarUrl}
+                      name={nicknames[thread.username] || thread.name || thread.username}
+                      color={thread.color}
+                      size={44}
                       animate={true}
                       onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}
                       className={isLockedDisplay ? 'grayscale opacity-50' : ''}
@@ -2941,9 +2964,9 @@ function ChatsPageContent() {
                         style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
                     )}
                     {!isLockedDisplay && !(thread.online || liveOnlineUsers.includes(thread.username)) && thread.lastVisit && (
-                        <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20 flex items-center justify-center">
-                            <span className="text-[6.5px] font-black text-[#6c5ce7] uppercase tracking-tighter leading-none">{formatLastSeenShort(thread.lastVisit)}</span>
-                        </div>
+                      <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20 flex items-center justify-center">
+                        <span className="text-[6.5px] font-black text-[#6c5ce7] uppercase tracking-tighter leading-none">{formatLastSeenShort(thread.lastVisit)}</span>
+                      </div>
                     )}
                     {mutedThreads.includes(thread.id) && (
                       <div className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20">
@@ -2979,11 +3002,11 @@ function ChatsPageContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <Avatar 
-                  src={myProfile.avatarUrl} 
-                  name={myProfile.name || myProfile.username} 
-                  color={myProfile.color} 
-                  size={40} 
+                <Avatar
+                  src={myProfile.avatarUrl}
+                  name={myProfile.name || myProfile.username}
+                  color={myProfile.color}
+                  size={40}
                   animate={true}
                   showBorder={true}
                 />
@@ -3086,18 +3109,18 @@ function ChatsPageContent() {
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
                     onClick={() => {
-                        router.push('/dashboard/chats');
+                      router.push('/dashboard/chats');
                     }}
                     className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
                     <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </motion.button>
                   <div className="relative shrink-0">
-                    <Avatar 
-                      src={activeThread.avatarUrl} 
-                      name={nicknames[activeThread.username] || activeThread.name || activeThread.username} 
-                      color={activeThread.color} 
-                      size={44} 
+                    <Avatar
+                      src={activeThread.avatarUrl}
+                      name={nicknames[activeThread.username] || activeThread.name || activeThread.username}
+                      color={activeThread.color}
+                      size={44}
                       animate={true}
                       onClick={() => setSelectedProfileUser({ username: activeThread.username, name: activeThread.name, color: activeThread.color, avatarUrl: activeThread.avatarUrl })}
                     />
@@ -4297,11 +4320,11 @@ function ChatsPageContent() {
               <div className="px-10 pb-10 -mt-20 relative z-10">
                 <div className="flex flex-col items-center">
                   <div className="relative group/avatar mb-6">
-                    <Avatar 
-                      src={selectedProfileUser.avatarUrl} 
-                      name={nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username} 
-                      color={selectedProfileUser.color} 
-                      size={144} 
+                    <Avatar
+                      src={selectedProfileUser.avatarUrl}
+                      name={nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
+                      color={selectedProfileUser.color}
+                      size={144}
                       animate={true}
                       className={`border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl transition-transform duration-500 group-hover/avatar:scale-105`}
                       showBorder={false}
@@ -4543,8 +4566,7 @@ function ChatsPageContent() {
                 </button>
                 <div className="flex-1">
                   <input autoFocus type="text" placeholder="Find people on Nexora..." value={manualPhone}
-                    onChange={e => { setManualPhone(e.target.value); if (e.target.value.trim().length > 0) handleManualAdd(); }}
-                    onKeyDown={e => e.key === 'Enter' && handleManualAdd()}
+                    onChange={e => setManualPhone(e.target.value)}
                     className="w-full bg-transparent outline-none text-xl sm:text-2xl font-black transition-all"
                     style={{ color: "var(--text-primary)" }} />
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mt-0.5">Find Friends · Global Discovery</p>
@@ -4593,12 +4615,12 @@ function ChatsPageContent() {
                         {pendingRequests.map((req: any, idx: number) => (
                           <motion.div key={req.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }}
                             className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] border border-transparent hover:border-[#6c5ce7]/20 hover:bg-[#6c5ce7]/5 transition-all">
-                            <Avatar 
-                              src={req.avatarUrl} 
-                              name={req.fromName} 
-                              color={req.fromColor} 
-                              size={56} 
-                              animate={true} 
+                            <Avatar
+                              src={req.avatarUrl}
+                              name={req.fromName}
+                              color={req.fromColor}
+                              size={56}
+                              animate={true}
                               showBorder={true}
                               className="shrink-0 shadow-xl"
                             />
@@ -4638,24 +4660,24 @@ function ChatsPageContent() {
 
                         <div className="grid grid-cols-2 gap-3">
                           {(expandedSuggestions ? suggestedUsers : suggestedUsers.slice(0, 4)).map((user: any, idx: number) => {
-                             const isRequested = sentRequests.includes(user.username);
-                             const isConnected = threads.some((t: any) => t.username === user.username);
-                             return (
+                            const isRequested = sentRequests.includes(user.username);
+                            const isConnected = threads.some((t: any) => t.username === user.username);
+                            return (
                               <motion.div key={user.username} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}
                                 className="relative group p-4 rounded-[2rem] border overflow-hidden flex flex-col items-center text-center transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                style={{ 
+                                style={{
                                   background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
                                   borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"
                                 }}>
                                 {/* Close / Remove suggestion icon? (Skip for now as not requested) */}
-                                
+
                                 <div className="relative mb-3 group-hover:scale-105 transition-transform duration-300">
-                                  <Avatar 
-                                    src={user.avatar_url} 
-                                    name={user.full_name || user.username} 
-                                    color={user.color} 
-                                    size={64} 
-                                    animate={true} 
+                                  <Avatar
+                                    src={user.avatar_url}
+                                    name={user.full_name || user.username}
+                                    color={user.color}
+                                    size={64}
+                                    animate={true}
                                     showBorder={true}
                                     className="shadow-xl"
                                   />
@@ -4665,39 +4687,36 @@ function ChatsPageContent() {
                                 <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.1em] mb-3">@{user.username}</p>
 
                                 {user.mutualFriends && user.mutualFriends.length > 0 && (
-                                  <div className="flex items-center justify-center -space-x-1.5 mb-4 group/mutuals relative">
-                                    {user.mutualFriends.slice(0, 2).map((m: any, midx: number) => (
-                                      <div key={midx} className="relative z-[1]">
-                                        <Avatar 
-                                          src={m.avatarUrl} 
-                                          name={m.fullName || m.username} 
-                                          color="from-purple-500 to-indigo-500" 
-                                          size={20} 
-                                          showBorder={true}
-                                          className="border-2 border-[var(--bg-surface)] shadow-sm"
-                                        />
-                                      </div>
-                                    ))}
-                                    <span className="pl-2.5 text-[9px] font-black opacity-40 uppercase">
-                                      {user.mutualCount > 1 ? `${user.mutualCount} Mutual` : "1 Mutual"}
-                                    </span>
-                                    
-                                    {/* Premium Tooltip showing mutual names */}
-                                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 p-2 rounded-xl bg-black/80 backdrop-blur-md border border-white/10 opacity-0 group-hover/mutuals:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap">
-                                      <p className="text-[8px] font-black uppercase text-white/50 mb-1 px-1">Mutual Friends</p>
+                                  <div className="flex flex-col items-center mb-4 group/mutuals relative cursor-pointer">
+                                    <div className="flex items-center justify-center -space-x-1.5 mb-1.5">
+                                      {user.mutualFriends.slice(0, 3).map((m: any, midx: number) => (
+                                        <div key={midx} className="relative z-[1]">
+                                          <Avatar
+                                            src={m.avatarUrl}
+                                            name={m.fullName || m.username}
+                                            color="from-purple-500 to-indigo-500"
+                                            size={22}
+                                            showBorder={true}
+                                            className="border-2 border-[var(--bg-surface)] shadow-md"
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <p className="text-[8px] font-black opacity-60 uppercase tracking-tighter text-center max-w-[100px] truncate">
+                                      {user.mutualFriends[0].fullName || user.mutualFriends[0].username}
+                                      {user.mutualCount > 1 && ` +${user.mutualCount - 1} mutual`}
+                                      {user.mutualCount === 1 && ` is a mutual`}
+                                    </p>
+
+                                    {/* Premium Tooltip on Hover */}
+                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 p-2 rounded-xl bg-black/80 backdrop-blur-md border border-white/10 opacity-0 group-hover/mutuals:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap shadow-2xl">
+                                      <p className="text-[8px] font-black uppercase text-white/50 mb-1 px-1">Mutual Connections</p>
                                       {user.mutualFriends.map((m: any, idx: number) => (
                                         <div key={idx} className="flex items-center gap-2 px-1 py-0.5">
-                                          <Avatar 
-                                            src={m.avatarUrl} 
-                                            name={m.fullName || m.username} 
-                                            color="from-purple-500 to-indigo-500" 
-                                            size={12} 
-                                            showBorder={false}
-                                          />
+                                          <Avatar src={m.avatarUrl} name={m.fullName || m.username} color="from-purple-500 to-indigo-500" size={14} />
                                           <span className="text-[9px] font-bold text-white">{m.fullName || m.username}</span>
                                         </div>
                                       ))}
-                                      {user.mutualCount > user.mutualFriends.length && <p className="text-[7px] font-black text-white/30 px-1 mt-1">+{user.mutualCount - user.mutualFriends.length} more</p>}
                                     </div>
                                   </div>
                                 )}
@@ -4726,7 +4745,7 @@ function ChatsPageContent() {
                         <div className="flex flex-wrap gap-2">
                           {searchHistory.map((h: string) => (
                             <motion.button key={h} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                              onClick={() => { setManualPhone(h); handleManualAdd(); }}
+                              onClick={() => setManualPhone(h)}
                               className="px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all"
                               style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)", color: "var(--text-primary)" }}>
                               @{h}
@@ -4785,9 +4804,12 @@ function ChatsPageContent() {
                     {/* Nexora Members */}
                     {syncMatches.length > 0 && (
                       <>
-                        <div className="px-4 py-1.5 mb-1 flex items-center gap-2">
-                          <Zap className="w-3 h-3 text-[#6c5ce7] opacity-60" />
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6c5ce7]">On Nexora ({syncMatches.length})</span>
+                        <div className="px-4 py-2 mt-4 mb-2 flex items-center justify-between border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-3.5 h-3.5 text-[#6c5ce7]" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-primary)]">Discovery Results ({syncMatches.length})</span>
+                          </div>
+                          <span className="text-[9px] font-black opacity-30 uppercase tracking-[0.2em]">Top Matches</span>
                         </div>
                         <div className="space-y-1">
                           {syncMatches.map((user: any, idx: number) => {
@@ -4800,12 +4822,12 @@ function ChatsPageContent() {
                                 onClick={() => setSelectedProfileUser(user)}
                                 className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98]">
                                 <div className="relative shrink-0 flex-none scale-100 group-hover:scale-105 transition-transform duration-300">
-                                  <Avatar 
-                                    src={user.avatarUrl} 
-                                    name={user.fullName || user.username} 
-                                    color={user.color} 
-                                    size={64} 
-                                    animate={true} 
+                                  <Avatar
+                                    src={user.avatarUrl}
+                                    name={user.fullName || user.username}
+                                    color={user.color}
+                                    size={64}
+                                    animate={true}
                                     showBorder={true}
                                     className="shadow-xl"
                                   />
@@ -4815,14 +4837,38 @@ function ChatsPageContent() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
-                                    <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName || user.username}</p>
+                                    <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.full_name || user.username}</p>
                                     {isConnected && (
-                                      <span className="flex-none px-1.5 py-0.5 rounded-full bg-[#6c5ce7]/10 text-[#6c5ce7] border border-[#6c5ce7]/20 text-[7px] font-black uppercase tracking-tighter flex items-center gap-0.5">
-                                        <Check className="w-2 h-2" /> Friend
-                                      </span>
+                                      <div className="h-4 w-4 rounded-full bg-[#2ed573]/10 flex items-center justify-center border border-[#2ed573]/20" title="Connected">
+                                        <Check className="w-2.5 h-2.5 text-[#2ed573]" />
+                                      </div>
                                     )}
                                   </div>
                                   <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
+                                  
+                                  {user.mutualFriends && user.mutualFriends.length > 0 && (
+                                    <div className="flex items-center gap-2 mt-2 group/m-tooltip relative h-6">
+                                      <div className="flex items-center -space-x-1">
+                                        {user.mutualFriends.slice(0, 3).map((mf: any, idx: number) => (
+                                          <Avatar key={idx} src={mf.avatarUrl} name={mf.fullName} color="from-purple-500 to-indigo-500" size={18} showBorder={true} className="border-2 border-[var(--bg-surface)] shrink-0" />
+                                        ))}
+                                      </div>
+                                      <p className="text-[8px] font-black text-[#6c5ce7] uppercase truncate max-w-[120px]">
+                                        {user.mutualCount} {user.mutualCount === 1 ? 'Mutual Friend' : 'Mutuals'}
+                                      </p>
+                                      
+                                      {/* Premium Tooltip */}
+                                      <div className="absolute top-full left-0 mt-1 p-2 rounded-xl bg-black/80 backdrop-blur-md border border-white/10 opacity-0 group-hover/m-tooltip:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap shadow-2xl">
+                                        <p className="text-[8px] font-black uppercase text-white/50 mb-1">Mutual Connections</p>
+                                        {user.mutualFriends.map((mf: any, idx: number) => (
+                                          <div key={idx} className="flex items-center gap-2 py-0.5">
+                                            <Avatar src={mf.avatarUrl} name={mf.fullName} color="from-purple-500 to-indigo-500" size={14} />
+                                            <span className="text-[9px] font-bold text-white">{mf.fullName || mf.username}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="shrink-0 ml-2" onClick={e => e.stopPropagation()}>
                                   {isConnected ? (
@@ -4866,23 +4912,22 @@ function ChatsPageContent() {
                       <div className="mt-6 space-y-2">
                         <div className="px-4 py-1.5 flex items-center gap-2 mt-4">
                           <Mail className="w-3 h-3 text-pink-500 opacity-60" />
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-pink-500">Not on Nexora — Invite via WhatsApp ({syncNonMatches.length})</span>
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-pink-500">Not on Nexora — Invite ({syncNonMatches.length})</span>
                         </div>
                         {syncNonMatches[0] === "__no_contacts_api__" ? (
                           <div className="mx-4 mt-2 p-5 rounded-[2rem] border border-yellow-500/20 bg-yellow-500/5 text-center">
                             <Smartphone className="w-8 h-8 text-yellow-500 mx-auto mb-3 opacity-60" />
                             <p className="text-sm font-black" style={{ color: "var(--text-primary)" }}>Contacts not supported here</p>
-                            <p className="text-[10px] opacity-50 font-bold mt-1 mb-4">Use the search bar above to find friends by username, or use your phone to sync contacts.</p>
                           </div>
                         ) : syncNonMatches.map((phone: string, idx: number) => (
                           <motion.div key={phone} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.04 }}
-                            className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] hover:bg-pink-500/5 transition-all border border-transparent hover:border-pink-500/20">
-                            <div className="w-14 h-14 rounded-full bg-white/10 dark:bg-white/5 flex items-center justify-center font-bold text-base uppercase shrink-0 border border-white/10">
+                            className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] hover:bg-pink-500/5 transition-all">
+                            <div className="w-14 h-14 rounded-full bg-white/10 dark:bg-white/5 flex items-center justify-center font-bold text-base uppercase shrink-0">
                               <Smartphone className="w-6 h-6 opacity-40" style={{ color: "var(--text-muted)" }} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-black text-[15px] truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{phone}</p>
-                              <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mt-0.5" style={{ color: "var(--text-muted)" }}>Not registered on Nexora</p>
+                              <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mt-0.5" style={{ color: "var(--text-muted)" }}>Invite via WhatsApp</p>
                             </div>
                             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                               onClick={() => {
@@ -4891,13 +4936,47 @@ function ChatsPageContent() {
                               }}
                               className="shrink-0 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider text-white flex items-center gap-1.5 shadow-lg"
                               style={{ background: "linear-gradient(135deg,#25d366,#128c7e)" }}>
-                              <WhatsAppIcon className="w-3.5 h-3.5" />
                               Invite
                             </motion.button>
                           </motion.div>
                         ))}
                       </div>
                     )}
+
+                    {/* Persistent Recommendations & History at the bottom of search results */}
+                    <div className="pt-8 border-t border-white/5 mt-8">
+                       {suggestedUsers.length > 0 && (
+                          <div className="px-4 py-2 opacity-50 flex items-center gap-2">
+                             <Zap className="w-3 h-3" />
+                             <span className="text-[10px] font-black uppercase tracking-widest">Recommended for You</span>
+                          </div>
+                       )}
+                       <div className="grid grid-cols-2 gap-3 p-2">
+                          {suggestedUsers.slice(0, 2).map((user: any) => (
+                            <motion.div key={'search-rec-'+user.username} 
+                              onClick={() => setSelectedProfileUser(user)}
+                              className="p-3 rounded-3xl bg-white/5 border border-white/5 flex flex-col items-center text-center cursor-pointer">
+                               <Avatar src={user.avatar_url} name={user.full_name} color={user.color} size={40} />
+                               <p className="text-[10px] font-black mt-2 truncate w-full" style={{ color: "var(--text-primary)" }}>{user.full_name}</p>
+                            </motion.div>
+                          ))}
+                       </div>
+
+                       {searchHistory.length > 0 && (
+                          <div className="mt-4 px-4 py-2 opacity-50 flex items-center gap-2">
+                             <Clock className="w-3 h-3" />
+                             <span className="text-[10px] font-black uppercase tracking-widest">Recent Searches</span>
+                          </div>
+                       )}
+                       <div className="flex flex-wrap gap-2 p-4">
+                          {searchHistory.slice(0, 5).map((h: string) => (
+                            <button key={'search-hist-'+h} onClick={() => { setManualPhone(h); handleManualAdd(); }}
+                              className="px-3 py-1.5 rounded-full text-[10px] font-bold bg-white/5 border border-white/10" style={{ color: "var(--text-primary)" }}>
+                              @{h}
+                            </button>
+                          ))}
+                       </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -4998,11 +5077,11 @@ function ChatsPageContent() {
         </AnimatePresence>
       </AnimatePresence>
       {showReportModal && activeThread && (
-        <ReportModal 
-          isOpen={showReportModal} 
-          onClose={() => setShowReportModal(false)} 
-          targetUser={activeThread.username} 
-          reporterUser={myProfile?.username || ""} 
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetUser={activeThread.username}
+          reporterUser={myProfile?.username || ""}
           evidenceMessages={messages.slice(-5)}
         />
       )}

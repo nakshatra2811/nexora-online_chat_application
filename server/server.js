@@ -47,9 +47,9 @@ function generateToken(user) {
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) return res.status(401).json({ error: "Access Denied: Missing Protocol Token." });
-    
+
     jwt.verify(token, DATABASE_SECRET, (err, user) => {
         if (err) return res.status(403).json({ error: "Access Denied: Invalid Protocol Token." });
         req.user = user;
@@ -522,7 +522,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 if (process.env.FIREBASE_PROJECT_ID && (process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY_B64)) {
     try {
         let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-        
+
         if (privateKey) {
             privateKey = privateKey.replace(/^["'](.*)["']$/, '$1');
             privateKey = privateKey.replace(/\\n/g, '\n');
@@ -590,7 +590,7 @@ const emailTemplateOverrides = new Map(); // type -> { subject, html }
 
 async function nexoraMailProtocol(type, to, data) {
     console.log(`[SMTP] Dispatch Protocol Synchronized. Type: ${type.toUpperCase()}, Recipient: ${to}`);
-    
+
     if (!to || !to.includes('@')) {
         console.error(`[SMTP] Protocol Rejected: Invalid or missing recipient address: "${to}"`);
         return false;
@@ -1006,13 +1006,13 @@ async function sendPushNotification(username, payloadData) {
             try {
                 const sub = JSON.parse(row.subscription);
                 if (!sub || !sub.endpoint) return;
-                
+
                 // High-priority delivery options for calls
                 const options = {
                     TTL: 60,
                     urgency: payloadData.urgency || 'normal'
                 };
-                
+
                 await webpush.sendNotification(sub, payload, options);
             } catch (err) {
                 // Remove expired or "Gone" subscriptions from the registry
@@ -1201,7 +1201,7 @@ io.on('connection', (socket) => {
         // Update last visit just in case server restarts while online
         try {
             await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [Date.now(), normalizedId]);
-        } catch(e) {}
+        } catch (e) { }
 
         // 3. Deliver any queued offline messages
         deliverQueuedMessages(normalizedId, socket);
@@ -1477,7 +1477,7 @@ io.on('connection', (socket) => {
                 badge: '/badge.png',
                 color: '#6c5ce7',
                 urgency: 'high',
-                data: { 
+                data: {
                     type: 'call',
                     callerName: data.callerName || senderId,
                     callerAvatar: callerAvatar || data.callerAvatar,
@@ -1595,7 +1595,7 @@ io.on('connection', (socket) => {
                 const now = Date.now();
                 try {
                     await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, userId]);
-                } catch(e) {}
+                } catch (e) { }
                 io.emit('user_status', { userId, status: 'offline', last_visit: now });
                 console.log(`[-] Registered Identity Fully Logged Off: ${userId}`);
             }
@@ -1702,9 +1702,9 @@ app.post('/api/auth/login', async (req, res) => {
                 nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(e => console.error("[MAIL] Login Alert failure:", e));
 
                 if (user.status === 'Suspended') {
-                    return res.status(403).json({ 
-                        status: "error", 
-                        message: "Your account has been suspended for violating platform policies." 
+                    return res.status(403).json({
+                        status: "error",
+                        message: "Your account has been suspended for violating platform policies."
                     });
                 }
 
@@ -1779,9 +1779,9 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
         });
 
         const excludedList = Array.from(excluded);
-        const myFriendsOnly = excludedList.filter(u => u !== myUser && u !== 'nexora_31' && u !== 'me' && 
+        const myFriendsOnly = excludedList.filter(u => u !== myUser && u !== 'nexora_31' && u !== 'me' &&
             myConnections.some(c => c.user_a.toLowerCase() === u || c.user_b.toLowerCase() === u));
-        
+
         let suggestions = [];
 
         // 2. Mutual Friends Logic
@@ -1792,15 +1792,15 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                 myFriendsOnly
             );
             const friendMap = {};
-            myFriendsData.forEach(f => { 
+            myFriendsData.forEach(f => {
                 friendMap[f.username.toLowerCase()] = {
                     avatar: f.avatar_url,
                     name: decryptField(f.full_name)
-                }; 
+                };
             });
 
             const placeholders = myFriendsOnly.map(() => '?').join(',');
-            
+
             // Handle cross-database aggregation (Postgres vs SQLite)
             const aggFn = dbType === 'postgres' ? 'STRING_AGG' : 'GROUP_CONCAT';
             const aggSuffix = dbType === 'postgres' ? ", ','" : '';
@@ -1809,16 +1809,16 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                 SELECT 
                     u.username, u.full_name, u.avatar_url, u.color,
                     COUNT(*) as mutual_count,
-                    ${aggFn}(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN LOWER(c.user_a) ELSE LOWER(c.user_b) END${aggSuffix}) as mutual_user_list
+                    ${aggFn}(LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_a ELSE c.user_b END)${aggSuffix}) as mutual_user_list
                 FROM connections c
                 JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_b ELSE c.user_a END)
                 WHERE (LOWER(c.user_a) IN (${placeholders}) OR LOWER(c.user_b) IN (${placeholders}))
                   AND LOWER(u.username) NOT IN (${excludedList.map(() => '?').join(',')})
                 GROUP BY u.username, u.full_name, u.avatar_url, u.color
                 ORDER BY mutual_count DESC
-                LIMIT 20
+                LIMIT 15
             `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
-            
+
             suggestions = potentialMutuals.map(m => {
                 const mutList = m.mutual_user_list ? m.mutual_user_list.split(',') : [];
                 return {
@@ -1836,29 +1836,31 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
             });
         }
 
-        // 3. Fallback to random users (if we have fewer than 10 suggestions)
-        if (suggestions.length < 10) {
-            const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
-            const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
-            
-            let randomUsersQuery = `SELECT username, full_name, avatar_url, color FROM users`;
-            if (finalExcluded.length > 0) {
-                randomUsersQuery += ` WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')})`;
-            }
-            randomUsersQuery += ` ORDER BY RANDOM() LIMIT ${15 - suggestions.length}`;
-            
-            const randomUsers = await db.all(randomUsersQuery, finalExcluded);
+        // 3. Fallback/Discovery Logic: Always mix in some random users for discovery
+        // Aim for at least 15 suggestions total. If we have mutuals, we still add some randoms for "Discovery".
+        const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
+        const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
 
-            for (const u of randomUsers) {
-                suggestions.push({
-                    username: u.username,
-                    full_name: decryptField(u.full_name),
-                    avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
-                    color: u.color,
-                    mutualCount: 0,
-                    mutualFriends: []
-                });
-            }
+        let randomUsersQuery = `SELECT username, full_name, avatar_url, color FROM users`;
+        if (finalExcluded.length > 0) {
+            randomUsersQuery += ` WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')}) AND status != 'Suspended'`;
+        } else {
+            randomUsersQuery += ` WHERE status != 'Suspended'`;
+        }
+        randomUsersQuery += ` ORDER BY RANDOM() LIMIT 15`;
+
+        const randomUsers = await db.all(randomUsersQuery, finalExcluded);
+
+        for (const u of randomUsers) {
+            if (suggestions.length >= 20) break; // Hard cap at 20 suggestions
+            suggestions.push({
+                username: u.username,
+                full_name: decryptField(u.full_name),
+                avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
+                color: u.color,
+                mutualCount: 0,
+                mutualFriends: []
+            });
         }
 
         res.json({ suggestions: suggestions });
@@ -1869,25 +1871,66 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
 });
 
 // SMART GLOBAL SEARCH: Partial match as-you-type (starting letters)
-app.get("/api/users/global-search", authMiddleware, async (req, res) => {
+app.get("/api/users/global-search", authenticateToken, async (req, res) => {
     const q = req.query.q;
     if (!q || q.length < 1) return res.json({ users: [] });
 
     try {
-        const currentUser = req.user.username;
+        const myUser = req.user.username.toLowerCase();
+        
+        // Find my friends to calculate mutuals
+        const myConnections = await db.all(
+            'SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?',
+            [myUser, myUser]
+        );
+        const myFriendsList = myConnections.map(c => 
+            c.user_a.toLowerCase() === myUser ? c.user_b.toLowerCase() : c.user_a.toLowerCase()
+        );
+
+        const query = `${q.toLowerCase()}%`;
+        
+        // Find matching users
         const users = await db.all(`
             SELECT username, full_name, avatar_url, color 
             FROM users 
             WHERE (LOWER(username) LIKE ? OR LOWER(full_name) LIKE ?)
-              AND LOWER(username) != LOWER(?)
-            LIMIT 10
-        `, [`${q.toLowerCase()}%`, `${q.toLowerCase()}%`, currentUser]);
+              AND LOWER(username) != ?
+            LIMIT 20
+        `, [query, query, myUser]);
 
-        const results = users.map(u => ({
-            username: u.username,
-            full_name: decryptField(u.full_name),
-            avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
-            color: u.color
+        const results = await Promise.all(users.map(async u => {
+            const targetUser = u.username.toLowerCase();
+            
+            // Calculate detailed mutuals
+            let mutualCount = 0;
+            let mutualFriends = [];
+            
+            if (myFriendsList.length > 0) {
+                const placeholders = myFriendsList.map(() => '?').join(',');
+                const mutuals = await db.all(`
+                    SELECT u.username, u.full_name, u.avatar_url 
+                    FROM connections c
+                    JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) = ? THEN c.user_b ELSE c.user_a END)
+                    WHERE (LOWER(c.user_a) = ? AND LOWER(c.user_b) IN (${placeholders}))
+                       OR (LOWER(c.user_b) = ? AND LOWER(c.user_a) IN (${placeholders}))
+                `, [targetUser, targetUser, ...myFriendsList, targetUser, ...myFriendsList]);
+                
+                mutualCount = mutuals.length;
+                mutualFriends = mutuals.map(m => ({
+                    username: m.username,
+                    fullName: decryptField(m.full_name),
+                    avatarUrl: (m.avatar_url && m.avatar_url !== 'null') ? m.avatar_url : null
+                }));
+            }
+
+            return {
+                username: u.username,
+                full_name: decryptField(u.full_name),
+                avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
+                color: u.color,
+                mutualCount: mutualCount,
+                mutualFriends: mutualFriends
+            };
         }));
 
         res.json({ users: results });
@@ -1961,19 +2004,19 @@ app.post('/api/auth/google-login', async (req, res) => {
 
     try {
         if (!db) return res.status(500).json({ error: "Identity db offline" });
-        
+
         const user = await db.get('SELECT * FROM users WHERE google_uid = ? OR LOWER(email) = ?', [googleUid, verifiedEmail]);
-        
+
         if (!user) {
             return res.json({ status: "not_found", message: "Identity not recognized. Complete profile setup." });
         }
-        
+
         if (user.status === 'Suspended') return res.status(403).json({ error: "Protocol Breach: Account suspended." });
 
         // Link uid if necessary
         if (!user.google_uid) await db.run('UPDATE users SET google_uid = ? WHERE id = ?', [googleUid, user.id]);
 
-        nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => {});
+        nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => { });
 
         const token = generateToken(user);
         res.json({
@@ -1998,7 +2041,7 @@ app.post('/api/auth/google-login', async (req, res) => {
 // Google OAuth Signup (Finalize Profile)
 app.post('/api/auth/complete-google-signup', async (req, res) => {
     const { username, idToken, fullName, avatarUrl } = req.body;
-    
+
     const decodedToken = await verifyGoogleToken(idToken);
     if (!decodedToken) return res.status(401).json({ error: "Identity verification failed." });
 
@@ -2021,7 +2064,7 @@ app.post('/api/auth/complete-google-signup', async (req, res) => {
             [encryptField(fullName || finalUsername), email, finalUsername, placeholder, 'Standard', color, 'Not Set', googleUid, avatarUrl || null]
         );
 
-        nexoraMailProtocol('welcome', email, { username: finalUsername }).catch(() => {});
+        nexoraMailProtocol('welcome', email, { username: finalUsername }).catch(() => { });
 
         const newUserObj = { id: existing ? existing.id : this.lastID, username: finalUsername, role: 'Standard' }; // simplified user object for token
         const token = generateToken(newUserObj);
@@ -2100,8 +2143,8 @@ app.post('/api/auth/verify-login-otp', async (req, res) => {
     authStore.delete(`login:${email}`);
     try {
         if (!user) return res.status(404).json({ error: "Identity lost." });
-        nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => {});
-        
+        nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(() => { });
+
         const token = generateToken(user);
         res.json({
             status: "success",
@@ -2128,9 +2171,9 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB offline" });
         const user = await db.get('SELECT id, full_name, email, username, role, status, color, phone_number, avatar_url FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
-        
+
         if (!user) return res.status(404).json({ error: "Identity lost" });
-        
+
         res.json({
             id: user.id,
             status: user.status,
@@ -2182,8 +2225,8 @@ app.post('/api/auth/recovery', async (req, res) => {
         const sent = await nexoraMailProtocol('otp', email, { otp });
         if (!sent) {
             console.error(`[SMTP] Recovery Protocol Transmission Breach to ${email}`);
-            return res.json({ 
-                status: "success", 
+            return res.json({
+                status: "success",
                 message: `Dev Fallback: SMTP Failed. Your Recovery OTP is: ${otp}`,
                 devOtp: otp
             });
@@ -2314,7 +2357,7 @@ app.post('/api/auth/signup', async (req, res) => {
                 console.error("[MAIL] Welcome Transmission failure:", e);
                 require('fs').appendFileSync('auth_debug.log', `[${new Date().toISOString()}] WELCOME_ERR: user=${finalUsername}, err=${e.message}\n`);
             });
-        
+
         const tokenUserObj = { id: this.lastID || null, username: finalUsername, role: role };
         const token = generateToken(tokenUserObj);
 
@@ -2700,11 +2743,11 @@ app.post('/api/admin/verify-login', async (req, res) => {
     }
 
     otpStore.delete(otpKey);
-    
+
     try {
         const user = await db.get("SELECT id, username, role FROM users WHERE LOWER(email) = ? AND role = 'Admin'", [email.toLowerCase()]);
         if (!user) return res.status(403).json({ error: "Access Denied: Administrative Identity Verification Failed." });
-        
+
         const token = generateToken(user);
         res.json({ status: "success", token, message: "Admin authenticated." });
     } catch (err) {
@@ -2929,7 +2972,7 @@ app.get('/api/users/search', async (req, res) => {
         const exactPrefix = `${q}%`;
         const exactContains = `%${q}%`;
         const fuzzyQ = '%' + q.split('').join('%') + '%';
-        
+
         const users = await db.all(`
             SELECT u.username, u.full_name AS fullName, u.color, u.avatar_url AS avatarUrl,
                    (EXISTS (
@@ -3015,7 +3058,7 @@ app.post('/api/connections/sync', authenticateToken, async (req, res) => {
 app.get('/api/users/profile', authenticateToken, async (req, res) => {
     const targetUsername = (req.query.username || '').toLowerCase();
     const myUsername = req.user.username.toLowerCase();
-    
+
     try {
         if (!db || !targetUsername) return res.status(400).json({ error: "Invalid username" });
         const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, last_visit FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
@@ -3048,12 +3091,12 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
             // Simplified approach for better clarity: Get my friends, get their friends, find intersection
             const myFriendsRows = await db.all('SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', [myUsername, myUsername]);
             const targetFriendsRows = await db.all('SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', [targetUsername, targetUsername]);
-            
+
             const myFriends = new Set(myFriendsRows.map(r => r.user_a.toLowerCase() === myUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase()));
             const targetFriends = new Set(targetFriendsRows.map(r => r.user_a.toLowerCase() === targetUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase()));
-            
+
             const mutualUsernames = [...myFriends].filter(u => targetFriends.has(u));
-            
+
             if (mutualUsernames.length > 0) {
                 const placeholders = mutualUsernames.map(() => '?').join(',');
                 const mutualDetails = await db.all(`SELECT username, full_name AS "fullName", avatar_url AS "avatarUrl", color FROM users WHERE LOWER(username) IN (${placeholders})`, mutualUsernames);
@@ -3855,15 +3898,15 @@ app.patch('/api/admin/users/:username/status', authenticateToken, isAdmin, async
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         await db.run('UPDATE users SET status = ? WHERE LOWER(username) = LOWER(?)', [status, username]);
-        
+
         // Handle real-time suspension enforcement
         if (status === 'Suspended') {
             const lowerUser = username.toLowerCase();
             console.log(`[SAFETY] Terminating all active sessions for @${lowerUser}`);
-            
+
             // 1. Alert all connected devices of this user
-            io.to(lowerUser).emit('force_logout', { 
-                reason: "Protocol Access Revoked: This account has been suspended for violating safety guidelines." 
+            io.to(lowerUser).emit('force_logout', {
+                reason: "Protocol Access Revoked: This account has been suspended for violating safety guidelines."
             });
 
             // 2. Force disconnect all sockets in that user's room
@@ -4127,7 +4170,7 @@ app.post('/api/report', authenticateToken, async (req, res) => {
 
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
-        
+
         // 1. Log the report
         await db.run(
             'INSERT INTO reports (reporter, target, reason, category, evidence, status) VALUES (?, ?, ?, ?, ?, ?)',
@@ -4184,7 +4227,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
         await db.run('UPDATE users SET status = ? WHERE LOWER(username) = ?', [status, username.toLowerCase()]);
-        
+
         // Log to audit logs if possible
         await db.run(
             'INSERT INTO audit_logs (action, target, admin_username, details) VALUES (?, ?, ?, ?)',
