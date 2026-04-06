@@ -49,10 +49,10 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
     return (
       <div className={`flex items-center gap-1.5 ${className}`}>
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00d4ff] opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00d4ff]"></span>
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2ed573] opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2ed573]"></span>
         </span>
-        <span className="text-[10px] font-black uppercase tracking-widest text-[#00d4ff] underline decoration-[#00d4ff]/20 underline-offset-4">Node Active</span>
+        <span className="text-[10px] font-black uppercase tracking-widest text-[#2ed573] underline decoration-[#2ed573]/20 underline-offset-4">User is Active</span>
       </div>
     );
   }
@@ -61,7 +61,7 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
   if (!lastVisit) {
     return (
       <div className={`flex items-center gap-2 opacity-50 ${className}`}>
-        <Clock className="w-3.5 h-3.5 text-[#6c5ce7]" />
+        <Clock className="w-3.5 h-3.5 text-zinc-500" />
         <div className="flex flex-col">
           <span className="text-[10px] font-black uppercase tracking-[0.1em]">Archive Active</span>
           <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest -mt-0.5 whitespace-nowrap">Calibrating IST Pulse...</span>
@@ -81,8 +81,8 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
             exit={{ opacity: 0, x: 10 }}
             className="flex items-center gap-1.5"
           >
-             <Clock className="w-3 h-3 text-[#6c5ce7]" />
-             <span className="text-[10px] font-black uppercase tracking-widest">Protocol Sync</span>
+             <Clock className="w-3 h-3 text-zinc-400" />
+             <span className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Last Visited</span>
           </motion.div>
         )}
 
@@ -99,7 +99,7 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
                  initial={{ x: "-100%" }}
                  animate={{ x: "100%" }}
                  transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                 className="absolute top-0 left-0 h-full w-1/2 bg-gradient-to-r from-transparent via-[#6c5ce7] to-transparent"
+                 className="absolute top-0 left-0 h-full w-1/2 bg-gradient-to-r from-transparent via-white/40 to-transparent"
                />
             </div>
           </motion.div>
@@ -112,21 +112,14 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="flex items-center gap-2"
           >
-             <div className="flex flex-col border-l-2 border-[#6c5ce7]/30 pl-2">
-                <div className="flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-tight text-[#6c5ce7]">
-                   LAST SEEN <span className="text-white/95">
-                     {(() => {
-                        const str = formatLastSeen(lastVisit).toLowerCase();
-                        if (str.includes("today")) return "TODAY";
-                        if (str.includes("yesterday")) return "YESTERDAY";
-                        if (str.includes("just now")) return "TODAY";
-                        return str.split(" at ")[0];
-                     })()} 
-                     <span className="ml-1">{exactTime}</span>
+             <div className="flex flex-col border-l-2 border-zinc-500/30 pl-2">
+                <div className="flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-tight text-zinc-300">
+                   LAST VISITED <span className="text-white/80">
+                     {formatLastSeen(lastVisit).toUpperCase()}
                    </span> 
                    <span className="text-[7px] opacity-40 ml-0.5">IST</span>
                 </div>
-                <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em] mt-0.5">Identity Synced</div>
+                <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em] mt-0.5 whitespace-nowrap">Identity Synced</div>
              </div>
           </motion.div>
         )}

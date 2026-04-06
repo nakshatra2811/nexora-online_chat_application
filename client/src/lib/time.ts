@@ -80,14 +80,10 @@ export function formatLastSeen(timestamp?: number | string | Date | null): strin
   
   if (isYesterday) return `yesterday at ${timeStr}`;
 
-  const dateStr = date.toLocaleDateString(INDIAN_LOCALE, {
-    timeZone: MUMBAI_TIMEZONE,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  });
+  const day = date.toLocaleDateString(INDIAN_LOCALE, { timeZone: MUMBAI_TIMEZONE, day: "numeric" });
+  const month = date.toLocaleDateString(INDIAN_LOCALE, { timeZone: MUMBAI_TIMEZONE, month: "long" });
 
-  return `${dateStr} at ${timeStr}`;
+  return `on ${day} ${month} at ${timeStr}`;
 }
 
 /**
