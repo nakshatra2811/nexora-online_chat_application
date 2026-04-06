@@ -75,7 +75,7 @@ export const TABS: { id: TabId; label: string; icon: any; color: string; group?:
 // ─── HELPERS ───
 async function adminFetch(endpoint: string, options: RequestInit = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
+  const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
   try {
     const token = localStorage.getItem("nexora_token");
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {

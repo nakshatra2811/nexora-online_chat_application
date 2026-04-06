@@ -1793,7 +1793,6 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                   AND LOWER(u.username) NOT IN (${excludedList.map(() => '?').join(',')})
                 GROUP BY u.username, u.full_name, u.avatar_url, u.color
                 ORDER BY mutual_count DESC
-                LIMIT 15
             `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
             
             suggestions = potentialMutuals.map(m => ({
@@ -1806,31 +1805,28 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
         }
 
         // 3. Fallback to random users
-        const needed = 30 - suggestions.length;
-        if (needed > 0) {
-            const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
-            const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
-            
-            const randomUsers = await db.all(`
-                SELECT username, full_name, avatar_url, color 
-                FROM users 
-                WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')})
-                ORDER BY RANDOM()
-                LIMIT ?
-            `, [...finalExcluded, needed]);
+        const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
+        const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
+        
+        let randomUsersQuery = `SELECT username, full_name, avatar_url, color FROM users`;
+        if (finalExcluded.length > 0) {
+            randomUsersQuery += ` WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')})`;
+        }
+        randomUsersQuery += ` ORDER BY RANDOM()`;
+        
+        const randomUsers = await db.all(randomUsersQuery, finalExcluded);
 
-            for (const u of randomUsers) {
-                suggestions.push({
-                    username: u.username,
-                    full_name: decryptField(u.full_name),
-                    avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
-                    color: u.color,
-                    mutualCount: 0
-                });
-            }
+        for (const u of randomUsers) {
+            suggestions.push({
+                username: u.username,
+                full_name: decryptField(u.full_name),
+                avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
+                color: u.color,
+                mutualCount: 0
+            });
         }
 
-        res.json({ suggestions: suggestions.slice(0, 30) });
+        res.json({ suggestions: suggestions });
     } catch (err) {
         console.error("[SUGGESTIONS] Error:", err);
         res.status(500).json({ error: "Failed to generate suggestions" });
@@ -1861,7 +1857,6 @@ app.get('/api/users/search', authenticateToken, async (req, res) => {
             WHERE (LOWER(u.username) LIKE ? OR LOWER(u.full_name) LIKE ?)
               AND LOWER(u.username) != ?
             ORDER BY is_friend DESC, u.username ASC
-            LIMIT 15
         `, [myUser, myUser, query, query, myUser]);
 
         const formatted = results.map(u => ({
@@ -2888,7 +2883,6 @@ app.get('/api/users/search', async (req, res) => {
                    WHEN LOWER(u.username) LIKE ? THEN 2 
                    ELSE 3 END,
               u.username ASC
-            LIMIT 20
         `, [me, me, exactContains, exactContains, fuzzyQ, fuzzyQ, me, exactPrefix, exactContains]);
 
         const mappedUsers = users.map(u => ({
