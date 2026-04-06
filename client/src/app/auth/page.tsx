@@ -25,6 +25,31 @@ function AuthContent() {
   const [successOverlay, setSuccessOverlay] = useState<{ show: boolean; isLogin: boolean; name: string } | null>(null);
   const [showLegalStep, setShowLegalStep] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [savedAccount, setSavedAccount] = useState<{username: string, name: string, color: string, avatar?: string} | null>(null);
+
+  // Auto-Login: Free Fire Style redirect
+  useEffect(() => {
+    const token = localStorage.getItem("nexora_token");
+    if (token) {
+      // Small delay for better UX (shimmer effect)
+      setTimeout(() => router.push("/dashboard/chats"), 800);
+    }
+
+    // Check for saved account for Quick Login
+    const savedUsername = localStorage.getItem("nexora_signup_username");
+    const savedName = localStorage.getItem("nexora_signup_name");
+    const savedColor = localStorage.getItem("nexora_signup_color");
+    const savedAvatar = localStorage.getItem("nexora_signup_avatar");
+    
+    if (savedUsername && savedName) {
+      setSavedAccount({
+        username: savedUsername,
+        name: savedName,
+        color: savedColor || "from-[#6c5ce7] to-[#00d4ff]",
+        avatar: savedAvatar || undefined
+      });
+    }
+  }, []);
 
   // Form State
   const [fullName, setFullName] = useState("");
@@ -267,12 +292,10 @@ function AuthContent() {
               return;
             } else {
               alert(data?.error || "Invalid OTP");
-              setIsLoading(false);
               return;
             }
         } else if (loginMethod === "otp" && !isLoginOtpSent) {
             await handleSendLoginOtp();
-            setIsLoading(false);
             return;
         }
 
@@ -304,17 +327,15 @@ function AuthContent() {
       } else {
         if (!googleUserInfo && password !== confirmPassword) {
           alert("Protocol Breach: Passports must match perfectly.");
-          setIsLoading(false);
           return;
         }
         
-        // Before calling API, show legal agreement step
         setShowLegalStep(true);
-        setIsLoading(false);
         return;
       }
     } catch (err) {
       alert("Connectivity error: High-load during tunnel establishment.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -752,6 +773,51 @@ function AuthContent() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* ── QUICK LOGIN (Garena style) ── */}
+            {isLogin && savedAccount && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsLoading(true);
+                    setTimeout(() => {
+                      const token = localStorage.getItem("nexora_token");
+                      if (token) {
+                        setSuccessOverlay({ show: true, isLogin: true, name: savedAccount.name });
+                        setTimeout(() => router.push("/dashboard/chats"), 1500);
+                      } else {
+                        setUsername(savedAccount.username);
+                        setLoginMethod("password");
+                        setIsLoading(false);
+                      }
+                    }, 1000);
+                  }}
+                  className="w-full group relative p-5 rounded-[2.5rem] border transition-all active:scale-95 overflow-hidden"
+                  style={{ 
+                    background: isDark ? "rgba(255,255,255,0.03)" : "rgba(108,92,231,0.05)",
+                    borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(108,92,231,0.2)"
+                  }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#6c5ce715] to-[#00d4ff15] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-xl font-black text-white shadow-xl bg-gradient-to-br ${savedAccount.color} shrink-0`}>
+                      {savedAccount.avatar ? <img src={savedAccount.avatar} className="w-full h-full object-cover rounded-[1.5rem]" /> : savedAccount.name[0]}
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-[#6c5ce7]">Connected Profile</p>
+                      <h3 className="text-lg font-black truncate" style={{ color: "var(--text-primary)" }}>{savedAccount.name}</h3>
+                      <p className="text-xs font-medium opacity-60 truncate">@{savedAccount.username}</p>
+                    </div>
+                  </div>
+                </button>
+                <div className="my-6 flex items-center gap-4 text-[10px] font-black uppercase tracking-widest opacity-20">
+                  <div className="h-px flex-1 bg-current" />
+                  <span>OR MANUAL AUTH</span>
+                  <div className="h-px flex-1 bg-current" />
+                </div>
+              </motion.div>
+            )}
 
             <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>{isLogin ? "Welcome Back" : "Create Account"}</h2>
             {signupSuccess && isLogin && (

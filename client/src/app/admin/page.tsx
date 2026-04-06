@@ -74,9 +74,14 @@ export const TABS: { id: TabId; label: string; icon: any; color: string; group?:
 // ─── HELPERS ───
 async function adminFetch(endpoint: string, options: RequestInit = {}) {
   try {
+    const token = localStorage.getItem("nexora_token");
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
-      headers: { "Content-Type": "application/json", ...options.headers },
+      headers: { 
+        "Content-Type": "application/json", 
+        "Authorization": token ? `Bearer ${token}` : "",
+        ...options.headers 
+      },
     });
     return await res.json();
   } catch { return null; }
@@ -1724,29 +1729,34 @@ export default function AdminPanel() {
     setErrorMsg("");
     setIsLoading(true);
 
-    if (otpStep) {
-      const res = await adminFetch("/api/admin/verify-login", {
-        method: "POST", body: JSON.stringify({ email: emailInput, otp: otpInput })
-      });
-      setIsLoading(false);
-      
-      if (res?.status === "success") {
-        sessionStorage.setItem("nexora_admin_session", "active");
-        setIsAuthenticated(true);
+    try {
+      if (otpStep) {
+        const res = await adminFetch("/api/admin/verify-login", {
+          method: "POST", body: JSON.stringify({ email: emailInput, otp: otpInput })
+        });
+        
+        if (res?.status === "success" && res?.token) {
+          localStorage.setItem("nexora_token", res.token);
+          sessionStorage.setItem("nexora_admin_session", "active");
+          setIsAuthenticated(true);
+        } else {
+          setErrorMsg(res?.error || "Invalid OTP segment.");
+        }
       } else {
-        setErrorMsg(res?.error || "Invalid OTP segment.");
-      }
-    } else {
-      const res = await adminFetch("/api/admin/login", {
-        method: "POST", body: JSON.stringify({ email: emailInput, password: passInput })
-      });
-      setIsLoading(false);
+        const res = await adminFetch("/api/admin/login", {
+          method: "POST", body: JSON.stringify({ email: emailInput, password: passInput })
+        });
 
-      if (res?.status === "success" && res?.requireOtp) {
-        setOtpStep(true);
-      } else {
-        setErrorMsg(res?.error || "Authentication Intercepted.");
+        if (res?.status === "success" && res?.requireOtp) {
+          setOtpStep(true);
+        } else {
+          setErrorMsg(res?.error || "Authentication Intercepted.");
+        }
       }
+    } catch (err) {
+      setErrorMsg("Protocol Error: Uplink failed.");
+    } finally {
+      setIsLoading(false);
     }
   };
 

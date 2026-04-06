@@ -2470,7 +2470,16 @@ app.post('/api/admin/verify-login', async (req, res) => {
     }
 
     otpStore.delete("admin_login_otp");
-    res.json({ status: "success", message: "Admin authenticated." });
+    
+    try {
+        const user = await db.get("SELECT id, username, role FROM users WHERE LOWER(email) = ? AND role = 'Admin'", [email.toLowerCase()]);
+        if (!user) return res.status(403).json({ error: "Access Denied: Administrative Identity Verification Failed." });
+        
+        const token = generateToken(user);
+        res.json({ status: "success", token, message: "Admin authenticated." });
+    } catch (err) {
+        res.status(500).json({ error: "Internal Server Error during security handshake." });
+    }
 });
 
 app.post('/api/admin/update-credentials', async (req, res) => {
