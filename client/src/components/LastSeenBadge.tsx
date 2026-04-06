@@ -12,13 +12,18 @@ interface LastSeenBadgeProps {
   className?: string;
 }
 
-export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenBadgeProps) => {
+export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }: LastSeenBadgeProps) => {
   const [phase, setPhase] = useState<"initial" | "scanning" | "final">("initial");
 
-  // Format exact IST target
+  // Format exact IST target with robust parsing
   const exactTime = useMemo(() => {
     if (!lastVisit) return "";
-    const date = new Date(Number(lastVisit));
+    let ts = lastVisit;
+    // Handle stringified numbers (e.g. from Postgres)
+    if (typeof lastVisit === 'string' && /^\d+$/.test(lastVisit)) {
+      ts = parseInt(lastVisit, 10);
+    }
+    const date = new Date(ts);
     if (isNaN(date.getTime())) return "";
     
     return date.toLocaleTimeString(INDIAN_LOCALE, {
@@ -35,7 +40,7 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
       return;
     }
 
-    // High performance animation sequence
+    // Sequence for protocol synchronization feel
     const timer1 = setTimeout(() => setPhase("scanning"), 600);
     const timer2 = setTimeout(() => setPhase("final"), 1800);
 
@@ -43,46 +48,36 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
-  }, [isOnline, lastVisit]);
+  }, [isOnline]);
 
   if (isOnline) {
     return (
-      <div className={`flex items-center gap-1.5 ${className}`}>
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2ed573] opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2ed573]"></span>
-        </span>
-        <span className="text-[10px] font-black uppercase tracking-widest text-[#2ed573] underline decoration-[#2ed573]/20 underline-offset-4">User is Active</span>
-      </div>
-    );
-  }
-
-  // If no lastVisit, show a more descriptive placeholder
-  if (!lastVisit) {
-    return (
-      <div className={`flex items-center gap-2 opacity-50 ${className}`}>
-        <Clock className="w-3.5 h-3.5 text-zinc-500" />
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase tracking-[0.1em]">Archive Active</span>
-          <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest -mt-0.5 whitespace-nowrap">Calibrating IST Pulse...</span>
+      <div className={`flex flex-col items-end gap-0.5 ${className}`}>
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2ed573] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#2ed573]"></span>
+          </span>
+          <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#2ed573]">Active Protocol</span>
         </div>
+        <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em]">Identity Synced</div>
       </div>
     );
   }
 
   return (
-    <div className={`relative h-6 flex items-center overflow-hidden min-w-[150px] ${className}`}>
+    <div className={`relative h-8 flex flex-col justify-center items-end overflow-hidden min-w-[140px] ${className}`}>
       <AnimatePresence mode="wait">
         {phase === "initial" && (
           <motion.div
             key="p1"
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 0.8, x: 0 }}
-            exit={{ opacity: 0, x: 10 }}
+            initial={{ opacity: 0, x: 5 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -5 }}
             className="flex items-center gap-1.5"
           >
-             <Clock className="w-3 h-3 text-zinc-400" />
-             <span className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Last Visited</span>
+             <Clock className="w-2.5 h-2.5 text-zinc-500" />
+             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Syncing...</span>
           </motion.div>
         )}
 
@@ -92,35 +87,45 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="w-full flex items-center px-1"
+            className="w-32 h-[1px] bg-white/5 relative overflow-hidden"
           >
-            <div className="w-full h-[2px] bg-white/5 relative rounded-full overflow-hidden">
-               <motion.div 
-                 initial={{ x: "-100%" }}
-                 animate={{ x: "100%" }}
-                 transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                 className="absolute top-0 left-0 h-full w-1/2 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-               />
-            </div>
+            <motion.div 
+              initial={{ x: "-100%" }}
+              animate={{ x: "100%" }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+              className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-[#6c5ce7] to-transparent"
+            />
           </motion.div>
         )}
 
         {phase === "final" && (
           <motion.div
             key="p3"
-            initial={{ opacity: 0, scale: 0.9, y: 3 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="flex items-center gap-2"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-end"
           >
-             <div className="flex flex-col border-l-2 border-zinc-500/30 pl-2">
-                <div className="flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-tight text-zinc-300">
-                   LAST VISITED <span className="text-white/80">
-                     {formatLastSeen(lastVisit).toUpperCase()}
-                   </span> 
-                   <span className="text-[7px] opacity-40 ml-0.5">IST</span>
-                </div>
-                <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em] mt-0.5 whitespace-nowrap">Identity Synced</div>
-             </div>
+             {!lastVisit ? (
+               <div className="flex flex-col items-end opacity-80 group hover:opacity-100 transition-opacity">
+                 <div className="flex items-center gap-1.5 mb-0.5">
+                   <div className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-pulse" />
+                   <span className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Identity Idle</span>
+                 </div>
+                 <span className="text-[7px] font-bold opacity-40 uppercase tracking-widest whitespace-nowrap">Encryption Active (IST)</span>
+               </div>
+             ) : (
+               <div className="flex flex-col items-end group">
+                  <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tight text-white/90">
+                     LAST SEEN <span className="text-[#6c5ce7]">
+                       {formatLastSeen(lastVisit).toUpperCase()}
+                     </span> 
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.1em]">Protocol Synced</div>
+                    {exactTime && <div className="text-[7px] font-black text-[#6c5ce7]/60">{exactTime} IST</div>}
+                  </div>
+               </div>
+             )}
           </motion.div>
         )}
       </AnimatePresence>
