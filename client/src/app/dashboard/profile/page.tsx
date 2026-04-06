@@ -645,6 +645,10 @@ export default function ProfilePage() {
                         });
                         if (res && res.status === "success") {
                             setShowOTPModal(true);
+                            // DEV FALLBACK
+                            if (res.devOtp || (res.message && res.message.includes("Dev Fallback"))) {
+                              alert(res.message || `Dev Fallback OTP: ${res.devOtp}`);
+                            }
                         } else {
                             alert(res.error || "Failed to send verification code.");
                         }

@@ -2684,9 +2684,14 @@ function ChatsPageContent() {
                     {pendingRequests.map((req) => (
                       <div key={req.id} className="p-3 rounded-xl border flex items-center justify-between gap-3" style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)" }}>
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className={`h-8 w-8 rounded-full bg-gradient-to-tr ${req.fromColor || 'from-purple-500 to-indigo-500'} flex items-center justify-center text-white font-black text-xs uppercase shadow-sm overflow-hidden`}>
-                            {req.avatarUrl ? <img src={req.avatarUrl} alt="" className="w-full h-full object-cover" /> : (req.fromName?.[0] || "?").toUpperCase()}
-                          </div>
+                          <Avatar 
+                            src={req.avatarUrl} 
+                            name={req.fromName} 
+                            color={req.fromColor} 
+                            size={32} 
+                            animate={true} 
+                            showBorder={false}
+                          />
                           <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -2804,10 +2809,16 @@ function ChatsPageContent() {
                     onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
                     className="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
                     <div className="relative">
-                      <div className={`h-14 w-14 rounded-full flex items-center justify-center text-white font-black text-xl shadow-xl transition-all duration-300 ${hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2 bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]') : 'ring-2 ring-transparent bg-gradient-to-tr ' + (user?.color?.includes('from-') ? user.color : 'from-[#6c5ce7] to-[#00d4ff]')} hover:scale-105 active:scale-95 uppercase overflow-hidden`}
-                        style={hasStory ? { border: `2px solid ${isDark ? '#12121c' : '#ffffff'}` } : {}}>
-                        {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : (nicknames[user.username]?.[0] || user.name?.[0] || user.username?.[0] || "?").toUpperCase()}
-                      </div>
+                <Avatar 
+                  src={user.avatarUrl} 
+                  name={nicknames[user.username] || user.name || user.username} 
+                  color={user.color || 'from-[#6c5ce7] to-[#00d4ff]'} 
+                  size={56} 
+                  className={hasStory ? 'ring-[3px] ring-[#ff006e] ring-offset-2' : ''}
+                  animate={true}
+                  showBorder={hasStory}
+                  onClick={() => hasStory ? router.push(`/dashboard/stories?user=${user.username}`) : handleOpenThread(user)}
+                />
                       {isUserOnline && !hasStory && (
                         <div className="absolute bottom-0 right-0.5 h-4 w-4 rounded-full bg-[#2ed573] shadow-[0_0_10px_#2ed573] z-10 animate-pulse"
                           style={{ border: `3.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />

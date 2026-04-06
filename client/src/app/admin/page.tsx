@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { API_BASE_URL, APP_LOGO } from "@/lib/config";
+import { Avatar } from "@/components/Avatar";
 
 // Removed Hardcoded Credentials. Using Zero-Knowledge API.
 
@@ -262,10 +263,20 @@ function UsersTab() {
 
             {/* User Info */}
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="w-11 h-11 rounded-full flex items-center justify-center font-black text-white text-sm shrink-0 overflow-hidden shadow-md relative"
-                style={{ background: user.avatarUrl ? undefined : `linear-gradient(135deg, #6c5ce7, #00d4ff)` }}>
-                {user.avatarUrl ? <img src={user.avatarUrl} className="w-full h-full object-cover" alt="" /> : user.fullName?.[0]?.toUpperCase() || "?"}
-                {user.online && <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#2ed573] border-2" style={{ borderColor: isDark ? "#10101e" : "#fff" }} />}
+              <div className="relative shrink-0">
+                <Avatar 
+                  src={user.avatarUrl} 
+                  name={user.fullName} 
+                  color={user.color} 
+                  size={44} 
+                  animate={true} 
+                  showBorder={false}
+                />
+                {user.online && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#2ed573] border-2 animate-pulse" 
+                    style={{ borderColor: isDark ? "#10101e" : "#fff" }} 
+                  />
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1757,6 +1768,11 @@ export default function AdminPanel() {
 
         if (res?.status === "success" && res?.requireOtp) {
           setOtpStep(true);
+          
+          // DEV FALLBACK
+          if (res.devOtp || (res.message && res.message.includes("Dev Fallback"))) {
+            alert(res.message || `Dev Fallback ADMIN OTP: ${res.devOtp}`);
+          }
         } else {
           setErrorMsg(res?.error || "Authentication Intercepted.");
         }

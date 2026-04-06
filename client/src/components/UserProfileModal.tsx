@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Phone, Video, MessageSquare, Shield, ShieldOff, MapPin, Share2, Copy, Check, QrCode, UserMinus, ChevronLeft, Mail } from "lucide-react";
 import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, DiscordIcon } from "./SocialIcons";
+import { Avatar } from "./Avatar";
 
 // ─── Unique QR per username (same canvas logic but seeded on username) ───
 function generateUniqueQR(username: string, size = 160): string {
@@ -153,13 +154,32 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
             <motion.div
               animate={{ boxShadow: ["0 0 0px rgba(108,92,231,0)", "0 0 30px rgba(108,92,231,0.5)", "0 0 0px rgba(108,92,231,0)"] }}
               transition={{ duration: 2.5, repeat: Infinity }}
-              className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${friend.color || "from-[#6c5ce7] to-[#00d4ff]"} flex items-center justify-center text-white text-4xl sm:text-5xl font-extrabold ring-[6px] shadow-xl overflow-hidden uppercase`}
-              style={{ "--tw-ring-color": isDark ? "rgba(16,16,28,1)" : "#fff", border: `6px solid ${isDark ? "rgba(16,16,28,1)" : "#fff"}` } as any}>
-              {friend.avatarUrl ? (
-                 <img src={friend.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-              ) : (
-                 <span className="drop-shadow-md">{(friend.name?.[0] || friend.username?.[0] || "N").toUpperCase()}</span>
-              )}
+              className="relative z-10"
+            >
+              <div className="hidden sm:block">
+                <Avatar 
+                  src={friend.avatarUrl} 
+                  name={friend.name || friend.username} 
+                  color={friend.color} 
+                  size={128} 
+                  animate={true} 
+                  showBorder={true}
+                  className="ring-[6px] shadow-2xl"
+                  borderColor={isDark ? "rgba(16,16,28,1)" : "#fff"}
+                />
+              </div>
+              <div className="sm:hidden">
+                <Avatar 
+                  src={friend.avatarUrl} 
+                  name={friend.name || friend.username} 
+                  color={friend.color} 
+                  size={96} 
+                  animate={true} 
+                  showBorder={true}
+                  className="ring-[6px] shadow-2xl"
+                  borderColor={isDark ? "rgba(16,16,28,1)" : "#fff"}
+                />
+              </div>
             </motion.div>
             {friend.online && (
               <motion.div 

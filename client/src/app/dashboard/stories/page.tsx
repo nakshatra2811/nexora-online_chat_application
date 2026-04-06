@@ -1025,16 +1025,16 @@ export default function StoriesPage() {
                   {/* Avatar stack of remaining users */}
                   <div className="relative flex -space-x-3 mb-4 z-10">
                     {suggestions.slice(3, 6).map((s, i) => (
-                      <div
-                        key={s.username}
-                        className="w-10 h-10 rounded-full border-2 border-[#1a1a2e] overflow-hidden bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white text-xs font-black shadow-lg"
-                        style={{ zIndex: 10 - i }}
-                      >
-                        {s.avatar_url ? (
-                          <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          (s.full_name || s.username)?.[0]?.toUpperCase()
-                        )}
+                      <div key={s.username} style={{ zIndex: 10 - i }}>
+                        <Avatar 
+                          src={s.avatar_url} 
+                          name={s.full_name || s.username} 
+                          color={s.color} 
+                          size={40} 
+                          animate={false} 
+                          showBorder={true}
+                          className="border-2 border-[#1a1a2e]"
+                        />
                       </div>
                     ))}
                     {suggestions.length - 3 > 3 && (

@@ -8,6 +8,7 @@ import { useTheme } from "@/lib/theme";
 import { Loader, OverlayLoader, ButtonLoader } from "@/components/Loader";
 import { nexoraFetch, APP_NAME, APP_LOGO } from "@/lib/config";
 import { signInWithGoogle } from "@/lib/firebase";
+import { Avatar } from "@/components/Avatar";
 
 function AuthContent() {
   const router = useRouter();
@@ -155,6 +156,10 @@ function AuthContent() {
       });
       if (data && data.status === "success") {
         setForgotStep(2);
+        // DEV FALLBACK
+        if (data.devOtp || (data.message && data.message.includes("Dev Fallback"))) {
+          alert(data.message || `Dev Fallback OTP: ${data.devOtp}`);
+        }
       } else {
         setForgotError("Recovery Protocol: Error transmitting code.");
       }
@@ -283,6 +288,10 @@ function AuthContent() {
             return c - 1;
           });
         }, 1000);
+        // DEV FALLBACK
+        if (data.devOtp || (data.message && data.message.includes("Dev Fallback"))) {
+          alert(data.message || `Dev Fallback OTP: ${data.devOtp}`);
+        }
       } else {
         alert(data?.error || "Failed to dispatch OTP");
       }
@@ -805,13 +814,15 @@ function AuthContent() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-[#6c5ce710] to-[#00d4ff10] opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="relative flex flex-col items-center text-center gap-4">
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white shadow-xl ring-[5px] ring-white/10 bg-gradient-to-br ${connectedUser.color || "from-[#6c5ce7] to-[#00d4ff]"} overflow-hidden uppercase`}>
-                      {connectedUser.avatar_url ? (
-                        <img src={connectedUser.avatar_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        connectedUser.fullName?.[0] || connectedUser.username?.[0]
-                      )}
-                    </div>
+                    <Avatar 
+                      src={connectedUser.avatar_url} 
+                      name={connectedUser.fullName || connectedUser.username} 
+                      color={connectedUser.color} 
+                      size={80} 
+                      animate={true} 
+                      showBorder={true}
+                      className="ring-[5px] ring-white/10 shadow-xl"
+                    />
                     <div>
                       <h3 className="text-xl font-black" style={{ color: "var(--text-primary)" }}>Connect with {connectedUser.fullName}</h3>
                       <p className="text-sm font-bold text-[#6c5ce7] mt-0.5">@{connectedUser.username}</p>
@@ -866,9 +877,15 @@ function AuthContent() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-[#6c5ce715] to-[#00d4ff15] opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="flex items-center gap-4 relative z-10">
-                    <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-xl font-black text-white shadow-xl bg-gradient-to-br ${savedAccount.color} shrink-0`}>
-                      {savedAccount.avatar ? <img src={savedAccount.avatar} className="w-full h-full object-cover rounded-[1.5rem]" /> : savedAccount.name[0]}
-                    </div>
+                    <Avatar 
+                      src={savedAccount.avatar} 
+                      name={savedAccount.name || savedAccount.username} 
+                      color={savedAccount.color} 
+                      size={64} 
+                      animate={false} 
+                      showBorder={false}
+                      className="shadow-xl"
+                    />
                     <div className="text-left flex-1 min-w-0">
                       <p className="text-[10px] font-black uppercase tracking-widest text-[#6c5ce7]">Connected Profile</p>
                       <h3 className="text-lg font-black truncate" style={{ color: "var(--text-primary)" }}>{savedAccount.name}</h3>

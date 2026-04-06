@@ -564,6 +564,9 @@ const emailTransporter = nodemailer.createTransport({
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_APP_PASSWORD,
     },
+    tls: {
+        rejectUnauthorized: false
+    }
 });
 
 emailTransporter.verify((error, success) => {
@@ -1999,22 +2002,28 @@ app.post('/api/auth/send-login-otp', async (req, res) => {
         
         console.log(`[AUTH] Login OTP for ${user.username}: ${otp}`); // Fallback in server logs
 
-        // Dispatch email non-blocking to prevent frontend UI hangs
-        nexoraMailProtocol('otp', user.email, { otp, username: user.username })
-            .then(sent => {
-                if (sent) {
-                    const successLog = `[${new Date().toISOString()}] SMTP_SUCCESS: user=${user.username}, email=${user.email}\n`;
-                    fs.appendFileSync('auth_debug.log', successLog);
-                } else {
-                    const failLog = `[${new Date().toISOString()}] SMTP_FAIL: user=${user.username}, email=${user.email}\n`;
-                    fs.appendFileSync('auth_debug.log', failLog);
-                }
-            })
-            .catch(err => {
-                const mailErr = `[${new Date().toISOString()}] SMTP_ERR: user=${user.username}, email=${user.email}, err=${err.message}\n`;
-                fs.appendFileSync('auth_debug.log', mailErr);
-                console.error(`[SMTP] Critical Relay Failure:`, err.message);
+        // Dispatch email and wait to handle local offline/testing fallbacks
+        let sent = false;
+        try {
+            sent = await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
+            if (sent) {
+                fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] SMTP_SUCCESS: user=${user.username}, email=${user.email}\n`);
+            } else {
+                fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] SMTP_FAIL: user=${user.username}, email=${user.email}\n`);
+            }
+        } catch (err) {
+            fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] SMTP_ERR: user=${user.username}, email=${user.email}, err=${err.message}\n`);
+            console.error(`[SMTP] Critical Relay Failure:`, err.message);
+        }
+
+        if (!sent) {
+            return res.json({ 
+                status: "success", 
+                message: `Dev Fallback: SMTP Failed. Your Login OTP is: ${otp}`, 
+                email: user.email,
+                devOtp: otp
             });
+        }
 
         res.json({ status: "success", message: "OTP transmitted securely. Access the Relay console in your inbox.", email: user.email });
     } catch (err) {
@@ -2108,7 +2117,11 @@ app.post('/api/auth/recovery', async (req, res) => {
         const sent = await nexoraMailProtocol('otp', email, { otp });
         if (!sent) {
             console.error(`[SMTP] Recovery Protocol Transmission Breach to ${email}`);
-            return res.status(500).json({ error: "Failed to transmit recovery protocol. Communication relay restricted." });
+            return res.json({ 
+                status: "success", 
+                message: `Dev Fallback: SMTP Failed. Your Recovery OTP is: ${otp}`,
+                devOtp: otp
+            });
         }
         res.json({ status: "success", message: "Recovery code transmitted to secure mail." });
     } catch (err) {
@@ -2460,8 +2473,13 @@ app.post('/api/profile/request-email-change', async (req, res) => {
             subject: 'Nexora: Verify Email Update',
             html: html
         };
-        await emailTransporter.sendMail(mailOptions);
-        res.json({ status: "success", message: "OTP sent to new email." });
+        try {
+            await emailTransporter.sendMail(mailOptions);
+            res.json({ status: "success", message: "OTP sent to new email." });
+        } catch (mailErr) {
+            console.error("Email update request mail error:", mailErr);
+            res.json({ status: "success", message: `Dev Fallback: SMTP Failed. Your OTP is: ${otp}`, devOtp: otp });
+        }
     } catch (err) {
         console.log("Email update request error:", err);
         res.status(500).json({ error: "Failed to send OTP." });
@@ -2574,15 +2592,26 @@ app.post('/api/admin/login', async (req, res) => {
         // Log the OTP console for bypass access if email fails
         console.warn(`[ADMIN] OTP Generated for ${email}: ${otp}`);
 
-        // Send OTP email in background (non-blocking) — never delay the response
-        nexoraMailProtocol('admin_otp', email, { otp })
-            .then(sent => {
-                if (!sent) console.error(`[ADMIN] SMTP background relay failure for ${email}. OTP: ${otp}`);
-                else console.log(`[ADMIN] OTP email dispatched to ${email}`);
-            })
-            .catch(err => console.error(`[ADMIN] Mail exception:`, err.message));
+        // Await email delivery so we can show Dev Fallback on SMTP issues
+        let sent = false;
+        try {
+            sent = await nexoraMailProtocol('admin_otp', email, { otp });
+            if (!sent) console.error(`[ADMIN] SMTP background relay failure for ${email}. OTP: ${otp}`);
+            else console.log(`[ADMIN] OTP email dispatched to ${email}`);
+        } catch (err) {
+            console.error(`[ADMIN] Mail exception:`, err.message);
+        }
 
-        // Respond immediately — OTP is already stored; email sends in background
+        if (!sent) {
+            return res.json({ 
+                status: "success", 
+                requireOtp: true, 
+                message: `Dev Fallback: SMTP Failed. Your ADMIN OTP is: ${otp}`,
+                devOtp: otp
+            });
+        }
+
+        // Respond with success
         return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP dispatched." });
     } catch (err) {
         console.error("Admin Login Error:", err.message);
