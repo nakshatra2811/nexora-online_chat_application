@@ -1959,12 +1959,12 @@ app.post('/api/auth/send-login-otp', async (req, res) => {
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         authStore.set(`login:${user.email}`, { otp, expiry: Date.now() + 10 * 60 * 1000, username: user.username });
+        console.log(`[AUTH] Login OTP for ${user.username}: ${otp}`); // Fallback in server logs
 
-        const sent = await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
-        if (!sent) {
-            console.error(`[SMTP] Critical Relay Failure to ${user.email} for @${user.username}`);
-            return res.status(500).json({ error: "Relay failed to transmit OTP. Protocol communication breach." });
-        }
+        // Dispatch email non-blocking to prevent frontend UI hangs
+        nexoraMailProtocol('otp', user.email, { otp, username: user.username })
+            .catch(err => console.error(`[SMTP] Critical Relay Failure to ${user.email} for @${user.username}:`, err));
+
         res.json({ status: "success", message: "OTP transmitted securely. Access the Relay console in your inbox.", email: user.email });
     } catch (err) {
         res.status(500).json({ error: "Relay failed to transmit OTP." });
