@@ -113,12 +113,20 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenB
             className="flex items-center gap-2"
           >
              <div className="flex flex-col border-l-2 border-[#6c5ce7]/30 pl-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-tight text-[#6c5ce7] flex items-center gap-1">
-                   LAST SEEN <span className="text-white/90">{exactTime}</span> <span className="text-[7px] opacity-40">IST</span>
-                </span>
-                <span className="text-[9px] font-black opacity-30 uppercase tracking-[0.15em] -mt-0.5">
-                  {formatLastSeen(lastVisit)}
-                </span>
+                <div className="flex flex-wrap items-center gap-1 text-[10px] font-black uppercase tracking-tight text-[#6c5ce7]">
+                   LAST SEEN <span className="text-white/95">
+                     {(() => {
+                        const str = formatLastSeen(lastVisit).toLowerCase();
+                        if (str.includes("today")) return "TODAY";
+                        if (str.includes("yesterday")) return "YESTERDAY";
+                        if (str.includes("just now")) return "TODAY";
+                        return str.split(" at ")[0];
+                     })()} 
+                     <span className="ml-1">{exactTime}</span>
+                   </span> 
+                   <span className="text-[7px] opacity-40 ml-0.5">IST</span>
+                </div>
+                <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em] mt-0.5">Identity Synced</div>
              </div>
           </motion.div>
         )}
