@@ -282,6 +282,22 @@ function AuthContent() {
     setIsLoading(true);
 
     try {
+      if (isLogin && !username && !password && savedAccount) {
+        const token = localStorage.getItem("nexora_token");
+        if (token) {
+          const data = await nexoraFetch("/api/auth/me");
+          if (data && !data.error) {
+            setSuccessOverlay({ show: true, isLogin: true, name: savedAccount.name });
+            setTimeout(() => router.push("/dashboard/chats"), 1500);
+            return;
+          }
+        }
+        // If token invalid or missing, just pre-fill and let user see it
+        setUsername(savedAccount.username);
+        setLoginMethod("password");
+        setIsLoading(false);
+        return;
+      }
       if (isLogin) {
         if (loginMethod === "otp" && isLoginOtpSent) {
             const data = await nexoraFetch("/api/auth/verify-login-otp", {

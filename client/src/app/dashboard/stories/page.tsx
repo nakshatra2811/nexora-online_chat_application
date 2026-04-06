@@ -80,6 +80,7 @@ export default function StoriesPage() {
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
 
   const fetchSuggestions = async () => {
     const username = localStorage.getItem("nexora_signup_username") || "";
@@ -946,23 +947,26 @@ export default function StoriesPage() {
               ))}
             </div>
           ) : suggestions.length > 0 ? (
+            <>
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="grid grid-cols-2 gap-4"
             >
-              {suggestions.slice(0, 3).map((s, i) => (
+              {(showAllSuggestions ? suggestions : suggestions.slice(0, 4)).map((s, i) => (
                 <motion.div 
                   key={s.username} 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.1 }}
                   whileHover={{ y: -5, scale: 1.02 }}
-                  className="relative p-5 rounded-[2rem] border border-white/5 shadow-xl flex flex-col items-center text-center group overflow-hidden"
+                  className="relative p-5 rounded-[2rem] border transition-all duration-300 shadow-xl flex flex-col items-center text-center group overflow-hidden cursor-pointer"
                   style={{ 
                     background: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)",
-                    backdropFilter: "blur(20px)"
+                    backdropFilter: "blur(20px)",
+                    borderColor: "rgba(255,255,255,0.05)"
                   }}
+                  onClick={() => setSelectedProfileUser(s)}
                 >
                   <div className={`absolute -top-10 -right-10 w-24 h-24 rounded-full opacity-10 blur-3xl bg-gradient-to-br ${s.color || 'from-[#6c5ce7] to-[#00d4ff]'}`} />
                   
@@ -971,61 +975,47 @@ export default function StoriesPage() {
                       src={s.avatar_url} 
                       name={s.full_name || s.username} 
                       color={s.color} 
-                      size={64} 
-                      className="ring-4 ring-white/10 group-hover:ring-[#6c5ce7]/40 transition-all duration-300" 
+                      size={72} 
+                      className="ring-4 ring-white/10 group-hover:ring-[#6c5ce7]/40 transition-all duration-300 shadow-2xl" 
                     />
                     {s.mutualCount > 0 && (
-                      <div className="absolute -bottom-1 -right-1 bg-[#6c5ce7] text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#1a1a2e]">
+                      <div className="absolute -bottom-1 -right-1 bg-[#6c5ce7] text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-[#1a1a2e]">
                         {s.mutualCount}
                       </div>
                     )}
                   </div>
 
                   <div className="w-full flex-grow flex flex-col">
-                    <h4 className="font-extrabold text-[13px] truncate w-full mb-0.5" style={{ color: "var(--text-primary)" }}>
+                    <h4 className="font-extrabold text-[14px] truncate w-full mb-0.5 tracking-tight" style={{ color: "var(--text-primary)" }}>
                       {s.full_name || s.username}
                     </h4>
-                    <p className="text-[10px] font-bold mb-3" style={{ color: "var(--text-muted)" }}>
-                      {s.mutualCount > 0 ? `${s.mutualCount} mutual` : `@${s.username}`}
+                    <p className="text-[11px] font-bold mb-3 opacity-60" style={{ color: "var(--text-muted)" }}>
+                      {s.mutualCount > 0 ? `${s.mutualCount} mutual friends` : `@${s.username}`}
                     </p>
 
                     <button
-                      onClick={() => handleAddFriend(s.username)}
-                      className="mt-auto px-4 py-2 rounded-full bg-[#6c5ce7] text-white text-[10px] font-black tracking-wider uppercase shadow-lg shadow-[#6c5ce7]/20 hover:shadow-[#6c5ce7]/40 active:scale-95 transition-all w-full"
+                      onClick={(e) => { e.stopPropagation(); handleAddFriend(s.username); }}
+                      className="mt-auto px-4 py-2.5 rounded-xl bg-[#6c5ce7] text-white text-[11px] font-black tracking-wider uppercase shadow-lg shadow-[#6c5ce7]/20 hover:shadow-[#6c5ce7]/40 active:scale-95 transition-all w-full"
                     >
                       Connect
                     </button>
                   </div>
                 </motion.div>
               ))}
-
-              {/* Slot 4: See More */}
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                whileHover={{ y: -5, scale: 1.02 }}
-                onClick={() => router.push('/dashboard/discover')}
-                className="relative p-5 rounded-[2rem] border border-white/5 shadow-xl flex flex-col items-center justify-center text-center cursor-pointer group overflow-hidden"
-                style={{ 
-                  background: "linear-gradient(135deg, rgba(108,92,231,0.05), rgba(0,212,255,0.05))",
-                  backdropFilter: "blur(20px)"
-                }}
-              >
-                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center mb-3 group-hover:bg-[#6c5ce7]/20 transition-colors">
-                  <RefreshCcw className="w-6 h-6" style={{ color: "#6c5ce7" }} />
-                </div>
-                <h4 className="font-extrabold text-[14px] mb-1" style={{ color: "var(--text-primary)" }}>
-                  See More
-                </h4>
-                <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
-                  Discover contacts
-                </p>
-                <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Plus className="w-4 h-4 text-[#6c5ce7]" />
-                </div>
-              </motion.div>
             </motion.div>
+            
+            {suggestions.length > 4 && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+                className="mt-6 flex w-full items-center justify-center py-4 rounded-2xl border transition-all text-[11px] font-black tracking-widest uppercase hover:bg-white/5"
+                style={{ borderColor: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)" }}
+              >
+                {showAllSuggestions ? "Show Less" : `See More (${suggestions.length - 4}+)`}
+              </motion.button>
+            )}
+            </>
           ) : (
             <div className="p-10 text-center rounded-[2rem] bg-white/5 border border-white/5">
                <p className="text-xs font-bold opacity-30 uppercase tracking-widest">No suggestions currently available</p>
@@ -1446,81 +1436,98 @@ export default function StoriesPage() {
                 </button>
               </div>
 
-              <div className="px-10 pb-10 -mt-20 relative z-10">
-                <div className="flex flex-col items-center">
-                  <div className="relative group/avatar mb-6">
-                    <Avatar 
-                      src={selectedProfileUser.avatarUrl} 
-                      name={nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username} 
-                      color={selectedProfileUser.color} 
-                      size={144} 
-                      animate={true}
-                      className={`border-[8px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl transition-transform duration-500 group-hover/avatar:scale-105`}
-                      showBorder={false}
-                    />
-                  </div>
-
-                  <div className="text-center mb-8">
-                    <h2 className="text-3xl font-black tracking-tight mb-1" style={{ color: "var(--text-primary)" }}>
-                      {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
-                    </h2>
-                    <p className="text-base font-black opacity-30 tracking-tight" style={{ color: "var(--text-muted)" }}>
-                      @{selectedProfileUser.username}
-                    </p>
+              <div className="px-6 pb-10 -mt-16 relative z-10">
+                <div className="flex flex-col">
+                  {/* Instagram-style Header */}
+                  <div className="flex items-center gap-6 mb-8">
+                    <div className="relative group/avatar">
+                      <Avatar 
+                        src={selectedProfileUser.avatarUrl || selectedProfileUser.avatar_url} 
+                        name={nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username} 
+                        color={selectedProfileUser.color} 
+                        size={100} 
+                        animate={true}
+                        className={`border-[4px] ${isDark ? 'border-[#12121e]' : 'border-white'} shadow-2xl transition-transform duration-500 group-hover/avatar:scale-105`}
+                        showBorder={false}
+                      />
+                    </div>
                     
-                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
-                      <span className="px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/10 shadow-sm whitespace-nowrap">
-                        Official Node
-                      </span>
-                      <span className="px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/10 text-green-500 border border-green-500/10 shadow-sm whitespace-nowrap">
-                        Encrypted
-                      </span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <h2 className="text-xl font-black truncate max-w-[150px]" style={{ color: "var(--text-primary)" }}>
+                          {selectedProfileUser.username}
+                        </h2>
+                        <div className="flex gap-1.5">
+                           <ShieldCheck className="w-4 h-4 text-[#6c5ce7]" />
+                           {selectedProfileUser.is_friend && <Users className="w-4 h-4 text-green-500" />}
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-4 mb-2">
+                        <div className="text-center">
+                          <p className="text-sm font-black" style={{ color: "var(--text-primary)" }}>{profileData?.stats?.posts || "0"}</p>
+                          <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Stories</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-black" style={{ color: "var(--text-primary)" }}>{profileData?.mutualCount || profileData?.mutual_count || "0"}</p>
+                          <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Mutual</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-black" style={{ color: "var(--text-primary)" }}>{profileData?.connectionsCount || "1"}</p>
+                          <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Node</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="w-full mb-8 p-6 rounded-[32px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 backdrop-blur-md">
-                     <div className="flex items-center gap-2 mb-3 opacity-40">
-                        <Lock className="w-3 h-3" />
-                        <h4 className="text-[10px] uppercase font-black tracking-[0.2em]">Identity Memo</h4>
-                     </div>
-                     <p className="text-sm font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                  <div className="mb-8">
+                    <h3 className="text-sm font-black mb-1" style={{ color: "var(--text-primary)" }}>
+                      {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
+                    </h3>
+                    <p className="text-xs font-bold opacity-60 mb-1" style={{ color: "var(--text-muted)" }}>
+                      {selectedProfileUser.is_friend ? "Node Connected" : "Discovery Protocol"}
+                    </p>
+                    <p className="text-[13px] font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                       {loadingProfile ? (
                         <span className="opacity-30 italic animate-pulse">Decrypting protocol memo...</span>
-                      ) : profileData?.bio || "No secure bio established for this node yet."}
+                      ) : (profileData?.bio || "No secure bio established for this node yet.")}
                     </p>
-                    <div className="mt-5 pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-center opacity-40 font-black text-[9px] tracking-[0.3em] uppercase">
-                       SECURE NODE ACCESS &bull; ENCRYPTED PROTOCOL
-                    </div>
                   </div>
 
-
-                  <div className="flex gap-3 w-full">
+                  <div className="w-full mb-6 flex gap-2">
                     <motion.button 
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                      onClick={() => { 
-                         router.push(`/dashboard/chats?u=${selectedProfileUser.username}`);
-                      }}
-                      className="flex-1 py-4.5 rounded-[28px] bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
+                      onClick={() => handleAddFriend(selectedProfileUser.username)}
+                      className="flex-[2] py-3.5 rounded-xl bg-[#6c5ce7] text-white font-black uppercase text-[11px] tracking-widest transition-all shadow-lg shadow-purple-500/20"
+                    >
+                      Connect
+                    </motion.button>
+                    <motion.button 
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                      onClick={() => { router.push(`/dashboard/chats?u=${selectedProfileUser.username}`); }}
+                      className="flex-1 py-3.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      Message Node
+                      Message
                     </motion.button>
-                    
+                  </div>
+
+                  <div className="flex gap-2 w-full">
                     {blockedThreads.includes(selectedProfileUser.id || 0) ? (
                       <motion.button 
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
                         onClick={() => handleUnblockUser(selectedProfileUser.id || 0)}
-                        className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
+                        className="flex-1 py-3.5 rounded-xl bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
                       >
-                        Unblock
+                        Unblock Node
                       </motion.button>
                     ) : (
                       <motion.button 
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
                         onClick={() => handleBlockUser(selectedProfileUser.id || 0)}
-                        className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
+                        className="flex-1 py-3.5 rounded-xl bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
                       >
-                        Block
+                        Block Communication
                       </motion.button>
                     )}
                   </div>

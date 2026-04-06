@@ -1657,6 +1657,7 @@ app.post('/api/auth/login', async (req, res) => {
 // AUTHENTICATION PROTOCOL (Unified Identity & Secure Handshake)
 // ------------------------------------------------------------------
 const authStore = new Map(); // identifier -> { otp, expiry, verified, type, ... }
+const otpStore = new Map();  // Admin & specialized verification store
 
 // Helper: Verify Google Token (Zero-Trust Security)
 async function verifyGoogleToken(idToken) {
@@ -1752,7 +1753,7 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
             }
         }
 
-        res.json({ suggestions: suggestions.slice(0, 10) });
+        res.json({ suggestions: suggestions.slice(0, 30) });
     } catch (err) {
         console.error("[SUGGESTIONS] Error:", err);
         res.status(500).json({ error: "Failed to generate suggestions" });
@@ -1913,8 +1914,9 @@ app.post('/api/auth/send-login-otp', async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         authStore.set(`login:${user.email}`, { otp, expiry: Date.now() + 10 * 60 * 1000, username: user.username });
 
-        await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
-        res.json({ status: "success", message: "OTP transmitted securely.", email: user.email });
+        const sent = await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
+        if (!sent) return res.status(500).json({ error: "Relay failed to transmit OTP. Protocol communication breach." });
+        res.json({ status: "success", message: "OTP transmitted securely. Access the Relay console in your inbox.", email: user.email });
     } catch (err) {
         res.status(500).json({ error: "Relay failed to transmit OTP." });
     }
@@ -1980,7 +1982,7 @@ app.get('/api/admin/announcement', (req, res) => {
     res.json({ announcement: currentAnnouncement });
 });
 
-app.post('/api/admin/announcement', (req, res) => {
+app.post('/api/admin/announcement', authenticateToken, isAdmin, (req, res) => {
     const { announcement } = req.body;
     if (announcement !== undefined) {
         currentAnnouncement = announcement;
@@ -2379,7 +2381,7 @@ app.post('/api/profile/verify-email-change', async (req, res) => {
 
 
 // GET /api/admin/config — Read current SEO config
-app.get('/api/admin/config', (req, res) => {
+app.get('/api/admin/config', authenticateToken, isAdmin, (req, res) => {
     try {
         const seoPath = path.join(__dirname, '../client/src/config/seo.json');
         const existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8'));
@@ -2390,7 +2392,7 @@ app.get('/api/admin/config', (req, res) => {
 });
 
 // POST /api/admin/config — Write full SEO config + optional logo
-app.post('/api/admin/config', async (req, res) => {
+app.post('/api/admin/config', authenticateToken, isAdmin, async (req, res) => {
     try {
         const { seo, logoBase64 } = req.body;
         if (seo) {
@@ -2418,7 +2420,7 @@ app.post('/api/admin/config', async (req, res) => {
 });
 
 // POST /api/admin/ping-search-engines - Notify Search engines
-app.post('/api/admin/ping-search-engines', async (req, res) => {
+app.post('/api/admin/ping-search-engines', authenticateToken, isAdmin, async (req, res) => {
     // In a real environment, you'd HTTP GET to google ping with the sitemap url
     // Since we don't have the final remote url necessarily during dev, we mock success here.
     ((..._args) => { })('[ADMIN] Search Engines Ping Triggered: Google & Bing notified of updated Sitemap.');
@@ -2442,13 +2444,19 @@ app.post('/api/admin/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, adminUser.password);
         if (!isMatch) return res.status(401).json({ error: "Invalid access credentials." });
 
-        // Generate OTP
+        // Initialize secure verification code and expiry
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = Date.now() + 10 * 60 * 1000;
-        otpStore.set("admin_login_otp", { otp, expiry, email: email.toLowerCase() });
+        const expiry = Date.now() + 15 * 60 * 1000; // 15 Minute Segment
+
+        // Use user-specific key for security and multi-admin stability
+        const otpKey = `admin_login_otp:${email.toLowerCase()}`;
+        otpStore.set(otpKey, { otp, expiry, email: email.toLowerCase() });
 
         // Send OTP via SMTP
-        await nexoraMailProtocol('otp', email, { otp });
+        const sent = await nexoraMailProtocol('otp', email, { otp });
+        if (!sent) {
+            return res.status(500).json({ error: "Relay failure: Unable to transmit secure verification segment." });
+        }
 
         return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP sent." });
     } catch (err) {
@@ -2461,19 +2469,20 @@ app.post('/api/admin/verify-login', async (req, res) => {
     const { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ error: "Missing verification payload." });
 
-    const record = otpStore.get("admin_login_otp");
+    const otpKey = `admin_login_otp:${email.toLowerCase()}`;
+    const record = otpStore.get(otpKey);
     if (!record || record.email !== email.toLowerCase()) {
         return res.status(400).json({ error: "Invalid session. Please authenticate again." });
     }
     if (Date.now() > record.expiry) {
-        otpStore.delete("admin_login_otp");
+        otpStore.delete(otpKey);
         return res.status(400).json({ error: "OTP token expired." });
     }
     if (record.otp !== otp.toString().trim()) {
         return res.status(400).json({ error: "Invalid verification segment." });
     }
 
-    otpStore.delete("admin_login_otp");
+    otpStore.delete(otpKey);
     
     try {
         const user = await db.get("SELECT id, username, role FROM users WHERE LOWER(email) = ? AND role = 'Admin'", [email.toLowerCase()]);
