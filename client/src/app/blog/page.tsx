@@ -103,15 +103,36 @@ export default function BlogPage() {
                   {post.excerpt}
                 </p>
                 
-                <div className="mt-auto pt-4 border-t flex items-center justify-between" style={{ borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
-                   <div className="flex items-center gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(window.location.origin + '/blog/' + post.slug); }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Link2 className="w-4 h-4" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); /* Add share logic */ }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"><Share2 className="w-4 h-4" /></button>
-                   </div>
-                   <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-[#6c5ce7]/10 group-hover:bg-[#6c5ce7] group-hover:text-white">
-                      <ChevronRight className="w-4 h-4" />
-                   </div>
-                </div>
+                 <div className="mt-auto pt-4 border-t flex items-center justify-between" style={{ borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}>
+                    <div className="flex items-center gap-2">
+                       <button onClick={(e) => { 
+                          e.stopPropagation(); 
+                          const url = `${window.location.origin}/blog/${post.slug}`;
+                          navigator.clipboard.writeText(url);
+                          alert("Link copied to clipboard!");
+                       }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors" title="Copy Link">
+                          <Link2 className="w-4 h-4" />
+                       </button>
+                       <button onClick={(e) => { 
+                          e.stopPropagation(); 
+                          const url = `${window.location.origin}/blog/${post.slug}`;
+                          if (navigator.share) {
+                             navigator.share({
+                                title: post.title,
+                                text: post.excerpt,
+                                url: url
+                             }).catch(() => {});
+                          } else {
+                             window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(post.title + " " + url)}`, "_blank");
+                          }
+                       }} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors" title="Share Article">
+                          <Share2 className="w-4 h-4" />
+                       </button>
+                    </div>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-[#6c5ce7]/10 group-hover:bg-[#6c5ce7] group-hover:text-white">
+                       <ChevronRight className="w-4 h-4" />
+                    </div>
+                 </div>
              </div>
            </motion.div>
          ))}

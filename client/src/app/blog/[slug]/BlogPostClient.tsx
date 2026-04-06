@@ -39,6 +39,24 @@ function FacebookIcon({ className }: { className?: string }) {
   );
 }
 
+function SnapchatIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.25c-3.15 0-5.7 1.25-5.7 3.75 0 .6.15 1.05.3 1.35C5.1 7.2 3 8.55 3 11.25c0 1.2.6 2.1 2.25 2.7-.15.45-.6 2.25-1.05 2.85-.3.45-.45.6-.45.75 0 .15.15.3.3.3h15.9c.15 0 .3-.15.3-.3 0-.15-.15-.3-.45-.75-.45-.6-.9-2.4-1.05-2.85 1.65-.6 2.25-1.5 2.25-2.7 0-2.7-2.1-4.05-3.6-3.9.15-.3.3-.75.3-1.35 0-2.5-2.55-3.75-5.7-3.75zM12 21c-1.5 0-2.25-.75-3-1.5 0-.15.15-.15.3-.15h5.4c.15 0 .3 0 .3.15-.75.75-1.5 1.5-3 1.5z" />
+    </svg>
+  );
+}
+
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+    </svg>
+  );
+}
+
 export default function BlogPostClient({ post, slug }: { post: any; slug: string }) {
   const { isDark } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -56,6 +74,24 @@ export default function BlogPostClient({ post, slug }: { post: any; slug: string
   const shareText = post ? `${post.title} — Read on Nexora Blog` : "Check this out on Nexora Blog";
 
   const shareLinks = [
+    {
+      label: "Instagram",
+      icon: <InstagramIcon className="w-4 h-4" />,
+      color: "#E4405F",
+      bg: "rgba(228,64,95,0.10)",
+      darkColor: "#E4405F",
+      darkBg: "rgba(228,64,95,0.12)",
+      href: `https://www.instagram.com/direct/inbox/`,
+    },
+    {
+      label: "Snapchat",
+      icon: <SnapchatIcon className="w-4 h-4" />,
+      color: "#FFFC00",
+      bg: "rgba(255,252,0,0.10)",
+      darkColor: "#FFFC00",
+      darkBg: "rgba(255,252,0,0.12)",
+      href: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(postUrl)}`,
+    },
     {
       label: "Twitter / X",
       icon: <TwitterXIcon className="w-4 h-4" />,
@@ -103,9 +139,35 @@ export default function BlogPostClient({ post, slug }: { post: any; slug: string
 
   if (!post) {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center gap-4 ${isDark ? "bg-[#0f0f13] text-white" : "bg-gray-50 text-gray-900"}`}>
-        <p className="text-xl font-bold opacity-60">Article not found.</p>
-        <Link href="/blog" className="text-[#6c5ce7] font-bold underline">← Back to Blog</Link>
+      <div className={`min-h-[100dvh] flex flex-col items-center justify-center p-6 text-center transition-colors duration-500 ease-in-out ${isDark ? 'bg-[#0f0f13] text-white' : 'bg-gray-50 text-gray-900'}`}>
+        <motion.div
+           initial={{ scale: 0.8, opacity: 0 }}
+           animate={{ scale: 1, opacity: 1 }}
+           className="relative mb-8 sm:mb-12"
+        >
+          <div className="absolute inset-0 bg-[#6c5ce7] blur-[120px] opacity-20 animate-pulse" />
+          <div className="relative text-[120px] sm:text-[180px] font-black leading-none tracking-tighter opacity-10 select-none">404</div>
+          <div className="absolute inset-0 flex items-center justify-center">
+             <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-3xl bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] flex items-center justify-center shadow-[0_20px_50px_rgba(108,92,231,0.3)] border border-white/20">
+               <ArrowLeft className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+             </div>
+          </div>
+        </motion.div>
+        
+        <h1 className="text-3xl sm:text-5xl font-black mb-4 sm:mb-6 tracking-tight">Article not found.</h1>
+        <p className="text-base sm:text-lg opacity-60 mb-10 max-w-md font-medium leading-relaxed">
+          The transmission might have been redacted or the encrypted link has expired. Secure communication is our priority.
+        </p>
+        
+        <Link href="/blog" 
+          className="group relative flex items-center gap-3 px-8 sm:px-10 py-4 sm:py-5 rounded-[2rem] font-black text-base sm:text-lg transition-all active:scale-95 shadow-[0_15px_40px_rgba(108,92,231,0.2)] hover:shadow-[0_20px_50px_rgba(108,92,231,0.3)] overflow-hidden"
+          style={{ background: "#6c5ce7", color: "#fff" }}>
+          <span className="relative z-10 flex items-center gap-2">
+            <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
+            Return to Hub
+          </span>
+          <div className="absolute inset-0 rounded-[2rem] bg-white opacity-0 group-hover:opacity-10 transition-opacity" />
+        </Link>
       </div>
     );
   }

@@ -15,8 +15,9 @@ async function fetchPost(slug: string) {
 }
 
 // ── Dynamic OG / Twitter card metadata per post ──
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const post = await fetchPost(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await fetchPost(slug);
   const siteUrl = "https://nexora31.vercel.app";
 
   if (!post) {
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const image = post.image && !post.image.endsWith('.svg')
     ? post.image
     : `${siteUrl}/icon.png`;
-  const url = `${siteUrl}/blog/${params.slug}`;
+  const url = `${siteUrl}/blog/${slug}`;
 
   return {
     metadataBase: new URL(siteUrl),
@@ -67,7 +68,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function BlogPostPage({ params }: { params: { slug: string } }) {
-  const post = await fetchPost(params.slug);
-  return <BlogPostClient post={post} slug={params.slug} />;
+export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const post = await fetchPost(slug);
+  return <BlogPostClient post={post} slug={slug} />;
 }

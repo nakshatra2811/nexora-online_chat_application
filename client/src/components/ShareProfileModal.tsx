@@ -21,14 +21,14 @@ export function ShareProfileModal({ profile, onClose, isDark }: { profile: any; 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shareApps = [
-    { name: "WhatsApp", icon: <WhatsAppIcon size={24} color="#25D366" />, color: "#25D366", bg: "rgba(37,211,102,0.12)", url: `https://wa.me/?text=Connect with me on Nexora! ${shareUrl}` },
-    { name: "Telegram", icon: <TelegramIcon size={24} color="#2CA5E0" />, color: "#2CA5E0", bg: "rgba(44,165,224,0.12)", url: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent("Connect with me on Nexora!")}` },
-    { name: "Instagram", icon: <InstagramGradientIcon size={24} />, color: "#E1306C", bg: "rgba(225,48,108,0.12)", url: `https://instagram.com` },
-    { name: "Snapchat", icon: <SnapchatIcon size={24} color="#FFFC00" />, color: "#FFFC00", bg: "rgba(255,252,0,0.15)", url: `https://snapchat.com` },
-    { name: "Twitter/X", icon: <TwitterIcon size={24} color="#1DA1F2" />, color: "#1DA1F2", bg: "rgba(29,161,242,0.12)", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent("Connect with me on Nexora! " + shareUrl)}` },
-    { name: "Email", icon: <Mail className="w-6 h-6" />, color: "#6c5ce7", bg: "rgba(108,92,231,0.12)", url: `mailto:?subject=Join me on Nexora&body=Connect with me on Nexora! ${shareUrl}` },
-  ];
+   const shareApps = [
+     { name: "WhatsApp", icon: <WhatsAppIcon size={24} color="#25D366" />, color: "#25D366", bg: "rgba(37,211,102,0.12)", url: `https://wa.me/?text=${encodeURIComponent(`Connect with me on Nexora! ${shareUrl}`)}` },
+     { name: "Telegram", icon: <TelegramIcon size={24} color="#2CA5E0" />, color: "#2CA5E0", bg: "rgba(44,165,224,0.12)", url: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent("Connect with me on Nexora!")}` },
+     { name: "Instagram", icon: <InstagramGradientIcon size={24} />, color: "#E1306C", bg: "rgba(225,48,108,0.12)", url: `https://instagram.com/direct/inbox/` }, // Redirect to DM to share
+     { name: "Snapchat", icon: <SnapchatIcon size={24} color="#FFFC00" />, color: "#FFFC00", bg: "rgba(255,252,0,0.15)", url: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(shareUrl)}` },
+     { name: "Twitter/X", icon: <TwitterIcon size={24} color="#1DA1F2" />, color: "#1DA1F2", bg: "rgba(29,161,242,0.12)", url: `https://twitter.com/intent/tweet?text=${encodeURIComponent("Connect with me on Nexora! " + shareUrl)}` },
+     { name: "Email", icon: <Mail className="w-6 h-6" />, color: "#6c5ce7", bg: "rgba(108,92,231,0.12)", url: `mailto:?subject=Join me on Nexora&body=Connect with me on Nexora! ${shareUrl}` },
+   ];
 
   const handleShareApp = (app: typeof shareApps[0]) => {
     if (typeof navigator !== "undefined" && navigator.share && app.name === "WhatsApp") {

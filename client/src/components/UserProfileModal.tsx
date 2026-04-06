@@ -2,8 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Phone, Video, MessageSquare, Shield, ShieldOff, MapPin, Share2, Copy, Check, QrCode, UserMinus, ChevronLeft, Mail } from "lucide-react";
-import { WhatsAppIcon, TelegramIcon, InstagramGradientIcon, DiscordIcon } from "./SocialIcons";
+import { 
+  X, MessageSquare, Phone, Video, UserMinus, QrCode, Share2, 
+  Copy, Check, Shield, ShieldOff, MapPin, ChevronLeft, Mail 
+} from "lucide-react";
+import { 
+  WhatsAppIcon, TelegramIcon, InstagramGradientIcon, DiscordIcon, 
+  SnapchatIcon 
+} from "./SocialIcons";
 import { Avatar } from "./Avatar";
 
 // ─── Unique QR per username (same canvas logic but seeded on username) ───
@@ -97,12 +103,12 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shareApps = [
-    { name: "WhatsApp", icon: <WhatsAppIcon size={20} color="#25D366" />, color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
-    { name: "Telegram", icon: <TelegramIcon size={20} color="#2CA5E0" />, color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with ${friend.name} on Nexora — encrypted private chat.`)}` },
-    { name: "Instagram", icon: <InstagramGradientIcon size={20} />, color: "#E1306C", url: "https://instagram.com/nexora_e2ee_31" },
-    { name: "Discord", icon: <DiscordIcon size={20} color="#5865F2" />, color: "#5865F2", url: `https://discord.com` },
-  ];
+    const shareApps = [
+      { name: "WhatsApp", icon: <WhatsAppIcon size={20} color="#25D366" />, color: "#25D366", url: `https://wa.me/?text=${encodeURIComponent(`🔐 Connect with me on Nexora — The Private Chat Protocol.\n${profileUrl}`)}` },
+      { name: "Telegram", icon: <TelegramIcon size={20} color="#2CA5E0" />, color: "#2CA5E0", url: `https://t.me/share/url?url=${encodeURIComponent(profileUrl)}&text=${encodeURIComponent(`🔐 Connect with me on Nexora — encrypted private chat.`)}` },
+      { name: "Instagram", icon: <InstagramGradientIcon size={20} />, color: "#E1306C", url: `https://instagram.com/direct/inbox/` },
+      { name: "Snapchat", icon: <SnapchatIcon size={20} color="#FFFC00" />, color: "#FFFC00", url: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(profileUrl)}` },
+    ];
 
 
   const downloadQR = () => {

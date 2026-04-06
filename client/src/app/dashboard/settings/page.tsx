@@ -13,6 +13,12 @@ import { useTheme } from "@/lib/theme";
 import { createPortal } from "react-dom";
 
 /* ─── Security questions ─── */
+const sKey = (k: string) => {
+  if (typeof window === 'undefined') return k;
+  const user = localStorage.getItem("nexora_logged_in_user");
+  return user ? `${user}_${k}` : k;
+};
+
 const GLOBAL_CHAT_LOCK_QUESTIONS = [
   "What is your secret code name?",
   "What is your hidden sanctuary?",
@@ -106,9 +112,9 @@ interface LockSetupProps {
 }
 
 function LockSetupModal({ type, onClose, onSave, isDark }: LockSetupProps) {
-  const username = typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "";
+  const username = typeof window !== "undefined" ? localStorage.getItem("nexora_logged_in_user") || "" : "";
   const questions = type === "global_chat" ? GLOBAL_CHAT_LOCK_QUESTIONS : APP_LOCK_QUESTIONS;
-  const prefix = type === "global_chat" ? `${username}_global_chat_lock` : `${username}_app_lock`;
+  const prefix = type === "global_chat" ? `global_chat_lock` : `app_lock`;
   const title = type === "global_chat" ? "Chat Page Lock Setup" : "App Lock Setup";
   const icon = type === "global_chat" ? "💬" : "📱";
 
@@ -129,10 +135,10 @@ function LockSetupModal({ type, onClose, onSave, isDark }: LockSetupProps) {
       setStep("question");
     } else {
       if (answer.trim().length < 2) { setError("Please provide a longer answer"); return; }
-      localStorage.setItem(`${prefix}_enabled`, "true");
-      localStorage.setItem(`${prefix}_pin`, pin);
-      localStorage.setItem(`${prefix}_question`, questions[selectedQ]);
-      localStorage.setItem(`${prefix}_answer`, answer.trim().toLowerCase());
+      localStorage.setItem(sKey(`${prefix}_enabled`), "true");
+      localStorage.setItem(sKey(`${prefix}_pin`), pin);
+      localStorage.setItem(sKey(`${prefix}_question`), questions[selectedQ]);
+      localStorage.setItem(sKey(`${prefix}_answer`), answer.trim().toLowerCase());
       onSave();
       onClose();
     }
@@ -215,8 +221,7 @@ function LockSetupModal({ type, onClose, onSave, isDark }: LockSetupProps) {
 
 // ─── Lock Card ─── (shown in settings for each lock type)
 function LockCard({ type, isDark }: { type: LockType; isDark: boolean }) {
-  const username = typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "";
-  const prefix = type === "global_chat" ? `${username}_global_chat_lock` : `${username}_app_lock`;
+  const prefix = type === "global_chat" ? `global_chat_lock` : `app_lock`;
   const title = type === "global_chat" ? "Chat Page Lock" : "App Lock";
   const desc = type === "global_chat" ? "Lock entire Chats Dashboard" : "Require PIN on app open after login";
   const color = type === "global_chat" ? "from-[#ff006e] to-[#a29bfe]" : "from-[#6c5ce7] to-[#00d4ff]";
@@ -231,17 +236,17 @@ function LockCard({ type, isDark }: { type: LockType; isDark: boolean }) {
   const [forgotError, setForgotError] = useState("");
 
   useEffect(() => {
-    setEnabled(localStorage.getItem(`${prefix}_enabled`) === "true");
+    setEnabled(localStorage.getItem(sKey(`${prefix}_enabled`)) === "true");
   }, [prefix]);
 
   const handleToggle = () => {
     if (!enabled) {
       setShowSetup(true);
     } else {
-      localStorage.removeItem(`${prefix}_enabled`);
-      localStorage.removeItem(`${prefix}_pin`);
-      localStorage.removeItem(`${prefix}_question`);
-      localStorage.removeItem(`${prefix}_answer`);
+      localStorage.removeItem(sKey(`${prefix}_enabled`));
+      localStorage.removeItem(sKey(`${prefix}_pin`));
+      localStorage.removeItem(sKey(`${prefix}_question`));
+      localStorage.removeItem(sKey(`${prefix}_answer`));
       setEnabled(false);
     }
   };
@@ -249,7 +254,7 @@ function LockCard({ type, isDark }: { type: LockType; isDark: boolean }) {
   const handleForgot = () => {
     setForgotError("");
     if (forgotStep === "answer") {
-      const saved = localStorage.getItem(`${prefix}_answer`) || "";
+      const saved = localStorage.getItem(sKey(`${prefix}_answer`)) || "";
       if (forgotAnswer.trim().toLowerCase() !== saved) {
         setForgotError("Incorrect answer. Try again.");
         return;
@@ -257,13 +262,13 @@ function LockCard({ type, isDark }: { type: LockType; isDark: boolean }) {
       setForgotStep("newpin");
     } else {
       if (newPin.length < 4) { setForgotError("PIN must be 4+ digits"); return; }
-      localStorage.setItem(`${prefix}_pin`, newPin);
+      localStorage.setItem(sKey(`${prefix}_pin`), newPin);
       setShowForgot(false);
       setForgotAnswer(""); setNewPin(""); setForgotStep("answer");
     }
   };
 
-  const savedQ = typeof window !== "undefined" ? localStorage.getItem(`${prefix}_question`) || "" : "";
+  const savedQ = typeof window !== "undefined" ? localStorage.getItem(sKey(`${prefix}_question`)) || "" : "";
 
   return (
     <>
@@ -382,10 +387,16 @@ export default function SettingsPage() {
   };
 
   const handleLogout = () => {
+    // SECURITY Protocol: Clear session tokens but PRESERVE user-scoped data
+    // This allows Multi-Account switching (Old profile data restoration)
     localStorage.removeItem("nexora_token");
-    localStorage.removeItem("nexora_signup_username");
-    localStorage.removeItem("nexora_signup_email");
-    localStorage.removeItem("nexora_signup_role");
+    localStorage.removeItem("nexora_auth_token"); // Compatibility fallback
+    localStorage.removeItem("nexora_logged_in_user");
+    localStorage.removeItem("active_chat_id");
+    
+    // Clear temporary auth flags (not user scoped)
+    localStorage.removeItem("nexora_pin_verified");
+    
     document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
     router.push("/auth");
   };

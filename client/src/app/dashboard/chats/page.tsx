@@ -66,6 +66,7 @@ interface ChatMessage {
   isSelf: boolean;
   status: "sending" | "delivered" | "seen";
   attachment?: { name: string; type: string; url: string; views?: number; size?: number };
+  caption?: string;
   reactions: Record<string, number>;
   replyTo?: string;
   isCallLog?: { type: "voice" | "video"; direction: "outgoing" | "incoming" | "missed"; duration: number };
@@ -1446,10 +1447,11 @@ function ChatsPageContent() {
             status: "delivered",
             reactions: {},
             attachment: data.attachment,
+            caption: data.caption,
             poll: data.poll,
             contact: data.contact,
             replyTo: data.replyTo,
-            isViewOnce: data.isViewOnce,
+            isViewOnce: data.isViewOnce === true || data.caption === "🔵 Quick Image",
           };
 
           const currentThread = activeThreadRef.current;
@@ -1983,6 +1985,13 @@ function ChatsPageContent() {
   // Emit typing indicator when user is typing
   const handleInputChange = (val: string) => {
     setInputValue(val);
+    
+    // Auto-resize textarea logic
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+    }
+
     const socket = socketService.getSocket();
     if (!socket || !activeThread?.username) return;
     socket.emit("dm:typing", { to: activeThread.username, isTyping: val.length > 0 });
@@ -2018,7 +2027,7 @@ function ChatsPageContent() {
         isSelf: true, status: "delivered", reactions: {},
         attachment,
         replyTo: currentReplyId,
-        isViewOnce: isImage,
+        isViewOnce: true,
       };
 
       setMessages(prev => [...prev, msg]);
@@ -2039,7 +2048,7 @@ function ChatsPageContent() {
           msgId, timestamp,
           caption: msg.text,
           replyTo: currentReplyId,
-          isViewOnce: isImage
+          isViewOnce: true
         });
       }
     };
@@ -2172,7 +2181,7 @@ function ChatsPageContent() {
       timestamp,
       createdAt: Date.now(),
       isSelf: true, status: "delivered", reactions: {},
-      attachment: undefined,
+      attachment: attachment,
       isViewOnce: true,
       replyTo: currentReplyId,
     };
@@ -3060,8 +3069,11 @@ function ChatsPageContent() {
             </div>
             <button
               onClick={() => {
-                if (confirm("Logout from current session?")) {
-                  localStorage.clear();
+                if (confirm("Logout from current account? Your local data will be saved for next time.")) {
+                  // Only clear session data, keep username-prefixed data intact
+                  localStorage.removeItem("nexora_logged_in_user");
+                  localStorage.removeItem("nexora_auth_token");
+                  localStorage.removeItem("active_chat_id");
                   document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
                   router.push("/auth");
                 }
@@ -3460,10 +3472,10 @@ function ChatsPageContent() {
                                   >
                                     <div className="absolute inset-0 bg-white/10 blur-xl group-hover/vo:bg-white/20 transition-colors" />
                                     <div className="w-14 h-14 rounded-[1rem] bg-white/10 backdrop-blur-md flex items-center justify-center mb-3 shadow-inner relative z-10 border border-white/10">
-                                      <div className="w-4 h-4 rounded-full bg-white/60 blur-[3px] animate-pulse" />
+                                      <div className="w-4 h-4 rounded-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-pulse" />
                                     </div>
-                                    <span className="text-white text-xs font-black tracking-[0.1em] uppercase relative z-10 drop-shadow-md">{m.isSelf ? "Sent Quick Image" : "Tap to View Image"}</span>
-                                    <span className="text-white/60 text-[8px] font-bold mt-1 uppercase relative z-10">{m.isSelf ? "Only you can see this" : "Secure • 1 View Only"}</span>
+                                    <span className="text-white text-xs font-black tracking-[0.1em] uppercase relative z-10 drop-shadow-md">{m.isSelf ? "Quick Image" : "Quick Image"}</span>
+                                    <span className="text-white/60 text-[8px] font-bold mt-1 uppercase relative z-10">{m.isSelf ? "Sent • One view" : "Tap to reveal • One view"}</span>
                                   </div>
                                 )
                               ) : (
