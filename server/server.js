@@ -1198,6 +1198,10 @@ io.on('connection', (socket) => {
         // 1. Broadcast online status to others
         socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
 
+        // 2. Send INITIAL list of online users to the registering user
+        const onlineUsernames = Array.from(new Set(Array.from(socketToUser.values())));
+        socket.emit('current_online_users', onlineUsernames);
+
         // Update last visit just in case server restarts while online
         try {
             await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [Date.now(), normalizedId]);

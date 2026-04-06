@@ -855,6 +855,21 @@ function ChatsPageContent() {
     }
   }, [activeThread]);
 
+  // 🔥 CRITICAL: Real-time sync for activeThread status (online/lastVisit)
+  useEffect(() => {
+    if (activeThread) {
+      const match = threads.find(t => t.id === activeThread.id);
+      if (match && (
+        match.online !== activeThread.online || 
+        match.lastVisit !== activeThread.lastVisit ||
+        match.avatarUrl !== activeThread.avatarUrl ||
+        match.name !== activeThread.name
+      )) {
+        setActiveThread(prev => prev ? { ...prev, ...match } : null);
+      }
+    }
+  }, [threads, activeThread?.id]);
+
   useEffect(() => {
     const loadMessages = async () => {
       if (!activeThread || !vaultReady) return;
