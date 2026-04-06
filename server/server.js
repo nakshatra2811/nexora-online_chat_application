@@ -446,6 +446,13 @@ let pgPool;
 // START SERVER (Ensured to run in parallel with DB migrations)
 // ------------------------------------------------------------------
 const PORT = process.env.PORT || 5000;
+console.log(`[CORE] Attempting to listen on PORT ${PORT}...`);
+server.on('error', (err) => {
+    console.error("[SERVER] Fatal Listener Error:", err.message);
+    if (err.code === 'EADDRINUSE') {
+        console.error(`[SERVER] Port ${PORT} is occupied by another terminal. Release it to proceed.`);
+    }
+});
 server.listen(PORT, () => {
     console.log(`[SERVER] Nexora Core operational on port ${PORT}`);
     console.log(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
@@ -575,20 +582,26 @@ emailTransporter.verify((error, success) => {
 const emailTemplateOverrides = new Map(); // type -> { subject, html }
 
 async function nexoraMailProtocol(type, to, data) {
-    console.log(`[SMTP] Nexora Protocol - Dispatch initiated. Type: ${type}, Recipient: ${to}`);
+    console.log(`[SMTP] Dispatch Protocol Synchronized. Type: ${type.toUpperCase()}, Recipient: ${to}`);
+    
+    if (!to || !to.includes('@')) {
+        console.error(`[SMTP] Protocol Rejected: Invalid or missing recipient address: "${to}"`);
+        return false;
+    }
+
     const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
     const GMAIL_USER = process.env.GMAIL_USER;
     const GMAIL_NAME = process.env.GMAIL_NAME || "Nexora Private Chat";
 
     // Check for admin-customized template override
     const override = emailTemplateOverrides.get(type);
-    if (override) {
-        let customSubject = override.subject || '';
+    if (override && override.html) {
+        let customSubject = override.subject || 'Nexora Secure Notification';
         let customHtml = override.html || '';
         // Replace template variables
         const replacements = {
-            '{{username}}': data.username || '',
-            '{{otp}}': data.otp || '',
+            '{{username}}': data.username || 'User',
+            '{{otp}}': data.otp || '------',
             '{{APP_LOGO}}': APP_LOGO,
             '{{CLIENT_URL}}': process.env.CLIENT_URL || 'https://nexora31.vercel.app',
             '{{YEAR}}': new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' }),
@@ -599,18 +612,18 @@ async function nexoraMailProtocol(type, to, data) {
             customHtml = customHtml.split(key).join(val);
         }
         try {
-            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) - Attempting relay to: ${to}`);
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) - Initiating relay...`);
             await emailTransporter.sendMail({
                 from: `"${GMAIL_NAME}" <${GMAIL_USER}>`,
                 to: to,
                 subject: customSubject,
-                text: `Nexora Notice: Your request was processed.`,
+                text: `Nexora Notice: Secure payload received. Please view in HTML.`,
                 html: customHtml
             });
-            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) Transmission Relayed Successfully to: ${to}`);
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) - Transmission confirmed.`);
             return true;
         } catch (err) {
-            console.error(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relay FAILED:`, err.message);
+            console.error(`[SMTP] ${type.toUpperCase()} (CUSTOM) - Relay FAILED:`, err.message);
             return false;
         }
     }
@@ -912,21 +925,34 @@ async function nexoraMailProtocol(type, to, data) {
               </table>
             </body>
             </html>`;
+    } else {
+        // CATCH-ALL for unknown protocol types
+        subject = `Nexora Notification: ${type.toUpperCase()} Segment`;
+        html = `
+            <body style="font-family:sans-serif; padding:40px; color:#1a1a2e; background:#f8fafc;">
+                <div style="max-width:500px; margin:auto; background:#fff; padding:30px; border-radius:20px; border:1px solid #eef2f7;">
+                    <h2 style="color:#6c5ce7;">Nexora Protocol Trace</h2>
+                    <p>A secure notification was directed to your identity.</p>
+                    <div style="background:#f1f5f9; padding:15px; border-radius:10px; font-family:monospace; font-size:12px;">Type: ${type.toUpperCase()}</div>
+                    <p style="font-size:13px; color:#64748b; margin-top:20px;">Timestamp: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+                </div>
+            </body>`;
+        console.warn(`[SMTP] Protocol using fallback template for unknown type: ${type}`);
     }
 
     try {
-        console.log(`[SMTP] ${type.toUpperCase()} - Attempting standard relay to: ${to}`);
+        console.log(`[SMTP] ${type.toUpperCase()} - Initiating relay...`);
         await emailTransporter.sendMail({
             from: `"${GMAIL_NAME}" <${GMAIL_USER}>`,
             to: to,
             subject: subject,
-            text: `Nexora Notice: Your request was processed. Please view the HTML version of this email to see your secure payload.`,
+            text: `Nexora Notice: Secure payload received. Please view in HTML.`,
             html: html
         });
-        console.log(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
+        console.log(`[SMTP] ${type.toUpperCase()} - Transmission confirmed.`);
         return true;
     } catch (err) {
-        console.error(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
+        console.error(`[SMTP] ${type.toUpperCase()} - Transmission FAILED:`, err.message);
         return false;
     }
 }
@@ -1589,7 +1615,7 @@ app.get('/api/users/public/:username', async (req, res) => {
             fullName: decryptField(user.full_name),
             username: user.username,
             color: user.color,
-            avatar_url: user.avatar_url,
+            avatar_url: (user.avatar_url && user.avatar_url !== 'null') ? user.avatar_url : null,
             bio: user.bio,
             joinedDate: new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
         });
@@ -1685,7 +1711,7 @@ app.post('/api/auth/login', async (req, res) => {
                     username: user.username,
                     phoneNumber: decryptField(user.phone_number),
                     color: user.color,
-                    avatarUrl: user.avatar_url ? decryptField(user.avatar_url) : null,
+                    avatarUrl: (user.avatar_url && user.avatar_url !== 'null') ? user.avatar_url : null,
                     accountStatus: user.status,
                     message: "Identity recognized. Protocol access granted."
                 });
@@ -1770,7 +1796,7 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
             suggestions = potentialMutuals.map(m => ({
                 username: m.username,
                 full_name: decryptField(m.full_name),
-                avatar_url: m.avatar_url, // No decryption for public images
+                avatar_url: (m.avatar_url && m.avatar_url !== 'null') ? m.avatar_url : null,
                 color: m.color,
                 mutualCount: parseInt(m.mutual_count) || 0
             }));
@@ -1794,7 +1820,7 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                 suggestions.push({
                     username: u.username,
                     full_name: decryptField(u.full_name),
-                    avatar_url: u.avatar_url,
+                    avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
                     color: u.color,
                     mutualCount: 0
                 });
@@ -1897,7 +1923,7 @@ app.post('/api/auth/google-login', async (req, res) => {
             username: user.username,
             phoneNumber: decryptField(user.phone_number),
             color: user.color,
-            avatarUrl: user.avatar_url ? decryptField(user.avatar_url) : null,
+            avatarUrl: (user.avatar_url && user.avatar_url !== 'null') ? user.avatar_url : null,
             accountStatus: user.status,
             message: "Google Identity synchronized."
         });
@@ -1957,16 +1983,38 @@ app.post('/api/auth/send-login-otp', async (req, res) => {
 
     try {
         const user = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [identifier, identifier]);
-        if (!user) return res.json({ status: "success", message: "If registered, an OTP has been dispatched." });
+        if (!user) {
+            require('fs').appendFileSync('auth_debug.log', `[${new Date().toISOString()}] USER_NOT_FOUND: id=${identifier}\n`);
+            return res.json({ status: "success", message: "If registered, an OTP has been dispatched." });
+        }
         if (user.status === 'Suspended') return res.status(403).json({ error: "Account suspended." });
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         authStore.set(`login:${user.email}`, { otp, expiry: Date.now() + 10 * 60 * 1000, username: user.username });
+        
+        // --- ADD DEBUG LOG ---
+        const fs = require('fs');
+        const authLog = `[${new Date().toISOString()}] AUTH_OTP: user=${user.username}, email=${user.email}, otp=${otp}\n`;
+        fs.appendFileSync('auth_debug.log', authLog);
+        
         console.log(`[AUTH] Login OTP for ${user.username}: ${otp}`); // Fallback in server logs
 
         // Dispatch email non-blocking to prevent frontend UI hangs
         nexoraMailProtocol('otp', user.email, { otp, username: user.username })
-            .catch(err => console.error(`[SMTP] Critical Relay Failure to ${user.email} for @${user.username}:`, err));
+            .then(sent => {
+                if (sent) {
+                    const successLog = `[${new Date().toISOString()}] SMTP_SUCCESS: user=${user.username}, email=${user.email}\n`;
+                    fs.appendFileSync('auth_debug.log', successLog);
+                } else {
+                    const failLog = `[${new Date().toISOString()}] SMTP_FAIL: user=${user.username}, email=${user.email}\n`;
+                    fs.appendFileSync('auth_debug.log', failLog);
+                }
+            })
+            .catch(err => {
+                const mailErr = `[${new Date().toISOString()}] SMTP_ERR: user=${user.username}, email=${user.email}, err=${err.message}\n`;
+                fs.appendFileSync('auth_debug.log', mailErr);
+                console.error(`[SMTP] Critical Relay Failure:`, err.message);
+            });
 
         res.json({ status: "success", message: "OTP transmitted securely. Access the Relay console in your inbox.", email: user.email });
     } catch (err) {
@@ -2003,7 +2051,7 @@ app.post('/api/auth/verify-login-otp', async (req, res) => {
             username: user.username,
             phoneNumber: decryptField(user.phone_number),
             color: user.color,
-            avatarUrl: user.avatar_url ? decryptField(user.avatar_url) : null,
+            avatarUrl: (user.avatar_url && user.avatar_url !== 'null') ? user.avatar_url : null,
             accountStatus: user.status
         });
     } catch (e) {
@@ -2175,7 +2223,19 @@ app.post('/api/auth/signup', async (req, res) => {
         };
 
         // Attempt to send welcome email to ALL new users (Non-blocking)
-        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch(e => console.error("[MAIL] Welcome Transmission failure:", e));
+        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername })
+            .then(sent => {
+                const fs = require('fs');
+                if (sent) {
+                    fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] WELCOME_SUCCESS: user=${finalUsername}, email=${finalEmail}\n`);
+                } else {
+                    fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] WELCOME_FAIL: user=${finalUsername}, email=${finalEmail}\n`);
+                }
+            })
+            .catch(e => {
+                console.error("[MAIL] Welcome Transmission failure:", e);
+                require('fs').appendFileSync('auth_debug.log', `[${new Date().toISOString()}] WELCOME_ERR: user=${finalUsername}, err=${e.message}\n`);
+            });
         
         const tokenUserObj = { id: this.lastID || null, username: finalUsername, role: role };
         const token = generateToken(tokenUserObj);
@@ -2870,12 +2930,8 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
         const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, last_visit FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        // Decrypt mapping for standard UI fields
-        user.fullName = decryptField(user.fullName);
-        user.phoneNumber = decryptField(user.phoneNumber);
-        // avatarUrl is kept as plain text (Cloudinary/Native)
-        // bio is usually plain but we check if it was encrypted by mistake
-        user.bio = decryptField(user.bio);
+        // PII Fields will be decrypted in cleanUser mapping below
+
 
         // Calculate Mutual Friends
         let mutualFriends = [];
@@ -2913,25 +2969,26 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
                 mutualFriends = mutualDetails.map(m => ({
                     ...m,
                     fullName: decryptField(m.fullName),
-                    avatarUrl: m.avatarUrl // No decryption
+                    avatarUrl: (m.avatarUrl && m.avatarUrl !== 'null') ? m.avatarUrl : null
                 }));
             }
         }
 
-        // Check if I sent a request or am friends
-        const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = ? AND LOWER(user_b) = ?) OR (LOWER(user_a) = ? AND LOWER(user_b) = ?)`, [myUsername, targetUsername, targetUsername, myUsername]);
-        const sentRequest = await db.get(`SELECT id FROM connection_requests WHERE LOWER(from_username) = ? AND LOWER(to_username) = ? AND status = 'pending'`, [myUsername, targetUsername]);
-        const receivedRequest = await db.get(`SELECT id FROM connection_requests WHERE LOWER(from_username) = ? AND LOWER(to_username) = ? AND status = 'pending'`, [targetUsername, myUsername]);
+        // Finalize user object with clean field naming
+        const cleanUser = {
+            ...user,
+            fullName: decryptField(user.fullName),
+            email: user.email,
+            phoneNumber: decryptField(user.phoneNumber),
+            avatarUrl: (user.avatarUrl && user.avatarUrl !== 'null') ? user.avatarUrl : null,
+            bio: decryptField(user.bio),
+            mutualFriends,
+            isFriend: !!isFriend,
+            requestSent: !!sentRequest,
+            requestReceived: !!receivedRequest
+        };
 
-        res.json({ 
-            user: {
-                ...user,
-                mutualFriends,
-                isFriend: !!isFriend,
-                requestSent: !!sentRequest,
-                requestReceived: !!receivedRequest
-            } 
-        });
+        res.json({ user: cleanUser });
     } catch (err) {
         console.error("Profile fetch error:", err);
         res.status(500).json({ error: "Server error" });

@@ -77,11 +77,11 @@ export const Avatar: React.FC<AvatarProps> = ({
       onClick={onClick}
     >
       {src ? (
-        <img src={src} alt={name} className="w-full h-full object-cover" />
+        <img src={src} alt={name} className="w-full h-full object-cover rounded-full" />
       ) : (
         <>
           {/* Glassmorphism Overlay */}
-          <div className="absolute inset-0 backdrop-blur-[2px] bg-white/5 pointer-events-none" />
+          <div className="absolute inset-0 backdrop-blur-[2px] bg-white/5 pointer-events-none rounded-full" />
           
           {/* Sub-pixel inner border for depth */}
           <div className="absolute inset-0 rounded-full border border-white/10 pointer-events-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.1)]" />
@@ -101,7 +101,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         whileHover={{ scale: 1.05 }} 
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        className="inline-block rounded-full overflow-hidden"
+        className="inline-block rounded-full"
         style={{ transform: "translateZ(0)" }} // Fixes clipping issues in some browsers
       >
         {content}
