@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { formatLastSeen, INDIAN_LOCALE, MUMBAI_TIMEZONE } from "@/lib/time";
+import { formatLastSeen } from "@/lib/time";
 import { Clock } from "lucide-react";
 
 interface LastSeenBadgeProps {
@@ -12,37 +12,8 @@ interface LastSeenBadgeProps {
   className?: string;
 }
 
-export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }: LastSeenBadgeProps) => {
+export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenBadgeProps) => {
   const [phase, setPhase] = useState<"initial" | "scanning" | "final">("initial");
-
-  // Format exact IST target with robust parsing (Direct Time and Date)
-  const exactTime = useMemo(() => {
-    if (!lastVisit) return "";
-    let ts = lastVisit;
-    // Handle stringified numbers (e.g. from Postgres)
-    if (typeof lastVisit === 'string' && /^\d+$/.test(lastVisit)) {
-      ts = parseInt(lastVisit, 10);
-    }
-    const date = new Date(ts);
-    if (isNaN(date.getTime())) return "";
-    
-    // Explicit HH:MM AM/PM
-    const timeStr = date.toLocaleTimeString(INDIAN_LOCALE, {
-      timeZone: MUMBAI_TIMEZONE,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true
-    }).toUpperCase();
-
-    // Explicit DD MMM
-    const dateStr = date.toLocaleDateString(INDIAN_LOCALE, {
-      timeZone: MUMBAI_TIMEZONE,
-      day: "2-digit",
-      month: "short"
-    }).toUpperCase();
-    
-    return `${dateStr} ${timeStr}`;
-  }, [lastVisit]);
 
   useEffect(() => {
     if (isOnline) {
@@ -50,9 +21,9 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
       return;
     }
 
-    // Sequence for protocol synchronization feel
-    const timer1 = setTimeout(() => setPhase("scanning"), 600);
-    const timer2 = setTimeout(() => setPhase("final"), 1800);
+    // Keep synchronization animations for premium feel
+    const timer1 = setTimeout(() => setPhase("scanning"), 500);
+    const timer2 = setTimeout(() => setPhase("final"), 1500);
 
     return () => {
       clearTimeout(timer1);
@@ -61,32 +32,19 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
   }, [isOnline]);
 
   if (isOnline) {
-    const nowSync = new Date().toLocaleTimeString(INDIAN_LOCALE, {
-      timeZone: MUMBAI_TIMEZONE,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true
-    }).toUpperCase();
-
     return (
-      <div className={`flex flex-col items-end gap-0.5 ${className}`}>
-        <div className="flex items-center gap-1.5">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2ed573] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#2ed573]"></span>
-          </span>
-          <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#2ed573]">Active Protocol</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em]">Online Synced</div>
-          <div className="text-[7px] font-black text-[#2ed573]/60">{nowSync} IST</div>
-        </div>
+      <div className={`flex items-center gap-1.5 ${className}`}>
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2ed573] opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#2ed573]"></span>
+        </span>
+        <span className="text-[10px] font-black uppercase tracking-[0.15em] text-[#2ed573]">Online</span>
       </div>
     );
   }
 
   return (
-    <div className={`relative h-8 flex flex-col justify-center items-end overflow-hidden min-w-[140px] ${className}`}>
+    <div className={`relative h-6 flex flex-col justify-center items-end overflow-hidden ${className}`}>
       <AnimatePresence mode="wait">
         {phase === "initial" && (
           <motion.div
@@ -94,10 +52,10 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
             initial={{ opacity: 0, x: 5 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -5 }}
-            className="flex items-center gap-1.5"
+            className="flex items-center gap-1"
           >
              <Clock className="w-2.5 h-2.5 text-zinc-500" />
-             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Syncing...</span>
+             <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Syncing</span>
           </motion.div>
         )}
 
@@ -107,12 +65,12 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="w-32 h-[1px] bg-white/5 relative overflow-hidden"
+            className="w-24 h-[1px] bg-white/5 relative overflow-hidden"
           >
             <motion.div 
               initial={{ x: "-100%" }}
               animate={{ x: "100%" }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-[#6c5ce7] to-transparent"
             />
           </motion.div>
@@ -125,27 +83,9 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col items-end"
           >
-             {!lastVisit ? (
-               <div className="flex flex-col items-end opacity-80 group hover:opacity-100 transition-opacity">
-                 <div className="flex items-center gap-1.5 mb-0.5">
-                   <div className="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-pulse" />
-                   <span className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Identity Idle</span>
-                 </div>
-                 <span className="text-[7px] font-bold opacity-40 uppercase tracking-widest whitespace-nowrap">Encryption Active (IST)</span>
-               </div>
-             ) : (
-               <div className="flex flex-col items-end group">
-                  <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tight text-white/90">
-                     LAST VISITED ON <span className="text-[#6c5ce7]">
-                       {exactTime}
-                     </span> 
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.1em]">Protocol Synced</div>
-                    <div className="text-[7px] font-black text-[#6c5ce7]/60">IST CONFIRMED</div>
-                  </div>
-               </div>
-             )}
+            <span className="text-[9px] font-bold uppercase tracking-tight text-white/40">
+              {formatLastSeen(lastVisit).toUpperCase()}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
