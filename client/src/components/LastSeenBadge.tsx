@@ -15,7 +15,7 @@ interface LastSeenBadgeProps {
 export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }: LastSeenBadgeProps) => {
   const [phase, setPhase] = useState<"initial" | "scanning" | "final">("initial");
 
-  // Format exact IST target with robust parsing
+  // Format exact IST target with robust parsing (Direct Time and Date)
   const exactTime = useMemo(() => {
     if (!lastVisit) return "";
     let ts = lastVisit;
@@ -26,12 +26,22 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
     const date = new Date(ts);
     if (isNaN(date.getTime())) return "";
     
-    return date.toLocaleTimeString(INDIAN_LOCALE, {
+    // Explicit HH:MM AM/PM
+    const timeStr = date.toLocaleTimeString(INDIAN_LOCALE, {
       timeZone: MUMBAI_TIMEZONE,
       hour: "2-digit",
       minute: "2-digit",
       hour12: true
     }).toUpperCase();
+
+    // Explicit DD MMM
+    const dateStr = date.toLocaleDateString(INDIAN_LOCALE, {
+      timeZone: MUMBAI_TIMEZONE,
+      day: "2-digit",
+      month: "short"
+    }).toUpperCase();
+    
+    return `${dateStr} ${timeStr}`;
   }, [lastVisit]);
 
   useEffect(() => {
@@ -51,6 +61,13 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
   }, [isOnline]);
 
   if (isOnline) {
+    const nowSync = new Date().toLocaleTimeString(INDIAN_LOCALE, {
+      timeZone: MUMBAI_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    }).toUpperCase();
+
     return (
       <div className={`flex flex-col items-end gap-0.5 ${className}`}>
         <div className="flex items-center gap-1.5">
@@ -60,7 +77,10 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
           </span>
           <span className="text-[10px] font-black uppercase tracking-[0.1em] text-[#2ed573]">Active Protocol</span>
         </div>
-        <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em]">Identity Synced</div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.2em]">Online Synced</div>
+          <div className="text-[7px] font-black text-[#2ed573]/60">{nowSync} IST</div>
+        </div>
       </div>
     );
   }
@@ -116,13 +136,13 @@ export const LastSeenBadge = ({ isOnline, lastVisit, className = "", username }:
              ) : (
                <div className="flex flex-col items-end group">
                   <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-tight text-white/90">
-                     LAST SEEN <span className="text-[#6c5ce7]">
-                       {formatLastSeen(lastVisit).toUpperCase()}
+                     LAST VISITED ON <span className="text-[#6c5ce7]">
+                       {exactTime}
                      </span> 
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <div className="text-[7px] font-bold opacity-30 uppercase tracking-[0.1em]">Protocol Synced</div>
-                    {exactTime && <div className="text-[7px] font-black text-[#6c5ce7]/60">{exactTime} IST</div>}
+                    <div className="text-[7px] font-black text-[#6c5ce7]/60">IST CONFIRMED</div>
                   </div>
                </div>
              )}
