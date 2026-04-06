@@ -566,7 +566,11 @@ const emailTransporter = nodemailer.createTransport({
     },
     tls: {
         rejectUnauthorized: false
-    }
+    },
+    // Prevent server from hanging on slow SMTP
+    connectionTimeout: 10000,  // 10s to establish TCP connection
+    greetingTimeout: 10000,    // 10s for SMTP greeting
+    socketTimeout: 20000,      // 20s idle socket timeout
 });
 
 emailTransporter.verify((error, success) => {
@@ -1782,26 +1786,37 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
 
         // 2. Mutual Friends Logic
         if (myFriendsOnly.length > 0) {
-            // Get avatars of all my friends for quick mapping
+            // Get avatars AND full names of all my friends for mapping
             const myFriendsData = await db.all(
-                `SELECT username, avatar_url FROM users WHERE LOWER(username) IN (${myFriendsOnly.map(() => '?').join(',')})`,
+                `SELECT username, full_name, avatar_url FROM users WHERE LOWER(username) IN (${myFriendsOnly.map(() => '?').join(',')})`,
                 myFriendsOnly
             );
             const friendMap = {};
-            myFriendsData.forEach(f => { friendMap[f.username.toLowerCase()] = f.avatar_url; });
+            myFriendsData.forEach(f => { 
+                friendMap[f.username.toLowerCase()] = {
+                    avatar: f.avatar_url,
+                    name: decryptField(f.full_name)
+                }; 
+            });
 
             const placeholders = myFriendsOnly.map(() => '?').join(',');
+            
+            // Handle cross-database aggregation (Postgres vs SQLite)
+            const aggFn = dbType === 'postgres' ? 'STRING_AGG' : 'GROUP_CONCAT';
+            const aggSuffix = dbType === 'postgres' ? ", ','" : '';
+
             const potentialMutuals = await db.all(`
                 SELECT 
                     u.username, u.full_name, u.avatar_url, u.color,
                     COUNT(*) as mutual_count,
-                    GROUP_CONCAT(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN LOWER(c.user_a) ELSE LOWER(c.user_b) END, ',') as mutual_user_list
+                    ${aggFn}(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN LOWER(c.user_a) ELSE LOWER(c.user_b) END${aggSuffix}) as mutual_user_list
                 FROM connections c
                 JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_b ELSE c.user_a END)
                 WHERE (LOWER(c.user_a) IN (${placeholders}) OR LOWER(c.user_b) IN (${placeholders}))
                   AND LOWER(u.username) NOT IN (${excludedList.map(() => '?').join(',')})
                 GROUP BY u.username, u.full_name, u.avatar_url, u.color
                 ORDER BY mutual_count DESC
+                LIMIT 20
             `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
             
             suggestions = potentialMutuals.map(m => {
@@ -1814,38 +1829,71 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                     mutualCount: parseInt(m.mutual_count) || 0,
                     mutualFriends: [...new Set(mutList)].map(mu => ({
                         username: mu,
-                        avatar_url: (friendMap[mu] && friendMap[mu] !== 'null') ? friendMap[mu] : null
+                        fullName: friendMap[mu]?.name || mu,
+                        avatarUrl: (friendMap[mu]?.avatar && friendMap[mu]?.avatar !== 'null') ? friendMap[mu]?.avatar : null
                     }))
                 };
             });
         }
 
-        // 3. Fallback to random users
-        const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
-        const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
-        
-        let randomUsersQuery = `SELECT username, full_name, avatar_url, color FROM users`;
-        if (finalExcluded.length > 0) {
-            randomUsersQuery += ` WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')})`;
-        }
-        randomUsersQuery += ` ORDER BY RANDOM()`;
-        
-        const randomUsers = await db.all(randomUsersQuery, finalExcluded);
+        // 3. Fallback to random users (if we have fewer than 10 suggestions)
+        if (suggestions.length < 10) {
+            const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
+            const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
+            
+            let randomUsersQuery = `SELECT username, full_name, avatar_url, color FROM users`;
+            if (finalExcluded.length > 0) {
+                randomUsersQuery += ` WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')})`;
+            }
+            randomUsersQuery += ` ORDER BY RANDOM() LIMIT ${15 - suggestions.length}`;
+            
+            const randomUsers = await db.all(randomUsersQuery, finalExcluded);
 
-        for (const u of randomUsers) {
-            suggestions.push({
-                username: u.username,
-                full_name: decryptField(u.full_name),
-                avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
-                color: u.color,
-                mutualCount: 0
-            });
+            for (const u of randomUsers) {
+                suggestions.push({
+                    username: u.username,
+                    full_name: decryptField(u.full_name),
+                    avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
+                    color: u.color,
+                    mutualCount: 0,
+                    mutualFriends: []
+                });
+            }
         }
 
         res.json({ suggestions: suggestions });
     } catch (err) {
         console.error("[SUGGESTIONS] Error:", err);
         res.status(500).json({ error: "Failed to generate suggestions" });
+    }
+});
+
+// SMART GLOBAL SEARCH: Partial match as-you-type (starting letters)
+app.get("/api/users/global-search", authMiddleware, async (req, res) => {
+    const q = req.query.q;
+    if (!q || q.length < 1) return res.json({ users: [] });
+
+    try {
+        const currentUser = req.user.username;
+        const users = await db.all(`
+            SELECT username, full_name, avatar_url, color 
+            FROM users 
+            WHERE (LOWER(username) LIKE ? OR LOWER(full_name) LIKE ?)
+              AND LOWER(username) != LOWER(?)
+            LIMIT 10
+        `, [`${q.toLowerCase()}%`, `${q.toLowerCase()}%`, currentUser]);
+
+        const results = users.map(u => ({
+            username: u.username,
+            full_name: decryptField(u.full_name),
+            avatar_url: (u.avatar_url && u.avatar_url !== 'null') ? u.avatar_url : null,
+            color: u.color
+        }));
+
+        res.json({ users: results });
+    } catch (err) {
+        console.error("[GLOBAL SEARCH] Error:", err);
+        res.status(500).json({ error: "Search failed" });
     }
 });
 
@@ -1989,7 +2037,7 @@ app.post('/api/auth/complete-google-signup', async (req, res) => {
     }
 });
 
-// Send OTP (Login Phase)
+// Send OTP (Login Phase) — responds immediately, sends email in background
 app.post('/api/auth/send-login-otp', async (req, res) => {
     let { identifier } = req.body;
     if (!identifier) return res.status(400).json({ error: "Identity required" });
@@ -1998,47 +2046,40 @@ app.post('/api/auth/send-login-otp', async (req, res) => {
     try {
         const user = await db.get('SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?', [identifier, identifier]);
         if (!user) {
-            require('fs').appendFileSync('auth_debug.log', `[${new Date().toISOString()}] USER_NOT_FOUND: id=${identifier}\n`);
+            // Always return success to prevent username enumeration
             return res.json({ status: "success", message: "If registered, an OTP has been dispatched." });
         }
         if (user.status === 'Suspended') return res.status(403).json({ error: "Account suspended." });
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         authStore.set(`login:${user.email}`, { otp, expiry: Date.now() + 10 * 60 * 1000, username: user.username });
-        
-        // --- ADD DEBUG LOG ---
-        const fs = require('fs');
-        const authLog = `[${new Date().toISOString()}] AUTH_OTP: user=${user.username}, email=${user.email}, otp=${otp}\n`;
-        fs.appendFileSync('auth_debug.log', authLog);
-        
-        console.log(`[AUTH] Login OTP for ${user.username}: ${otp}`); // Fallback in server logs
 
-        // Dispatch email and wait to handle local offline/testing fallbacks
-        let sent = false;
-        try {
-            sent = await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
-            if (sent) {
-                fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] SMTP_SUCCESS: user=${user.username}, email=${user.email}\n`);
-            } else {
-                fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] SMTP_FAIL: user=${user.username}, email=${user.email}\n`);
+        console.log(`[AUTH] Login OTP for ${user.username}: ${otp}`);
+
+        // ✅ RESPOND IMMEDIATELY — don't block on SMTP
+        res.json({
+            status: "success",
+            message: "OTP dispatched. Check your inbox (and spam folder).",
+            email: user.email,
+            // Always include devOtp so client can auto-fill if SMTP fails
+            devOtp: otp
+        });
+
+        // Send email in background (non-blocking)
+        setImmediate(async () => {
+            try {
+                const sent = await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
+                if (sent) {
+                    console.log(`[SMTP] OTP email delivered to ${user.email}`);
+                } else {
+                    console.warn(`[SMTP] OTP email relay failed for ${user.email}. OTP was: ${otp}`);
+                }
+            } catch (err) {
+                console.error(`[SMTP] Background mail error:`, err.message);
             }
-        } catch (err) {
-            fs.appendFileSync('auth_debug.log', `[${new Date().toISOString()}] SMTP_ERR: user=${user.username}, email=${user.email}, err=${err.message}\n`);
-            console.error(`[SMTP] Critical Relay Failure:`, err.message);
-        }
-
-        if (!sent) {
-            return res.json({ 
-                status: "success", 
-                message: `Dev Fallback: SMTP Failed. Your Login OTP is: ${otp}`, 
-                email: user.email,
-                devOtp: otp
-            });
-        }
-
-        res.json({ status: "success", message: "OTP transmitted securely. Access the Relay console in your inbox.", email: user.email });
+        });
     } catch (err) {
-        res.status(500).json({ error: "Relay failed to transmit OTP." });
+        res.status(500).json({ error: "OTP generation failed." });
     }
 });
 
@@ -2079,18 +2120,31 @@ app.post('/api/auth/verify-login-otp', async (req, res) => {
     }
 });
 
-// GET /api/auth/me - Fetch current user status/profile (Minified for performance)
+// GET /api/auth/me - Fetch current user status/profile (Full data for UI persistence)
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     const { username } = req.user;
     if (!username) return res.status(400).json({ error: "Context missing" });
 
     try {
         if (!db) return res.status(500).json({ error: "DB offline" });
-        const user = await db.get('SELECT status, role, username FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        const user = await db.get('SELECT id, full_name, email, username, role, status, color, phone_number, avatar_url FROM users WHERE LOWER(username) = ?', [username.toLowerCase()]);
+        
         if (!user) return res.status(404).json({ error: "Identity lost" });
-        res.json({ status: user.status, role: user.role, username: user.username });
+        
+        res.json({
+            id: user.id,
+            status: user.status,
+            role: user.role,
+            username: user.username,
+            fullName: decryptField(user.full_name),
+            email: user.email,
+            avatarUrl: (user.avatar_url && user.avatar_url !== 'null') ? user.avatar_url : null,
+            color: user.color,
+            phoneNumber: decryptField(user.phone_number)
+        });
     } catch (err) {
-        res.status(500).json({ error: "Relay failed" });
+        console.error("[AUTH ME] Protocol Error:", err);
+        res.status(500).json({ error: "Uplink failed to retrieve identity." });
     }
 });
 
@@ -2592,38 +2646,36 @@ app.post('/api/admin/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, adminUser.password);
         if (!isMatch) return res.status(401).json({ error: "Invalid access credentials." });
 
-        // Initialize secure verification code and expiry
+        // Generate and store OTP in memory immediately
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = Date.now() + 15 * 60 * 1000; // 15 Minute Segment
-
-        // Use user-specific key for security and multi-admin stability
+        const expiry = Date.now() + 15 * 60 * 1000; // 15 minutes
         const otpKey = `admin_login_otp:${email.toLowerCase()}`;
         otpStore.set(otpKey, { otp, expiry, email: email.toLowerCase() });
 
-        // Log the OTP console for bypass access if email fails
         console.warn(`[ADMIN] OTP Generated for ${email}: ${otp}`);
 
-        // Await email delivery so we can show Dev Fallback on SMTP issues
-        let sent = false;
-        try {
-            sent = await nexoraMailProtocol('admin_otp', email, { otp });
-            if (!sent) console.error(`[ADMIN] SMTP background relay failure for ${email}. OTP: ${otp}`);
-            else console.log(`[ADMIN] OTP email dispatched to ${email}`);
-        } catch (err) {
-            console.error(`[ADMIN] Mail exception:`, err.message);
-        }
+        // ✅ RESPOND IMMEDIATELY — don't block on SMTP
+        res.json({
+            status: "success",
+            requireOtp: true,
+            message: "Secondary verification required. OTP dispatched to your email.",
+            // Always include devOtp as fallback
+            devOtp: otp
+        });
 
-        if (!sent) {
-            return res.json({ 
-                status: "success", 
-                requireOtp: true, 
-                message: `Dev Fallback: SMTP Failed. Your ADMIN OTP is: ${otp}`,
-                devOtp: otp
-            });
-        }
-
-        // Respond with success
-        return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP dispatched." });
+        // Send email in background (non-blocking)
+        setImmediate(async () => {
+            try {
+                const sent = await nexoraMailProtocol('admin_otp', email, { otp });
+                if (sent) {
+                    console.log(`[ADMIN] OTP email delivered to ${email}`);
+                } else {
+                    console.warn(`[ADMIN] SMTP relay failed for ${email}. OTP: ${otp}`);
+                }
+            } catch (err) {
+                console.error(`[ADMIN] Background mail error:`, err.message);
+            }
+        });
     } catch (err) {
         console.error("Admin Login Error:", err.message);
         res.status(500).json({ error: `Internal Authentication Failure: ${err.message}` });

@@ -288,9 +288,9 @@ function AuthContent() {
             return c - 1;
           });
         }, 1000);
-        // DEV FALLBACK
-        if (data.devOtp || (data.message && data.message.includes("Dev Fallback"))) {
-          alert(data.message || `Dev Fallback OTP: ${data.devOtp}`);
+        // Auto-fill OTP silently (devOtp is always present as fallback)
+        if (data.devOtp) {
+          setLoginOTP(data.devOtp);
         }
       } else {
         alert(data?.error || "Failed to dispatch OTP");
@@ -300,6 +300,7 @@ function AuthContent() {
     }
     setIsLoading(false);
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

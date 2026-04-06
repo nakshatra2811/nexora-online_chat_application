@@ -346,6 +346,9 @@ function ChatsPageContent() {
   const [manualPhone, setManualPhone] = useState("");
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [syncNonMatches, setSyncNonMatches] = useState<string[]>([]);
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+  const [expandedSuggestions, setExpandedSuggestions] = useState(false);
 
   // ═══ Global Persistence Watcher: Syncs state across layout and tabs ═══
   useEffect(() => {
@@ -387,6 +390,49 @@ function ChatsPageContent() {
     });
   };
 
+  // Fetch suggestions when discovery modal opens
+  useEffect(() => {
+    if (showSyncModal && suggestedUsers.length === 0) {
+      const fetchSuggestions = async () => {
+        setIsFetchingSuggestions(true);
+        try {
+          const res = await nexoraFetch("/api/users/suggestions");
+          if (res && res.suggestions) {
+            setSuggestedUsers(res.suggestions);
+          }
+        } catch (e) {
+          console.error("Suggestions fetch failed:", e);
+        } finally {
+          setIsFetchingSuggestions(false);
+        }
+      };
+      fetchSuggestions();
+    }
+  }, [showSyncModal, suggestedUsers.length]);
+
+  // Real-time Global Search (Debounced) for "Smart Search" as requested
+  useEffect(() => {
+    const q = manualPhone.trim();
+    if (q.length < 1) {
+      if (syncMatches.length > 0) setSyncMatches([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSyncing(true);
+      try {
+        const res = await nexoraFetch(`/api/users/global-search?q=${encodeURIComponent(q)}`);
+        if (res && res.users) {
+          setSyncMatches(res.users);
+        }
+      } catch (e) {
+        console.error("Global search failed:", e);
+      } finally {
+        setIsSyncing(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [manualPhone]);
+
   const handleManualAdd = async () => {
     const query = manualPhone.trim();
     if (!query) return;
@@ -421,49 +467,42 @@ function ChatsPageContent() {
     setSyncMatches([]);
     setSyncNonMatches([]);
     try {
-      // 1. Try modern Contacts API if available
       let numbers: string[] = [];
-      if ('contacts' in navigator && 'select' in (navigator as any).contacts) {
+      const hasContactsAPI = typeof navigator !== "undefined" && 'contacts' in navigator && 'select' in (navigator as any).contacts;
+
+      if (hasContactsAPI) {
         try {
-          const props = ['tel'];
-          const opts = { multiple: true };
-          const contacts = await (navigator as any).contacts.select(props, opts);
+          const contacts = await (navigator as any).contacts.select(['tel', 'name'], { multiple: true });
           numbers = contacts.flatMap((c: any) => c.tel || []);
-        } catch (err) {
-          ((..._args: any[]) => { })("Contacts API failed/cancelled, using simulated baseline.");
+        } catch (_err) {
+          // User cancelled or permission denied
         }
       }
 
-      // Cleanup numbers (keep digits only)
-      const cleanNumbers = numbers.map(n => n.replace(/\D/g, '')).filter(n => n.length >= 10);
+      // Normalise: digits only, >= 10 digits, unique
+      const cleanNumbers = [...new Set(
+        numbers.map(n => n.replace(/\D/g, '')).filter(n => n.length >= 10)
+      )];
 
-      // If no contacts found (empty or denied), we use a notification or mock for dev feedback
-      if (cleanNumbers.length === 0) {
-        // simulated contacts for development if real ones aren't available
-        ((..._args: any[]) => { })("No contacts selected/found. Syncing limited to manual entries.");
-      }
-
-      // Send original numbers to server (server will hash them for PII protection during match)
       if (cleanNumbers.length > 0) {
+        // Server hashes numbers before matching for PII protection
         const res = await nexoraFetch("/api/users/sync-contacts", {
           method: "POST",
-          body: JSON.stringify({
-            contacts: cleanNumbers,
-            me: myProfile.username
-          })
+          body: JSON.stringify({ contacts: cleanNumbers, me: myProfile.username })
         });
 
         if (res && res.suggestions) {
           setSyncMatches(res.suggestions);
-
-          // Calculate non-matches (invite list)
-          const registered = res.registeredPhones || [];
-          const notOnNexora = cleanNumbers.filter(n => !registered.includes(n));
-          setSyncNonMatches(notOnNexora);
+          const registered: string[] = res.registeredPhones || [];
+          // Show non-matching numbers so user can invite via WhatsApp
+          setSyncNonMatches(cleanNumbers.filter(n => !registered.includes(n)));
         }
+      } else if (!hasContactsAPI) {
+        // Desktop fallback: prompt user with "not supported" message
+        setSyncNonMatches(["__no_contacts_api__"]);
       }
-    } catch (e) {
-      ((..._args: any[]) => { })("Sync failed:", e);
+    } catch (_e) {
+      // silent fail
     } finally {
       setIsSyncing(false);
     }
@@ -4476,144 +4515,394 @@ function ChatsPageContent() {
         )}
       </AnimatePresence>
 
-      {/* ── Contact Sync & Find Modal ── */}
+      {/* ── Find Friends Modal — Global Discovery Style ── */}
       <AnimatePresence>
         {showSyncModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-            <motion.div initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }} transition={{ type: "spring", damping: 32, stiffness: 350, mass: 0.8 }} className="relative w-full h-full flex flex-col overflow-hidden shadow-2xl" 
-                style={{ background: isDark ? "rgba(10, 10, 18, 1)" : "rgba(255, 255, 255, 1)" }}>
-              <div className="p-6 sm:p-8 border-b border-white/5 flex items-center gap-4 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 backdrop-blur-3xl">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex flex-col"
+            style={{ background: isDark ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.75)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
+            onClick={() => setShowSyncModal(false)}
+          >
+            <motion.div
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 32, stiffness: 350, mass: 0.8 }}
+              className="w-full h-full overflow-hidden relative flex flex-col"
+              style={{ background: isDark ? "rgba(10,10,18,1)" : "rgba(255,255,255,1)", zIndex: 301 }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header — search input */}
+              <div className="flex items-center gap-3 px-4 py-6 sm:px-8 border-b sticky top-0 z-50 backdrop-blur-3xl"
+                style={{ borderColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)", background: isDark ? "rgba(10,10,18,0.88)" : "rgba(255,255,255,0.88)" }}>
                 <button onClick={() => setShowSyncModal(false)} className="p-2 -ml-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
                   <ArrowLeft className="w-6 h-6" />
                 </button>
                 <div className="flex-1">
-                  <h3 className="text-xl font-black uppercase tracking-widest text-[#6c5ce7]">Find Friends</h3>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">Snap-Style Contact Sync</p>
+                  <input autoFocus type="text" placeholder="Find people on Nexora..." value={manualPhone}
+                    onChange={e => { setManualPhone(e.target.value); if (e.target.value.trim().length > 0) handleManualAdd(); }}
+                    onKeyDown={e => e.key === 'Enter' && handleManualAdd()}
+                    className="w-full bg-transparent outline-none text-xl sm:text-2xl font-black transition-all"
+                    style={{ color: "var(--text-primary)" }} />
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mt-0.5">Find Friends · Global Discovery</p>
                 </div>
+                {manualPhone.length > 0 && (
+                  <button onClick={() => { setManualPhone(""); setSyncMatches([]); setSyncNonMatches([]); }} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                {/* Search History Section */}
-                {searchHistory.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-primary/60">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Recent Activity</span>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar pb-32 sm:pb-10 px-1 sm:px-2">
+                {isSyncing ? (
+                  <div className="flex flex-col items-center justify-center py-24 gap-6">
+                    <div className="relative">
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-12 h-12 border-4 border-[#6c5ce7]/10 border-t-[#6c5ce7] rounded-full" />
+                      <div className="absolute inset-0 blur-xl bg-[#6c5ce7]/20 animate-pulse rounded-full" />
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {searchHistory.map(h => (
-                        <motion.button key={h} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={async () => { setManualPhone(h); setIsSyncing(true); setSyncNonMatches([]); try { const res = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(h)}`); if (res && res.user) { setSyncMatches([res.user]); addToSearchHistory(res.user.username); } else { setSyncMatches([]); } } catch {} finally { setIsSyncing(false); } }} className="px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-primary hover:bg-white/10 transition-all">
-                          @{h}
-                        </motion.button>
-                      ))}
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em]" style={{ color: "#6c5ce7" }}>Scanning Protocol</span>
+                  </div>
+
+                ) : manualPhone.length < 1 && syncMatches.length === 0 ? (
+                  /* Default / empty state */
+                  <div className="flex flex-col items-center justify-center py-14 px-8 gap-8">
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-[2.5rem] flex items-center justify-center rotate-12 shadow-[0_20px_50px_rgba(108,92,231,0.3)] relative z-10 overflow-hidden" style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}>
+                        <UserPlus className="w-10 h-10 text-white" />
+                      </div>
+                      <div className="absolute -inset-6 bg-purple-500/20 blur-3xl rounded-full animate-pulse" />
                     </div>
-                  </div>
-                )}
-
-                {/* Contact Sync Section */}
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 text-center">
-                    <Users className="w-8 h-8 text-indigo-400 mx-auto mb-3" />
-                    <p className="text-sm font-bold mb-4">Sync your contacts and find your friends</p>
-                    <button onClick={handleNativeSync} disabled={isSyncing} className="w-full py-3 rounded-xl bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50">
-                      {isSyncing ? "Syncing..." : "🚀 Sync Phone Contacts"}
-                    </button>
-                    <p className="text-[9px] mt-3 uppercase tracking-tighter opacity-40 font-bold">Privacy Protocol: Numbers are hashed for matching; your actual contacts are never stored.</p>
-                  </div>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-white/5"></span></div>
-                    <div className="relative flex justify-center text-[10px] uppercase font-black bg-[var(--bg-surface-solid)] px-2 text-muted-foreground opacity-40">Or Manual Entry</div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input type="text" value={manualPhone} onChange={e => setManualPhone(e.target.value)} placeholder="Phone or Username..." className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 outline-none text-sm font-bold focus:border-indigo-500 transition-colors" onKeyDown={e => e.key === 'Enter' && handleManualAdd()} />
-                    <button onClick={handleManualAdd} className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all"><Search className="w-5 h-5" /></button>
-                  </div>
-                </div>
-
-                {/* Sync Results */}
-                {syncMatches.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t border-white/5">
-                    <h4 className="text-[11px] font-black uppercase tracking-widest text-[#6c5ce7] flex items-center gap-2">
-                      <Zap className="w-3.5 h-3.5" /> Members on Nexora
-                    </h4>
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                      {syncMatches.map(u => {
-                        const isConnected = threads.some(t => t.username === u.username);
-                        const isRequested = sentRequests.includes(u.username);
-                        return (
-                          <div key={u.username} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-[#6c5ce7]/30 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div className={`h-10 w-10 rounded-full bg-gradient-to-tr ${u.color || 'from-indigo-500 to-purple-500'} flex items-center justify-center text-white font-black text-sm overflow-hidden`}>
-                                {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" /> : (u.fullName?.[0] || u.username?.[0]).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-bold truncate leading-tight">{u.fullName || u.username}</p>
-                                <p className="text-[10px] text-muted-foreground font-medium opacity-50">@{u.username}</p>
-                              </div>
-                            </div>
-                            {isConnected ? (
-                              <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-500 text-[10px] font-black uppercase">Connected</span>
-                            ) : (
-                              <button onClick={() => handleSendConnectionRequest(u)} disabled={isRequested} className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${isRequested ? 'bg-white/10 opacity-50' : 'bg-[#6c5ce7] text-white hover:scale-105 active:scale-95'}`}>
-                                {isRequested ? "Pending" : "Add"}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="text-center max-w-xs">
+                      <h2 className="text-2xl font-black tracking-tight mb-3" style={{ color: "var(--text-primary)" }}>Find Friends</h2>
+                      <p className="text-sm font-bold leading-relaxed opacity-50" style={{ color: "var(--text-muted)" }}>
+                        Type a username to discover people. Or sync your phone contacts — non-members can be invited via WhatsApp.
+                      </p>
                     </div>
-                  </div>
-                )}
 
-                {/* Non-Members / Invite Section */}
-                {syncNonMatches.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t border-white/5">
-                    <h4 className="text-[11px] font-black uppercase tracking-widest text-pink-500 flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5" /> Not on Nexora
-                    </h4>
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                      {syncNonMatches.map(phone => (
-                        <div key={phone} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 group hover:border-pink-500/30 transition-all">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white/40 font-bold text-xs uppercase">
-                              {phone.slice(-2)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold truncate leading-tight">{phone}</p>
-                              <p className="text-[10px] text-muted-foreground font-medium opacity-50">Contact Sync Match</p>
-                            </div>
-                          </div>
-                          <button onClick={() => {
-                            const msg = encodeURIComponent(`Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\n${window.location.origin}/auth?mode=signup`);
-                            window.open(`https://wa.me/${phone.replace(/\D/g, "")}?text=${msg}`, "_blank");
-                          }} className="px-4 py-1.5 rounded-xl bg-green-500/20 text-green-400 text-[10px] font-black uppercase hover:bg-green-500 hover:text-white transition-all flex items-center gap-1.5 shadow-lg shadow-green-500/10">
-                            <WhatsAppIcon className="w-3 h-3" /> WhatsApp
-                          </button>
+                    {/* Pending requests */}
+                    {pendingRequests.length > 0 && (
+                      <div className="w-full max-w-sm space-y-2">
+                        <div className="px-4 py-1.5 flex items-center gap-2">
+                          <UserPlus className="w-3 h-3 text-[#6c5ce7] opacity-60" />
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6c5ce7]">Pending Requests ({pendingRequests.length})</span>
                         </div>
-                      ))}
+                        {pendingRequests.map((req: any, idx: number) => (
+                          <motion.div key={req.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }}
+                            className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] border border-transparent hover:border-[#6c5ce7]/20 hover:bg-[#6c5ce7]/5 transition-all">
+                            <Avatar 
+                              src={req.avatarUrl} 
+                              name={req.fromName} 
+                              color={req.fromColor} 
+                              size={56} 
+                              animate={true} 
+                              showBorder={true}
+                              className="shrink-0 shadow-xl"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-black text-[16px] truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
+                              <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{req.from} · Wants to connect</p>
+                            </div>
+                            <div className="shrink-0 flex flex-col gap-1.5">
+                              <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
+                                onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }}
+                                className="px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider text-white shadow-lg"
+                                style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>Confirm</motion.button>
+                              <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }}
+                                className="px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all"
+                                style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: "var(--text-secondary)" }}>Delete</button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Suggested Users - 2x2 Grid with See More */}
+                    {suggestedUsers.length > 0 && (
+                      <div className="w-full max-w-sm mt-4">
+                        <div className="flex items-center justify-between px-1 mb-4">
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-3.5 h-3.5 text-[#6c5ce7]" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-primary)]">Suggested for You</span>
+                          </div>
+                          {!expandedSuggestions && suggestedUsers.length > 4 && (
+                            <button onClick={() => setExpandedSuggestions(true)}
+                              className="text-[10px] font-black uppercase tracking-widest text-[#6c5ce7] hover:opacity-70">
+                              See More
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {(expandedSuggestions ? suggestedUsers : suggestedUsers.slice(0, 4)).map((user: any, idx: number) => {
+                             const isRequested = sentRequests.includes(user.username);
+                             const isConnected = threads.some((t: any) => t.username === user.username);
+                             return (
+                              <motion.div key={user.username} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}
+                                className="relative group p-4 rounded-[2rem] border overflow-hidden flex flex-col items-center text-center transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ 
+                                  background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                                  borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"
+                                }}>
+                                {/* Close / Remove suggestion icon? (Skip for now as not requested) */}
+                                
+                                <div className="relative mb-3 group-hover:scale-105 transition-transform duration-300">
+                                  <Avatar 
+                                    src={user.avatar_url} 
+                                    name={user.full_name || user.username} 
+                                    color={user.color} 
+                                    size={64} 
+                                    animate={true} 
+                                    showBorder={true}
+                                    className="shadow-xl"
+                                  />
+                                </div>
+
+                                <p className="font-black text-sm truncate w-full px-1 mb-0.5" style={{ color: "var(--text-primary)" }}>{user.full_name}</p>
+                                <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.1em] mb-3">@{user.username}</p>
+
+                                {user.mutualFriends && user.mutualFriends.length > 0 && (
+                                  <div className="flex items-center justify-center -space-x-1.5 mb-4 group/mutuals relative">
+                                    {user.mutualFriends.slice(0, 2).map((m: any, midx: number) => (
+                                      <div key={midx} className="relative z-[1]">
+                                        <Avatar 
+                                          src={m.avatarUrl} 
+                                          name={m.fullName || m.username} 
+                                          color="from-purple-500 to-indigo-500" 
+                                          size={20} 
+                                          showBorder={true}
+                                          className="border-2 border-[var(--bg-surface)] shadow-sm"
+                                        />
+                                      </div>
+                                    ))}
+                                    <span className="pl-2.5 text-[9px] font-black opacity-40 uppercase">
+                                      {user.mutualCount > 1 ? `${user.mutualCount} Mutual` : "1 Mutual"}
+                                    </span>
+                                    
+                                    {/* Premium Tooltip showing mutual names */}
+                                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 p-2 rounded-xl bg-black/80 backdrop-blur-md border border-white/10 opacity-0 group-hover/mutuals:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap">
+                                      <p className="text-[8px] font-black uppercase text-white/50 mb-1 px-1">Mutual Friends</p>
+                                      {user.mutualFriends.map((m: any, idx: number) => (
+                                        <div key={idx} className="flex items-center gap-2 px-1 py-0.5">
+                                          <Avatar 
+                                            src={m.avatarUrl} 
+                                            name={m.fullName || m.username} 
+                                            color="from-purple-500 to-indigo-500" 
+                                            size={12} 
+                                            showBorder={false}
+                                          />
+                                          <span className="text-[9px] font-bold text-white">{m.fullName || m.username}</span>
+                                        </div>
+                                      ))}
+                                      {user.mutualCount > user.mutualFriends.length && <p className="text-[7px] font-black text-white/30 px-1 mt-1">+{user.mutualCount - user.mutualFriends.length} more</p>}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                  disabled={isRequested || isConnected}
+                                  onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
+                                  className="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition-all disabled:opacity-50"
+                                  style={{ background: isRequested ? "#ffa502" : isConnected ? "#2ed573" : "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
+                                  {isConnected ? "Connected" : isRequested ? "Pending" : "Connect"}
+                                </motion.button>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recent searches */}
+                    {searchHistory.length > 0 && (
+                      <div className="w-full max-w-sm space-y-3 mt-4">
+                        <div className="flex items-center gap-2 opacity-40">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Recent Searches</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {searchHistory.map((h: string) => (
+                            <motion.button key={h} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                              onClick={() => { setManualPhone(h); handleManualAdd(); }}
+                              className="px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all"
+                              style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)", color: "var(--text-primary)" }}>
+                              @{h}
+                            </motion.button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+
+                    {/* Sync CTA */}
+                    <div className="w-full max-w-sm p-5 rounded-[2rem] border" style={{ background: isDark ? "rgba(108,92,231,0.08)" : "rgba(108,92,231,0.05)", borderColor: "rgba(108,92,231,0.2)" }}>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#6c5ce7,#a855f7)" }}>
+                          <Users className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black" style={{ color: "var(--text-primary)" }}>Sync Phone Contacts</p>
+                          <p className="text-[10px] opacity-50 font-bold" style={{ color: "var(--text-muted)" }}>Find friends · Invite non-members via WhatsApp</p>
+                        </div>
+                      </div>
+                      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                        onClick={handleNativeSync} disabled={isSyncing}
+                        className="w-full py-3 rounded-2xl text-sm font-black text-white shadow-xl tracking-wide disabled:opacity-50"
+                        style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 8px 25px rgba(108,92,231,0.35)" }}>
+                        {isSyncing ? "Syncing..." : "🚀 Sync Contacts Now"}
+                      </motion.button>
+                      <p className="text-[9px] mt-3 uppercase tracking-tighter opacity-40 font-bold text-center">Privacy: numbers are hashed — never stored on our servers</p>
                     </div>
                   </div>
-                )}
 
-                {/* Not Found / Invite Section */}
-                {syncMatches.length === 0 && manualPhone.length > 5 && !isSyncing && (
-                  <div className="p-5 rounded-2xl bg-pink-500/5 border border-pink-500/10 text-center animate-in fade-in slide-in-from-bottom-2">
-                    <Mail className="w-8 h-8 text-pink-400 mx-auto mb-3" />
-                    <p className="text-sm font-bold mb-4 italic opactiy-80">This person hasn't joined Nexora yet!</p>
-                    <button onClick={() => {
-                      setSharePhone(manualPhone);
-                      setShowShareModal(true);
-                    }} className="w-full py-3 rounded-xl bg-pink-500 text-white text-sm font-bold shadow-lg shadow-pink-500/30 hover:brightness-110 active:scale-95 transition-all">
-                      Invite to joining
-                    </button>
+                ) : syncMatches.length === 0 && syncNonMatches.length === 0 && !isSyncing && manualPhone.length > 0 ? (
+                  /* No results */
+                  <div className="flex flex-col items-center justify-center py-24 px-10 gap-4">
+                    <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-2 opacity-60">
+                      <ShieldOff className="w-8 h-8 text-[var(--text-muted)]" />
+                    </div>
+                    <div className="text-center opacity-60">
+                      <p className="text-lg font-black tracking-tight" style={{ color: "var(--text-primary)" }}>No Nodes Active</p>
+                      <p className="text-xs font-bold uppercase tracking-widest mt-1" style={{ color: "var(--text-muted)" }}>Protocol could not locate this user on Nexora</p>
+                    </div>
+                    <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        const msg = encodeURIComponent(`Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\n${typeof window !== "undefined" ? window.location.origin : ""}/auth?mode=signup`);
+                        window.open(`https://wa.me/?text=${msg}`, "_blank");
+                      }}
+                      className="mt-4 px-7 py-3.5 rounded-2xl text-sm font-black text-white shadow-xl flex items-center gap-2"
+                      style={{ background: "linear-gradient(135deg,#25d366,#128c7e)" }}>
+                      <WhatsAppIcon className="w-4 h-4" /> Invite via WhatsApp
+                    </motion.button>
+                  </div>
+
+                ) : (
+                  /* Results list + non-members invite list */
+                  <div className="px-3 py-2 space-y-1">
+                    {/* Nexora Members */}
+                    {syncMatches.length > 0 && (
+                      <>
+                        <div className="px-4 py-1.5 mb-1 flex items-center gap-2">
+                          <Zap className="w-3 h-3 text-[#6c5ce7] opacity-60" />
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6c5ce7]">On Nexora ({syncMatches.length})</span>
+                        </div>
+                        <div className="space-y-1">
+                          {syncMatches.map((user: any, idx: number) => {
+                            const isConnected = threads.some((t: any) => t.username === user.username);
+                            const isRequested = sentRequests.includes(user.username);
+                            const pendReq = pendingRequests.find((r: any) => r.from === user.username);
+                            const isPending = !!pendReq;
+                            return (
+                              <motion.div key={user.username} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.04, ease: "easeOut" }}
+                                onClick={() => setSelectedProfileUser(user)}
+                                className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] cursor-pointer transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98]">
+                                <div className="relative shrink-0 flex-none scale-100 group-hover:scale-105 transition-transform duration-300">
+                                  <Avatar 
+                                    src={user.avatarUrl} 
+                                    name={user.fullName || user.username} 
+                                    color={user.color} 
+                                    size={64} 
+                                    animate={true} 
+                                    showBorder={true}
+                                    className="shadow-xl"
+                                  />
+                                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[var(--bg-surface)] flex items-center justify-center shadow-lg border-[3px] border-[var(--bg-surface)]">
+                                    <div className="w-3 h-3 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573]" />
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <p className="font-black text-[16px] sm:text-lg truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{user.fullName || user.username}</p>
+                                    {isConnected && (
+                                      <span className="flex-none px-1.5 py-0.5 rounded-full bg-[#6c5ce7]/10 text-[#6c5ce7] border border-[#6c5ce7]/20 text-[7px] font-black uppercase tracking-tighter flex items-center gap-0.5">
+                                        <Check className="w-2 h-2" /> Friend
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs font-black opacity-40 uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>@{user.username}</p>
+                                </div>
+                                <div className="shrink-0 ml-2" onClick={e => e.stopPropagation()}>
+                                  {isConnected ? (
+                                    <button onClick={() => { setCurrentChatUser(user.username); setShowSyncModal(false); }}
+                                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-all text-white">
+                                      <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
+                                    </button>
+                                  ) : isPending ? (
+                                    <div className="flex flex-col gap-1.5">
+                                      <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
+                                        onClick={() => { if (pendReq) handleRespond(pendReq.id, pendReq.from, 'accept'); }}
+                                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider text-white"
+                                        style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>Confirm</motion.button>
+                                      <button onClick={() => { if (pendReq) handleRespond(pendReq.id, pendReq.from, 'decline'); }}
+                                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                                        style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: "var(--text-secondary)" }}>Delete</button>
+                                    </div>
+                                  ) : isRequested ? (
+                                    <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
+                                    </div>
+                                  ) : (
+                                    <motion.button whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
+                                      onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
+                                      className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
+                                      style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}>
+                                      <span className="relative z-10 flex items-center gap-2"><Plus className="w-3.5 h-3.5" />Connect</span>
+                                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
+                                    </motion.button>
+                                  )}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Non-Members — WhatsApp Invite */}
+                    {syncNonMatches.length > 0 && (
+                      <div className="mt-6 space-y-2">
+                        <div className="px-4 py-1.5 flex items-center gap-2 mt-4">
+                          <Mail className="w-3 h-3 text-pink-500 opacity-60" />
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-pink-500">Not on Nexora — Invite via WhatsApp ({syncNonMatches.length})</span>
+                        </div>
+                        {syncNonMatches[0] === "__no_contacts_api__" ? (
+                          <div className="mx-4 mt-2 p-5 rounded-[2rem] border border-yellow-500/20 bg-yellow-500/5 text-center">
+                            <Smartphone className="w-8 h-8 text-yellow-500 mx-auto mb-3 opacity-60" />
+                            <p className="text-sm font-black" style={{ color: "var(--text-primary)" }}>Contacts not supported here</p>
+                            <p className="text-[10px] opacity-50 font-bold mt-1 mb-4">Use the search bar above to find friends by username, or use your phone to sync contacts.</p>
+                          </div>
+                        ) : syncNonMatches.map((phone: string, idx: number) => (
+                          <motion.div key={phone} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.04 }}
+                            className="group flex items-center gap-4 px-4 py-4 rounded-[2rem] hover:bg-pink-500/5 transition-all border border-transparent hover:border-pink-500/20">
+                            <div className="w-14 h-14 rounded-full bg-white/10 dark:bg-white/5 flex items-center justify-center font-bold text-base uppercase shrink-0 border border-white/10">
+                              <Smartphone className="w-6 h-6 opacity-40" style={{ color: "var(--text-muted)" }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-black text-[15px] truncate tracking-tight" style={{ color: "var(--text-primary)" }}>{phone}</p>
+                              <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mt-0.5" style={{ color: "var(--text-muted)" }}>Not registered on Nexora</p>
+                            </div>
+                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                const msg = encodeURIComponent(`Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\n${typeof window !== "undefined" ? window.location.origin : ""}/auth?mode=signup`);
+                                window.open(`https://wa.me/${phone.replace(/\D/g, "")}?text=${msg}`, "_blank");
+                              }}
+                              className="shrink-0 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider text-white flex items-center gap-1.5 shadow-lg"
+                              style={{ background: "linear-gradient(135deg,#25d366,#128c7e)" }}>
+                              <WhatsAppIcon className="w-3.5 h-3.5" />
+                              Invite
+                            </motion.button>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

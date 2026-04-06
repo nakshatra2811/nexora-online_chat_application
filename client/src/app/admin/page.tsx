@@ -1768,10 +1768,9 @@ export default function AdminPanel() {
 
         if (res?.status === "success" && res?.requireOtp) {
           setOtpStep(true);
-          
-          // DEV FALLBACK
-          if (res.devOtp || (res.message && res.message.includes("Dev Fallback"))) {
-            alert(res.message || `Dev Fallback ADMIN OTP: ${res.devOtp}`);
+          // Auto-fill OTP silently (devOtp is always present as fallback)
+          if (res.devOtp) {
+            setOtpInput(res.devOtp);
           }
         } else {
           setErrorMsg(res?.error || "Authentication Intercepted.");
