@@ -1782,11 +1782,20 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
 
         // 2. Mutual Friends Logic
         if (myFriendsOnly.length > 0) {
+            // Get avatars of all my friends for quick mapping
+            const myFriendsData = await db.all(
+                `SELECT username, avatar_url FROM users WHERE LOWER(username) IN (${myFriendsOnly.map(() => '?').join(',')})`,
+                myFriendsOnly
+            );
+            const friendMap = {};
+            myFriendsData.forEach(f => { friendMap[f.username.toLowerCase()] = f.avatar_url; });
+
             const placeholders = myFriendsOnly.map(() => '?').join(',');
             const potentialMutuals = await db.all(`
                 SELECT 
                     u.username, u.full_name, u.avatar_url, u.color,
-                    COUNT(*) as mutual_count
+                    COUNT(*) as mutual_count,
+                    GROUP_CONCAT(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN LOWER(c.user_a) ELSE LOWER(c.user_b) END, ',') as mutual_user_list
                 FROM connections c
                 JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_b ELSE c.user_a END)
                 WHERE (LOWER(c.user_a) IN (${placeholders}) OR LOWER(c.user_b) IN (${placeholders}))
@@ -1795,13 +1804,20 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                 ORDER BY mutual_count DESC
             `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
             
-            suggestions = potentialMutuals.map(m => ({
-                username: m.username,
-                full_name: decryptField(m.full_name),
-                avatar_url: (m.avatar_url && m.avatar_url !== 'null') ? m.avatar_url : null,
-                color: m.color,
-                mutualCount: parseInt(m.mutual_count) || 0
-            }));
+            suggestions = potentialMutuals.map(m => {
+                const mutList = m.mutual_user_list ? m.mutual_user_list.split(',') : [];
+                return {
+                    username: m.username,
+                    full_name: decryptField(m.full_name),
+                    avatar_url: (m.avatar_url && m.avatar_url !== 'null') ? m.avatar_url : null,
+                    color: m.color,
+                    mutualCount: parseInt(m.mutual_count) || 0,
+                    mutualFriends: [...new Set(mutList)].map(mu => ({
+                        username: mu,
+                        avatar_url: (friendMap[mu] && friendMap[mu] !== 'null') ? friendMap[mu] : null
+                    }))
+                };
+            });
         }
 
         // 3. Fallback to random users

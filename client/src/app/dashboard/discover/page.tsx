@@ -410,11 +410,25 @@ export default function DiscoverPage() {
                           </p>
 
                           {user.mutualCount > 0 && (
-                            <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#6c5ce7]/10 border border-[#6c5ce7]/20">
-                              <Users className="w-2.5 h-2.5 text-[#6c5ce7]" />
-                              <span className="text-[9px] font-black text-[#6c5ce7] uppercase tracking-wider">
-                                {user.mutualCount} Mutual
-                              </span>
+                            <div className="mt-2 inline-flex flex-col items-center gap-1.5">
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#6c5ce7]/10 border border-[#6c5ce7]/20">
+                                <Users className="w-2.5 h-2.5 text-[#6c5ce7]" />
+                                <span className="text-[9px] font-black text-[#6c5ce7] uppercase tracking-wider">
+                                  {user.mutualCount} Mutual
+                                </span>
+                              </div>
+                              {user.mutualFriends && user.mutualFriends.length > 0 && (
+                                <div className="flex -space-x-1.5 opacity-80 hover:opacity-100 transition-opacity">
+                                  {user.mutualFriends.slice(0, 3).map((mf: any, idx: number) => (
+                                    <Avatar key={idx} src={mf.avatar_url} name={mf.username} size={16} animate={false} showBorder={true} className="border border-[#1a1a2e] shadow-sm" />
+                                  ))}
+                                  {user.mutualFriends.length > 3 && (
+                                    <div className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center text-[7px] font-black border border-[#1a1a2e] z-10">
+                                      +{user.mutualFriends.length - 3}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

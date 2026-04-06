@@ -2682,21 +2682,24 @@ function ChatsPageContent() {
                 {showRequestsSlider && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-2 space-y-2">
                     {pendingRequests.map((req) => (
-                      <div key={req.id} className="p-3 rounded-xl border flex items-center justify-between gap-3" style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)" }}>
+                      <div key={req.id} className="p-3 rounded-xl flex items-center justify-between gap-2" style={{ background: "transparent", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"}` }}>
                         <div className="flex items-center gap-2 min-w-0">
                           <Avatar 
                             src={req.avatarUrl} 
                             name={req.fromName} 
                             color={req.fromColor} 
-                            size={32} 
-                            animate={true} 
+                            size={40} 
+                            animate={false} 
                             showBorder={false}
                           />
-                          <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
+                          <div className="flex-1 min-w-0 pr-2">
+                            <p className="text-[13px] font-bold truncate leading-tight" style={{ color: "var(--text-primary)" }}>{req.fromName}</p>
+                            <p className="text-[11px] opacity-40 truncate leading-tight" style={{ color: "var(--text-primary)" }}>Requested</p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="p-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20"><X className="w-3.5 h-3.5" /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="p-1.5 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20"><Check className="w-3.5 h-3.5" /></button>
+                        <div className="flex flex-col gap-1.5 shrink-0">
+                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="px-4 py-1.5 rounded-lg text-[11px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white">Confirm</button>
+                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="px-4 py-1.5 rounded-lg text-[11px] font-bold bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10" style={{ color: "var(--text-primary)" }}>Delete</button>
                         </div>
                       </div>
                     ))}
@@ -2732,19 +2735,32 @@ function ChatsPageContent() {
                       <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Quiet Protocol</p>
                     </div>
                   ) : (
-                    notifications.map(notif => (
+                    notifications.map(notif => {
+                      let namePart = notif.message;
+                      let restPart = '';
+                      const match = notif.message.match(/(.*?) (sent|accepted|started|tagged|replied|liked)(.*)/i);
+                      if (match) {
+                        namePart = match[1];
+                        restPart = ` ${match[2]}${match[3]}`;
+                      }
+                      
+                      return (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                         key={notif.id}
-                        className="group flex flex-col gap-1.5 p-2.5 rounded-xl border relative transition-all"
+                        className="group flex flex-col gap-1.5 p-3 rounded-xl border relative transition-all"
                         style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)", background: isDark ? "rgba(10,10,20,0.4)" : "rgba(255,255,255,0.5)" }}
                       >
-                        <div className="flex items-start gap-2.5" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
-                          <div className="mt-1">
-                            {notif.type === 'request_accepted' ? <UserCheck className="w-3.5 h-3.5 text-blue-400" /> : <Bell className="w-3.5 h-3.5 text-purple-500" />}
-                          </div>
+                        <div className="flex items-center gap-2.5" onClick={() => setSelectedProfileUser({ username: notif.from_username, name: notif.from_username, color: 'from-purple-500 to-indigo-500' })}>
+                          <Avatar 
+                             name={notif.from_username} 
+                             size={32} 
+                             color={notif.type?.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} 
+                             animate={false} showBorder={false} />
                           <div className="flex-1 min-w-0 pr-6 cursor-pointer">
-                            <p className="text-[11px] leading-tight font-medium" style={{ color: "var(--text-primary)" }}>{notif.message}</p>
+                            <p className="text-[11px] leading-tight" style={{ color: "var(--text-primary)" }}>
+                              <span className="font-bold">{namePart}</span>{restPart}
+                            </p>
                             <p className="text-[9px] text-white/40 mt-0.5 font-bold uppercase">{notif.time}</p>
                           </div>
                         </div>
@@ -2754,7 +2770,7 @@ function ChatsPageContent() {
                             nexoraFetch("/api/notifications/read", { method: "POST", body: JSON.stringify({ id: notif.id }) });
                           }}><X className="w-3 h-3" /></button>
                       </motion.div>
-                    ))
+                    )})
                   )}
                 </motion.div>
               </AnimatePresence>

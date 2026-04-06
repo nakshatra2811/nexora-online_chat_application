@@ -953,8 +953,8 @@ export default function StoriesPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="grid grid-cols-2 gap-4"
             >
-              {/* Show first 3 cards + "See More" as 4th, OR all cards when expanded */}
-              {(showAllSuggestions ? suggestions : suggestions.slice(0, 3)).map((s, i) => (
+              {/* Show first 3 cards + "See More" as 4th */}
+              {suggestions.slice(0, 3).map((s, i) => (
                 <motion.div 
                   key={s.username} 
                   initial={{ opacity: 0, y: 10 }}
@@ -990,8 +990,19 @@ export default function StoriesPage() {
                     <h4 className="font-extrabold text-[14px] truncate w-full mb-0.5 tracking-tight" style={{ color: "var(--text-primary)" }}>
                       {s.full_name || s.username}
                     </h4>
-                    <p className="text-[11px] font-bold mb-3 opacity-60" style={{ color: "var(--text-muted)" }}>
-                      {s.mutualCount > 0 ? `${s.mutualCount} mutual friends` : `@${s.username}`}
+                    <p className="text-[11px] font-bold mb-3 opacity-60 flex flex-col items-center justify-center gap-1 min-h-[32px]" style={{ color: "var(--text-muted)" }}>
+                      {s.mutualCount > 0 ? (
+                        <>
+                           <span>{s.mutualCount} mutual friendship{s.mutualCount > 1 ? 's' : ''}</span>
+                           {s.mutualFriends && s.mutualFriends.length > 0 && (
+                             <div className="flex -space-x-2 mt-0.5">
+                               {s.mutualFriends.map((mf: any, idx: number) => (
+                                 <Avatar key={idx} src={mf.avatar_url} name={mf.username} size={18} animate={false} showBorder={true} className="border border-[#1a1a2e] shadow-sm z-10" />
+                               ))}
+                             </div>
+                           )}
+                        </>
+                      ) : `@${s.username}`}
                     </p>
 
                     <button
@@ -1004,14 +1015,14 @@ export default function StoriesPage() {
                 </motion.div>
               ))}
 
-              {/* 4th slot: "See More" card (only when not expanded and there are more suggestions) */}
-              {!showAllSuggestions && suggestions.length > 3 && (
+              {/* 4th slot: "See More" card (only when there are more suggestions) */}
+              {suggestions.length > 3 && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 }}
                   whileHover={{ y: -5, scale: 1.02 }}
-                  onClick={() => setShowAllSuggestions(true)}
+                  onClick={() => router.push('/dashboard/discover')}
                   className="relative p-5 rounded-[2rem] border transition-all duration-300 shadow-xl flex flex-col items-center justify-center text-center group overflow-hidden cursor-pointer"
                   style={{
                     background: isDark ? "rgba(108,92,231,0.06)" : "rgba(108,92,231,0.04)",
@@ -1060,23 +1071,6 @@ export default function StoriesPage() {
                       <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   </motion.div>
-                </motion.div>
-              )}
-
-              {/* "Show Less" button when expanded (full-width, bottom of grid) */}
-              {showAllSuggestions && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="col-span-2"
-                >
-                  <button
-                    onClick={() => setShowAllSuggestions(false)}
-                    className="w-full mt-2 py-3.5 rounded-2xl border text-[11px] font-black tracking-widest uppercase hover:bg-white/5 transition-all"
-                    style={{ borderColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" }}
-                  >
-                    Show Less ↑
-                  </button>
                 </motion.div>
               )}
             </motion.div>

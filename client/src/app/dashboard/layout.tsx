@@ -873,48 +873,65 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             )}
                             {pendingRequests.map((req) => (
                               <motion.div key={`req-${req.id}`} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: actionedIds.includes(req.id) ? 0 : 1, x: 0 }} exit={{ opacity: 0 }}
-                                className="px-4 py-4 border-b flex items-center gap-3" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                                className="px-4 py-3 border-b flex items-center gap-3 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
                                 <Avatar 
                                   src={req.avatarUrl} 
                                   name={req.fromName || req.from} 
                                   color={req.fromColor} 
-                                  size={40} 
+                                  size={44} 
                                   animate={false}
+                                  showBorder={false}
                                 />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[11px] font-bold"><span className="text-[#6c5ce7]">@{req.from}</span> requested.</p>
-                                  <p className="text-[8px] opacity-30 uppercase font-black">{req.time}</p>
+                                <div className="flex-1 min-w-0 pr-2">
+                                  <p className="text-[13px] leading-tight" style={{ color: "var(--text-primary)" }}>
+                                    <span className="font-bold">{(req.fromName || req.from).toLowerCase()}</span> requested to follow you.
+                                  </p>
+                                  <p className="text-[11px] opacity-40 mt-0.5">{req.time}</p>
                                 </div>
-                                <div className="flex gap-2">
-                                  <button onClick={() => handleRespond(req, "accept")} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-xl">Confirm</button>
-                                  <button onClick={() => handleRespond(req, "decline")} className="p-2 rounded-lg opacity-40 hover:opacity-100 transition-opacity" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }}><X className="w-3.5 h-3.5" /></button>
+                                <div className="flex flex-col gap-1.5 shrink-0">
+                                  <button onClick={() => handleRespond(req, "accept")} className="px-5 py-1.5 rounded-lg text-[12px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white transition-colors">Confirm</button>
+                                  <button onClick={() => handleRespond(req, "decline")} className="px-5 py-1.5 rounded-lg text-[12px] font-bold transition-colors" style={{ background: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", color: "var(--text-primary)" }}>Delete</button>
                                 </div>
                               </motion.div>
                             ))}
 
                             {generalNotifications.length > 0 && (
-                              <div key="activity-header" className="px-4 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                                <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Recent Activity</span>
+                              <div key="activity-header" className="px-4 py-3 bg-black/[0.02] dark:bg-white/[0.02] border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                                <span className="text-[11px] font-bold opacity-60">This Month</span>
                               </div>
                             )}
-                            {generalNotifications.map((notif) => (
-                              <motion.div key={`notif-${notif.id}`} layout initial={{ opacity: 0 }} animate={{ opacity: actionedIds.includes(notif.id) ? 0 : 1 }} exit={{ opacity: 0 }}
-                                className="px-4 py-4 border-b flex items-center gap-3 last:border-0" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
-                                <Avatar 
-                                  name={notif.from_username} 
-                                  color={notif.type.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} 
-                                  size={36} 
-                                  animate={false}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[11px] leading-tight"><span className="font-bold">@{notif.from_username}</span> {notif.message}</p>
-                                  <p className="text-[9px] opacity-30 mt-0.5">{notif.time || "Recently"}</p>
-                                </div>
-                                {notif.type === 'request_back_prompt' && (
-                                  <button onClick={() => handleFollowBack(notif.from_username)} className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase text-[#00d4ff] border border-[#00d4ff]/20 bg-[#00d4ff]/5">Follow Back</button>
-                                )}
-                              </motion.div>
-                            ))}
+                            {generalNotifications.map((notif) => {
+                              // Safely extract the full name to bold it (split at common action verbs)
+                              let namePart = notif.message;
+                              let restPart = '';
+                              const match = notif.message.match(/(.*?) (sent|accepted|started|tagged|replied|liked)(.*)/i);
+                              if (match) {
+                                namePart = match[1];
+                                restPart = ` ${match[2]}${match[3]}`;
+                              }
+                              
+                              return (
+                                <motion.div key={`notif-${notif.id}`} layout initial={{ opacity: 0 }} animate={{ opacity: actionedIds.includes(notif.id) ? 0 : 1 }} exit={{ opacity: 0 }}
+                                  className="px-4 py-3 border-b flex items-center gap-3 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }}>
+                                  <Avatar 
+                                    name={notif.from_username} 
+                                    color={notif.type.includes('story') ? 'from-pink-500 to-rose-500' : 'from-indigo-500 to-blue-500'} 
+                                    size={44} 
+                                    animate={false}
+                                    showBorder={false}
+                                  />
+                                  <div className="flex-1 min-w-0 pr-2">
+                                    <p className="text-[13px] leading-tight" style={{ color: "var(--text-primary)" }}>
+                                      <span className="font-bold">{namePart}</span>{restPart}
+                                      <span className="text-[11px] opacity-40 ml-1">{notif.time || "1w"}</span>
+                                    </p>
+                                  </div>
+                                  {notif.type === 'request_back_prompt' && (
+                                    <button onClick={() => handleFollowBack(notif.from_username)} className="shrink-0 px-4 py-1.5 rounded-lg text-[12px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white transition-colors">Follow Back</button>
+                                  )}
+                                </motion.div>
+                              );
+                            })}
                           </AnimatePresence>
                         </div>
                       )}
