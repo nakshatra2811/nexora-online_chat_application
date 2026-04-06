@@ -97,6 +97,7 @@ function ChatsPageContent() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
   const [vaultKey, setVaultKey] = useState<CryptoKey | null>(null);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -1908,6 +1909,9 @@ function ChatsPageContent() {
     const text = inputValue.trim();
     const myUsername = myUsernameRef.current;
     setInputValue("");
+    if (inputRef.current) {
+      inputRef.current.style.height = 'inherit';
+    }
 
     // Stop typing indicator
     const socket = socketService.getSocket();
@@ -3005,7 +3009,14 @@ function ChatsPageContent() {
                         )}
                       </div>
                     </div>
-                    {!isLockedDisplay && <p className="text-xs truncate mt-0.5" style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)" }}>{thread.preview}</p>}
+                    {!isLockedDisplay && (
+                      <p 
+                        className="text-[11px] mt-0.5 line-clamp-2 leading-[1.3] font-medium overflow-hidden" 
+                        style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+                      >
+                        {thread.preview}
+                      </p>
+                    )}
                   </div>
                 </motion.button>
               );
@@ -3333,10 +3344,13 @@ function ChatsPageContent() {
                     <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] flex flex-col ${m.isSelf ? "items-end" : "items-start"}`}>
 
                       <div
-                        onContextMenu={(e) => { e.preventDefault(); setMsgMenu(m.id); }}
-                        onDoubleClick={(e) => { e.preventDefault(); setMsgMenu(m.id); }}
+                        onContextMenu={(e) => { e.preventDefault(); if (navigator.vibrate) navigator.vibrate(50); setMsgMenu(m.id); }}
+                        onDoubleClick={(e) => { e.preventDefault(); if (navigator.vibrate) navigator.vibrate(30); setMsgMenu(m.id); }}
                         onTouchStart={() => {
-                          longPressTimerRef.current = setTimeout(() => setMsgMenu(m.id), 600);
+                          longPressTimerRef.current = setTimeout(() => {
+                            if (navigator.vibrate) navigator.vibrate(50);
+                            setMsgMenu(m.id);
+                          }, 550);
                         }}
                         onTouchEnd={() => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
                         onTouchMove={() => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
@@ -3497,19 +3511,57 @@ function ChatsPageContent() {
                           </div>
                         )}
 
-                        {/* MESSAGE MENU */}
-                        {msgMenu === m.id && (
-                          <div className={`absolute ${m.isSelf ? "right-full mr-2 top-0" : "left-full ml-2 top-0"} bg-white dark:bg-[#161622] rounded-2xl shadow-2xl border dark:border-white/10 flex flex-col overflow-hidden z-50 w-auto min-w-[140px] glass-panel`}>
-                            {/* Reactions row */}
-                            <div className="flex px-3 py-2 gap-2 justify-between border-b border-black/5 dark:border-white/10">
-                              {REACTIONS.map(emoji => (
-                                <button key={emoji} onClick={(e) => { e.stopPropagation(); addReaction(m.id, emoji); setMsgMenu(null); }} className="hover:scale-125 transition-transform text-sm">{emoji}</button>
-                              ))}
-                            </div>
-                            <button onClick={(e) => { e.stopPropagation(); setReplyTo(m); setMsgMenu(null); }} className="px-4 py-3 text-xs font-bold text-left hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-3 transition-colors text-[var(--text-primary)]"><Reply className="w-3.5 h-3.5" /> Reply</button>
-                            {m.isSelf && <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(m.id); setMsgMenu(null); }} className="px-4 py-3 text-xs font-bold text-left text-red-500 hover:bg-red-500/10 flex items-center gap-3 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>}
-                          </div>
-                        )}
+                        {/* PREMIUM REACTION & ACTION MENU */}
+                        <AnimatePresence>
+                          {msgMenu === m.id && (
+                            <>
+                              {/* Overlay to close menu */}
+                              <motion.div 
+                                initial={{ opacity: 0 }} 
+                                animate={{ opacity: 1 }} 
+                                exit={{ opacity: 0 }}
+                                onClick={(e) => { e.stopPropagation(); setMsgMenu(null); }}
+                                className="fixed inset-0 z-[100] cursor-default"
+                                style={{ background: "rgba(10,10,20,0.4)", backdropFilter: "blur(4px)" }}
+                              />
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.8, y: m.isSelf ? -10 : 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.8, y: m.isSelf ? -10 : 10 }}
+                                transition={{ type: "spring", damping: 18, stiffness: 300 }}
+                                className={`absolute ${m.isSelf ? "right-0" : "left-0"} top-full mt-2 bg-white dark:bg-[#1c1c2e] rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.4)] border border-white/10 flex flex-col overflow-hidden z-[110] w-56 glass-panel`}
+                                style={{ originX: m.isSelf ? 1 : 0, originY: 0 }}
+                              >
+                                {/* Reactions row - Larger and smoother */}
+                                <div className="flex px-4 py-3 gap-3 justify-between border-b border-white/5 bg-white/5">
+                                  {REACTIONS.map(emoji => (
+                                    <motion.button
+                                      key={emoji}
+                                      whileHover={{ scale: 1.3 }}
+                                      whileTap={{ scale: 0.8 }}
+                                      onClick={(e) => { e.stopPropagation(); addReaction(m.id, emoji); setMsgMenu(null); }}
+                                      className="text-xl drop-shadow-sm hit-target"
+                                    >
+                                      {emoji}
+                                    </motion.button>
+                                  ))}
+                                </div>
+                                <div className="p-1.5 flex flex-col gap-0.5">
+                                  <button onClick={(e) => { e.stopPropagation(); setReplyTo(m); setMsgMenu(null); }} className="px-4 py-3 text-[13px] font-extrabold text-left hover:bg-black/5 dark:hover:bg-white/10 rounded-2xl flex items-center justify-between transition-colors text-[var(--text-primary)]">
+                                    <span className="flex items-center gap-3"><Reply className="w-4 h-4 text-blue-500" /> Reply</span>
+                                    <ChevronRight className="w-3.5 h-3.5 opacity-30" />
+                                  </button>
+                                  {m.isSelf && (
+                                    <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(m.id); setMsgMenu(null); }} className="px-4 py-3 text-[13px] font-extrabold text-left text-red-500 hover:bg-red-500/10 rounded-2xl flex items-center justify-between transition-colors">
+                                      <span className="flex items-center gap-3"><Trash2 className="w-4 h-4" /> Delete for everyone</span>
+                                      <ChevronRight className="w-3.5 h-3.5 opacity-30" />
+                                    </button>
+                                  )}
+                                </div>
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </div>
                   </div>
@@ -3759,16 +3811,26 @@ function ChatsPageContent() {
                       )}
                     </AnimatePresence>
 
-                    <input
-                      type="text"
+                    <textarea
+                      ref={inputRef}
                       value={inputValue}
-                      onChange={(e) => handleInputChange(e.target.value)}
+                      onChange={(e) => {
+                        handleInputChange(e.target.value);
+                        e.target.style.height = 'inherit';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                      }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") { e.preventDefault(); handleSendMessage(); }
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                          const target = e.target as HTMLTextAreaElement;
+                          target.style.height = 'inherit';
+                        }
                       }}
                       placeholder="Type message..."
-                      className="w-full bg-transparent outline-none text-sm font-medium pr-3"
-                      style={{ color: "var(--text-primary)" }}
+                      rows={1}
+                      className="w-full bg-transparent outline-none text-sm font-medium pr-3 resize-none scrollbar-hide py-1"
+                      style={{ color: "var(--text-primary)", maxHeight: "120px" }}
                     />
                   </motion.div>
                 )}
