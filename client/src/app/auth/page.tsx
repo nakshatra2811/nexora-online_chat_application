@@ -316,6 +316,11 @@ function AuthContent() {
       }
       if (isLogin) {
         if (loginMethod === "otp" && isLoginOtpSent) {
+            if (!loginOTP || loginOTP.length !== 6) {
+                alert("Please enter a valid 6-digit verification code.");
+                setIsLoading(false);
+                return;
+            }
             const data = await nexoraFetch("/api/auth/verify-login-otp", {
               method: "POST",
               body: JSON.stringify({ identifier: username, otp: loginOTP })
@@ -337,7 +342,8 @@ function AuthContent() {
               setTimeout(() => router.push("/dashboard/chats"), 2200);
               return;
             } else {
-              alert(data?.error || "Invalid OTP");
+              alert(data?.error || "Invalid Verification Segment.");
+              setIsLoading(false);
               return;
             }
         } else if (loginMethod === "otp" && !isLoginOtpSent) {
@@ -352,6 +358,8 @@ function AuthContent() {
 
         if (data && data._httpError) {
           alert(data.message || "Authentication failed: Invalid credentials.");
+          setIsLoading(false);
+          return;
         } else if (data && data.status === "success") {
           const role = data.role || "Standard";
           if (data.token) localStorage.setItem("nexora_token", data.token);

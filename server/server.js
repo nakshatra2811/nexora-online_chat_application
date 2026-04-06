@@ -1,5 +1,5 @@
 process.env.TZ = "Asia/Kolkata";
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const Sentry = require("@sentry/node");
 const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 
@@ -605,10 +605,10 @@ async function nexoraMailProtocol(type, to, data) {
                 text: `Nexora Notice: Your request was processed.`,
                 html: customHtml
             });
-            ((..._args) => { })(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
             return true;
         } catch (err) {
-            ((..._args) => { })(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
             return false;
         }
     }
@@ -757,7 +757,8 @@ async function nexoraMailProtocol(type, to, data) {
             </body>
             </html>`;
     } else if (type === 'otp') {
-        subject = "Nexora Recovery: Verification Code";
+        const isLogin = data.username ? true : false;
+        subject = isLogin ? "Nexora Authorization: Login Segment" : "Nexora Security: Recovery Segment";
         html = `
             <!DOCTYPE html>
             <html>
@@ -773,7 +774,7 @@ async function nexoraMailProtocol(type, to, data) {
                       <tr>
                         <td align="center" style="padding:30px 20px 10px;">
                           <span style="background:rgba(108,92,231,0.08); color:#6c5ce7; padding:8px 18px; border-radius:100px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:2px;">
-                            🛡️ Recovery Protocol Active
+                            ${isLogin ? "🔐 Authorization Vault" : "🛡️ Recovery Protocol Active"}
                           </span>
                         </td>
                       </tr>
@@ -788,7 +789,7 @@ async function nexoraMailProtocol(type, to, data) {
                         <td align="center" style="padding:10px 45px;">
                           <h1 style="margin:0; font-size:32px; font-weight:900; color:#1a1a2e; letter-spacing:-1px;">Verification Code</h1>
                           <p style="margin-top:20px; color:#64748b; font-size:18px; line-height:1.6; font-weight:500;">
-                            A request was made to unlock your account. Use the authorization code below to establish a secure link.
+                            ${isLogin ? `A session login request was made for <span style="color:#6c5ce7; font-weight:700;">@${data.username}</span>.` : "A request was made to unlock this account."} Use the authorization code below to establish a secure link.
                           </p>
                         </td>
                       </tr>
@@ -811,7 +812,7 @@ async function nexoraMailProtocol(type, to, data) {
                       </tr>
                       <tr>
                         <td align="center" style="padding:45px; background:#fafbfc; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; line-height:1.8; font-weight:600; text-transform:uppercase; letter-spacing:1px;">
-                          © ${new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' })} Nexora • Systems Security Protocol
+                          © 2026 Nexora • Protocol Security Division
                         </td>
                       </tr>
                     </table>
@@ -820,6 +821,7 @@ async function nexoraMailProtocol(type, to, data) {
               </table>
             </body>
             </html>`;
+
     } else if (type === 'admin_otp') {
         subject = "🔐 Nexora: Administrative Access Segment";
         html = `
@@ -918,10 +920,10 @@ async function nexoraMailProtocol(type, to, data) {
             text: `Nexora Notice: Your request was processed. Please view the HTML version of this email to see your secure payload.`,
             html: html
         });
-        ((..._args) => { })(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
+        console.log(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
         return true;
     } catch (err) {
-        ((..._args) => { })(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
+        console.log(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
         return false;
     }
 }
@@ -946,9 +948,9 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
         VAPID_PUBLIC_KEY,
         VAPID_PRIVATE_KEY
     );
-    ((..._args) => { })('[PUSH] Web Push VAPID configured.');
+    console.log('[PUSH] Web Push VAPID configured.');
 } else {
-    ((..._args) => { })('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
+    console.log('[PUSH] VAPID keys not set — push notifications disabled. Run: node -e "const w=require(\'web-push\');const k=w.generateVAPIDKeys();((..._args) => {})(JSON.stringify(k))" to generate.');
 }
 
 // In-memory fallback just in case, but mostly relying on DB
@@ -1094,7 +1096,7 @@ let broadcastState = {
 async function sendNextBroadcastMessage(users, index, message) {
     if (!broadcastState.isRunning || index >= users.length) {
         broadcastState.isRunning = false;
-        ((..._args) => { })(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
+        console.log(`[BROADCAST] Completed. Sent: ${broadcastState.sent}, Failed: ${broadcastState.failed}`);
         return;
     }
 
@@ -1136,7 +1138,7 @@ async function sendNextBroadcastMessage(users, index, message) {
         queueMessageForUser(targetId, payload);
         broadcastState.sent++;
     } catch (e) {
-        ((..._args) => { })(`[BROADCAST] Failed for ${targetId}:`, e.message);
+        console.log(`[BROADCAST] Failed for ${targetId}:`, e.message);
         broadcastState.failed++;
     }
 
@@ -1145,7 +1147,7 @@ async function sendNextBroadcastMessage(users, index, message) {
 }
 
 io.on('connection', (socket) => {
-    ((..._args) => { })(`[+] Node Connected: ${socket.id}`);
+    console.log(`[+] Node Connected: ${socket.id}`);
 
     // User registers their identity — Joins a private room for cross-device sync
     socket.on('register', async (userId) => {
@@ -1155,7 +1157,7 @@ io.on('connection', (socket) => {
 
         // Joining a room named after the userId allows us to emit to all of their devices
         socket.join(normalizedId);
-        ((..._args) => { })(`[+] Registered: ${normalizedId} → Channel Sync Active`);
+        console.log(`[+] Registered: ${normalizedId} → Channel Sync Active`);
 
         // 1. Broadcast online status to others
         socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
@@ -1264,7 +1266,7 @@ io.on('connection', (socket) => {
 
             try {
                 await db.run('UPDATE connections SET wallpaper = ? WHERE user_a = ? AND user_b = ?', [data.wallpaper, first, second]);
-            } catch (e) { ((..._args) => { })("Wallpaper save error:", e); }
+            } catch (e) { console.log("Wallpaper save error:", e); }
 
             io.to(u2).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
             socket.to(senderId).emit('dm:wallpaper', { from: senderId, wallpaper: data.wallpaper });
@@ -1469,7 +1471,7 @@ io.on('connection', (socket) => {
     socket.on('create-room', ({ roomId, offer }) => {
         const senderId = socketToUser.get(socket.id);
         socket.join(roomId);
-        ((..._args) => { })(`[Call] Room Created: ${roomId} by ${senderId}`);
+        console.log(`[Call] Room Created: ${roomId} by ${senderId}`);
         // For direct calls, the 'to' is usually the user we are calling.
         // If roomId is used for signaling, we broadcast 'offer-received' to the other peer(s).
         // Since Nexora usually calls 1-on-1, 'roomId' is typically shared via another channel or known ID.
@@ -1479,7 +1481,7 @@ io.on('connection', (socket) => {
     socket.on('join-room', ({ roomId }) => {
         const senderId = socketToUser.get(socket.id);
         socket.join(roomId);
-        ((..._args) => { })(`[Call] Peer Joined: ${roomId} (${senderId})`);
+        console.log(`[Call] Peer Joined: ${roomId} (${senderId})`);
     });
 
     socket.on('send-answer', ({ roomId, answer }) => {
@@ -1559,10 +1561,10 @@ io.on('connection', (socket) => {
                     await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, userId]);
                 } catch(e) {}
                 io.emit('user_status', { userId, status: 'offline', last_visit: now });
-                ((..._args) => { })(`[-] Registered Identity Fully Logged Off: ${userId}`);
+                console.log(`[-] Registered Identity Fully Logged Off: ${userId}`);
             }
         }
-        ((..._args) => { })(`[-] Node Disconnected: ${socket.id}`);
+        console.log(`[-] Node Disconnected: ${socket.id}`);
     });
 });
 
@@ -1640,7 +1642,7 @@ app.post('/api/users/sync-contacts', authenticateToken, async (req, res) => {
 
         res.json({ suggestions, registeredPhones });
     } catch (e) {
-        ((..._args) => { })("Contact Sync Protocol Error:", e);
+        console.log("Contact Sync Protocol Error:", e);
         res.status(500).json({ error: "Server sync failure." });
     }
 });
@@ -1661,7 +1663,7 @@ app.post('/api/auth/login', async (req, res) => {
 
             if (isMatch) {
                 // Send Login Alert (Non-blocking)
-                nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch((..._args) => { });
+                nexoraMailProtocol('login_alert', user.email, { username: user.username }).catch(e => console.error("[MAIL] Login Alert failure:", e));
 
                 if (user.status === 'Suspended') {
                     return res.status(403).json({ 
@@ -1688,7 +1690,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
         res.status(401).json({ status: "error", message: "Authentication failed. Invalid identity." });
     } catch (err) {
-        ((..._args) => { })("Login Error:", err);
+        console.log("Login Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -1959,7 +1961,10 @@ app.post('/api/auth/send-login-otp', async (req, res) => {
         authStore.set(`login:${user.email}`, { otp, expiry: Date.now() + 10 * 60 * 1000, username: user.username });
 
         const sent = await nexoraMailProtocol('otp', user.email, { otp, username: user.username });
-        if (!sent) return res.status(500).json({ error: "Relay failed to transmit OTP. Protocol communication breach." });
+        if (!sent) {
+            console.error(`[SMTP] Critical Relay Failure to ${user.email} for @${user.username}`);
+            return res.status(500).json({ error: "Relay failed to transmit OTP. Protocol communication breach." });
+        }
         res.json({ status: "success", message: "OTP transmitted securely. Access the Relay console in your inbox.", email: user.email });
     } catch (err) {
         res.status(500).json({ error: "Relay failed to transmit OTP." });
@@ -2049,7 +2054,11 @@ app.post('/api/auth/recovery', async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         authStore.set(`recovery:${email}`, { otp, expiry: Date.now() + 20 * 60 * 1000, verified: false });
 
-        await nexoraMailProtocol('otp', email, { otp });
+        const sent = await nexoraMailProtocol('otp', email, { otp });
+        if (!sent) {
+            console.error(`[SMTP] Recovery Protocol Transmission Breach to ${email}`);
+            return res.status(500).json({ error: "Failed to transmit recovery protocol. Communication relay restricted." });
+        }
         res.json({ status: "success", message: "Recovery code transmitted to secure mail." });
     } catch (err) {
         res.status(500).json({ error: "Failed to transmit recovery protocol." });
@@ -2101,11 +2110,11 @@ const COLORS = [
 
 app.post('/api/auth/signup', async (req, res) => {
     const { username, email, fullName, password, isAuthorized, phoneNumber } = req.body;
-    ((..._args) => { })(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
+    console.log(`[SIGNUP] Incoming identity synchronization request for @${username} (Email: ${email})`);
 
     try {
         if (!db) {
-            ((..._args) => { })("[SIGNUP] Database Reference Missing Error: DB not ready");
+            console.log("[SIGNUP] Database Reference Missing Error: DB not ready");
             return res.status(500).json({ status: "error", error: "Database not ready" });
         }
 
@@ -2120,6 +2129,9 @@ app.post('/api/auth/signup', async (req, res) => {
             const isMatch = await bcrypt.compare(password, existing.password).catch(() => password === existing.password);
 
             if (isMatch) {
+                // Send Login Alert (Non-blocking)
+                nexoraMailProtocol('login_alert', existing.email, { username: existing.username }).catch(e => console.error("[MAIL] Login Alert failure:", e));
+
                 return res.json({
                     status: "success",
                     user: {
@@ -2132,9 +2144,6 @@ app.post('/api/auth/signup', async (req, res) => {
                     },
                     message: "Identity recognized. Automatic login authorized."
                 });
-
-                // Send Login Alert (Non-blocking)
-                nexoraMailProtocol('login_alert', existing.email, { username: existing.username }).catch((..._args) => { });
             } else {
                 return res.status(400).json({ status: "error", error: "Username or Email already registered. Please log in instead." });
             }
@@ -2163,7 +2172,7 @@ app.post('/api/auth/signup', async (req, res) => {
         };
 
         // Attempt to send welcome email to ALL new users (Non-blocking)
-        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch((..._args) => { });
+        nexoraMailProtocol('welcome', finalEmail, { username: finalUsername }).catch(e => console.error("[MAIL] Welcome Transmission failure:", e));
         
         const tokenUserObj = { id: this.lastID || null, username: finalUsername, role: role };
         const token = generateToken(tokenUserObj);
@@ -2272,7 +2281,7 @@ app.post('/api/admin/approve', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "User approved and welcome protocol deployed." });
     } catch (err) {
-        ((..._args) => { })("Approval error:", err);
+        console.log("Approval error:", err);
         res.status(500).json({ error: "Failed to process approval." });
     }
 });
@@ -2300,7 +2309,7 @@ app.post('/api/admin/test-mail', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "Test protocol transmitted successfully." });
     } catch (err) {
-        ((..._args) => { })("SMTP Test Error:", err);
+        console.log("SMTP Test Error:", err);
         res.status(500).json({ error: "SMTP Protocol Failure. Check node console for logs." });
     }
 });
@@ -2391,7 +2400,7 @@ app.post('/api/profile/request-email-change', async (req, res) => {
         await emailTransporter.sendMail(mailOptions);
         res.json({ status: "success", message: "OTP sent to new email." });
     } catch (err) {
-        ((..._args) => { })("Email update request error:", err);
+        console.log("Email update request error:", err);
         res.status(500).json({ error: "Failed to send OTP." });
     }
 });
@@ -2421,7 +2430,7 @@ app.post('/api/profile/verify-email-change', async (req, res) => {
         otpStore.delete(key);
         res.json({ status: "success", message: "Email updated successfully. Identity graph resynced." });
     } catch (err) {
-        ((..._args) => { })("Email update error:", err);
+        console.log("Email update error:", err);
         res.status(500).json({ error: "Failed to update email." });
     }
 });
@@ -2449,7 +2458,7 @@ app.post('/api/admin/config', authenticateToken, isAdmin, async (req, res) => {
             try { existing = JSON.parse(fs.readFileSync(seoPath, 'utf-8')); } catch { }
             const merged = { ...existing, ...seo };
             fs.writeFileSync(seoPath, JSON.stringify(merged, null, 2), 'utf-8');
-            ((..._args) => { })('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
+            console.log('[ADMIN] SEO config updated. Indexing:', merged.indexing !== false);
         }
         if (logoBase64) {
             const b64Data = logoBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -2461,7 +2470,7 @@ app.post('/api/admin/config', authenticateToken, isAdmin, async (req, res) => {
         }
         res.json({ status: "success", message: "Configuration protocols deployed." });
     } catch (err) {
-        ((..._args) => { })('[ADMIN] Config error:', err);
+        console.log('[ADMIN] Config error:', err);
         res.status(500).json({ error: "Failed to deploy dynamic settings." });
     }
 });
@@ -2470,7 +2479,7 @@ app.post('/api/admin/config', authenticateToken, isAdmin, async (req, res) => {
 app.post('/api/admin/ping-search-engines', authenticateToken, isAdmin, async (req, res) => {
     // In a real environment, you'd HTTP GET to google ping with the sitemap url
     // Since we don't have the final remote url necessarily during dev, we mock success here.
-    ((..._args) => { })('[ADMIN] Search Engines Ping Triggered: Google & Bing notified of updated Sitemap.');
+    console.log('[ADMIN] Search Engines Ping Triggered: Google & Bing notified of updated Sitemap.');
     // Simulated delay
     setTimeout(() => res.json({ status: "success" }), 1200);
 });
@@ -2581,7 +2590,7 @@ app.post('/api/admin/update-credentials', async (req, res) => {
         await db.run(`UPDATE users SET ${querySegments.join(", ")} WHERE role = 'Admin'`, params);
         res.json({ status: "success", message: "Security credentials updated." });
     } catch (err) {
-        ((..._args) => { })("Admin Security Update Error:", err);
+        console.log("Admin Security Update Error:", err);
         res.status(500).json({ error: "Failed to deploy new security context." });
     }
 });
@@ -2686,7 +2695,7 @@ app.post('/api/media/upload', upload.single('file'), async (req, res) => {
             message: "Encrypted media stored securely."
         });
     } catch (err) {
-        ((..._args) => { })("Media upload error:", err);
+        console.log("Media upload error:", err);
         res.status(500).json({ error: "Failed to upload encrypted media." });
     }
 });
@@ -2729,7 +2738,7 @@ app.post('/api/push/subscribe', async (req, res) => {
             ? 'INSERT INTO push_subscriptions (username, endpoint, subscription) VALUES ($1, $2, $3) ON CONFLICT (username, endpoint) DO UPDATE SET subscription = $3'
             : 'INSERT OR REPLACE INTO push_subscriptions (username, endpoint, subscription) VALUES (?, ?, ?)';
         await db.run(sql, params);
-        ((..._args) => { })(`[PUSH] Subscription persisted for: ${username}`);
+        console.log(`[PUSH] Subscription persisted for: ${username}`);
         res.json({ status: 'success', message: 'Push subscription registered.' });
     } catch (err) {
         res.status(500).json({ error: 'Database error while subscribing' });
@@ -2844,7 +2853,7 @@ app.post('/api/connections/sync', authenticateToken, async (req, res) => {
 
         res.json({ matches: result });
     } catch (err) {
-        ((..._args) => { })("Connection Sync Error:", err);
+        console.log("Connection Sync Error:", err);
         res.status(500).json({ matches: [] });
     }
 });
@@ -2878,7 +2887,7 @@ app.patch('/api/users/bio', authenticateToken, async (req, res) => {
         await db.run('UPDATE users SET bio = ? WHERE LOWER(username) = LOWER(?)', [bio || null, username]);
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => { })("Bio update error:", err);
+        console.log("Bio update error:", err);
         res.status(500).json({ error: "Failed to update bio" });
     }
 });
@@ -2904,7 +2913,7 @@ app.post('/api/users/avatar', authenticateToken, async (req, res) => {
 
         res.json({ status: "success", message: "Profile picture updated." });
     } catch (err) {
-        ((..._args) => { })("Avatar update error:", err);
+        console.log("Avatar update error:", err);
         res.status(500).json({ error: "Failed to update avatar." });
     }
 });
@@ -2982,7 +2991,7 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor });
         res.json({ status: 'sent' });
     } catch (err) {
-        ((..._args) => { })("Connection Request Error:", err);
+        console.log("Connection Request Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -3136,7 +3145,7 @@ app.post('/api/connections/respond', authenticateToken, async (req, res) => {
 
         res.json({ status: action === 'accept' ? 'accepted' : 'declined' });
     } catch (err) {
-        ((..._args) => { })("Respond Error:", err);
+        console.log("Respond Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -3228,7 +3237,7 @@ app.get('/api/stories', authenticateToken, async (req, res) => {
 
         res.json({ stories: decrypted });
     } catch (err) {
-        ((..._args) => { })("Fetch Stories Error:", err);
+        console.log("Fetch Stories Error:", err);
         res.status(500).json({ stories: [] });
     }
 });
@@ -3249,7 +3258,7 @@ app.post('/api/stories', authenticateToken, async (req, res) => {
 
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => { })("Post Story Error:", err);
+        console.log("Post Story Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -3268,7 +3277,7 @@ app.post('/api/stories/view', authenticateToken, async (req, res) => {
         }
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => { })("Story View Error:", err);
+        console.log("Story View Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -3316,12 +3325,12 @@ app.post('/api/stories/like', authenticateToken, async (req, res) => {
                     title: `${username} liked your story`,
                     body: "❤️",
                     icon: '/icon.svg'
-                })).catch((..._args) => { });
+                })).catch(e => console.error("[PUSH] Notification relay failure:", e));
             }
         }
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => { })("Story Like Error:", err);
+        console.log("Story Like Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -3373,7 +3382,7 @@ app.post('/api/stories/reply', authenticateToken, async (req, res) => {
 
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => { })("Story Reply Error:", err);
+        console.log("Story Reply Error:", err);
         res.status(500).json({ error: "Server Error" });
     }
 });
@@ -3403,7 +3412,7 @@ app.get('/api/stories/stats', async (req, res) => {
 
         res.json({ views: decryptedViews, likes: decryptedLikes });
     } catch (err) {
-        ((..._args) => { })("Story Stats Error:", err);
+        console.log("Story Stats Error:", err);
         res.status(500).json({ views: [], likes: [] });
     }
 });
@@ -3440,7 +3449,7 @@ async function logAdminAction(admin_username, action, target, details) {
             [action, target, admin_username, details || '']
         );
     } catch (err) {
-        ((..._args) => { })("[AUDIT] Log failed:", err);
+        console.log("[AUDIT] Log failed:", err);
     }
 }
 
@@ -3471,7 +3480,7 @@ app.post('/api/admin/broadcast', authenticateToken, isAdmin, async (req, res) =>
                     await new Promise(r => setTimeout(r, 500));
                 } catch (e) {
                     failed++;
-                    ((..._args) => { })(`[BROADCAST] Failed to ${u.email}:`, e.message);
+                    console.log(`[BROADCAST] Failed to ${u.email}:`, e.message);
                 }
             }
             logAdminAction('ADMIN', 'EMAIL_BROADCAST', 'ALL_USERS', `Sent: ${sent}, Failed: ${failed}`);
@@ -3567,7 +3576,7 @@ app.get('/api/admin/stats', authenticateToken, isAdmin, async (req, res) => {
             onlineUsers: onlineCount
         });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Stats error:", err);
+        console.log("[ADMIN] Stats error:", err);
         res.status(500).json({ error: "Failed to fetch stats" });
     }
 });
@@ -3593,7 +3602,7 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
         }));
         res.json({ users: decrypted });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Users list error:", err);
+        console.log("[ADMIN] Users list error:", err);
         res.status(500).json({ error: "Failed to fetch users" });
     }
 });
@@ -3608,7 +3617,7 @@ app.patch('/api/admin/users/:username/role', authenticateToken, isAdmin, async (
         await db.run('UPDATE users SET role = ? WHERE LOWER(username) = LOWER(?)', [role, username]);
         res.json({ status: "success", message: `Role updated to ${role} for @${username}` });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Role update error:", err);
+        console.log("[ADMIN] Role update error:", err);
         res.status(500).json({ error: "Failed to update role" });
     }
 });
@@ -3625,7 +3634,7 @@ app.patch('/api/admin/users/:username/status', authenticateToken, isAdmin, async
         // Handle real-time suspension enforcement
         if (status === 'Suspended') {
             const lowerUser = username.toLowerCase();
-            ((..._args) => { })(`[SAFETY] Terminating all active sessions for @${lowerUser}`);
+            console.log(`[SAFETY] Terminating all active sessions for @${lowerUser}`);
             
             // 1. Alert all connected devices of this user
             io.to(lowerUser).emit('force_logout', { 
@@ -3640,7 +3649,7 @@ app.patch('/api/admin/users/:username/status', authenticateToken, isAdmin, async
                     const s = io.sockets.sockets.get(socketId);
                     if (s) {
                         s.disconnect(true);
-                        ((..._args) => { })(`[SAFETY] Disconnected socket ${socketId} for @${lowerUser}`);
+                        console.log(`[SAFETY] Disconnected socket ${socketId} for @${lowerUser}`);
                     }
                 });
             }
@@ -3648,7 +3657,7 @@ app.patch('/api/admin/users/:username/status', authenticateToken, isAdmin, async
 
         res.json({ status: "success", message: `Status updated to ${status} for @${username}` });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Status update error:", err);
+        console.log("[ADMIN] Status update error:", err);
         res.status(500).json({ error: "Failed to update status" });
     }
 });
@@ -3676,7 +3685,7 @@ app.delete('/api/admin/users/:username', authenticateToken, isAdmin, async (req,
         await db.run('DELETE FROM users WHERE LOWER(username) = LOWER(?)', [username]);
         res.json({ status: "success", message: `User @${username} and all associated data deleted.` });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] User delete error:", err);
+        console.log("[ADMIN] User delete error:", err);
         res.status(500).json({ error: "Failed to delete user" });
     }
 });
@@ -3692,7 +3701,7 @@ app.patch('/api/admin/users/:username/password', authenticateToken, isAdmin, asy
         await db.run('UPDATE users SET password = ? WHERE LOWER(username) = LOWER(?)', [hashed, username]);
         res.json({ status: "success", message: `Password reset for @${username}` });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Password reset error:", err);
+        console.log("[ADMIN] Password reset error:", err);
         res.status(500).json({ error: "Failed to reset password" });
     }
 });
@@ -3753,7 +3762,7 @@ app.put('/api/admin/email-templates/:type', authenticateToken, isAdmin, (req, re
     if (!subject || !html) return res.status(400).json({ error: "Subject and HTML body required" });
 
     emailTemplateOverrides.set(type, { subject, html });
-    ((..._args) => { })(`[ADMIN] Email template '${type}' customized.`);
+    console.log(`[ADMIN] Email template '${type}' customized.`);
     res.json({ status: "success", message: `Template '${type}' updated successfully.` });
 });
 
@@ -3761,7 +3770,7 @@ app.put('/api/admin/email-templates/:type', authenticateToken, isAdmin, (req, re
 app.delete('/api/admin/email-templates/:type', authenticateToken, isAdmin, (req, res) => {
     const { type } = req.params;
     emailTemplateOverrides.delete(type);
-    ((..._args) => { })(`[ADMIN] Email template '${type}' reset to default.`);
+    console.log(`[ADMIN] Email template '${type}' reset to default.`);
     res.json({ status: "success", message: `Template '${type}' reset to default.` });
 });
 
@@ -3785,7 +3794,7 @@ app.get('/api/admin/connections', authenticateToken, isAdmin, async (req, res) =
         }));
         res.json({ connections: decrypted });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Connections list error:", err);
+        console.log("[ADMIN] Connections list error:", err);
         res.status(500).json({ error: "Failed to fetch connections" });
     }
 });
@@ -3798,7 +3807,7 @@ app.delete('/api/admin/connections/:id', authenticateToken, isAdmin, async (req,
         await db.run('DELETE FROM connections WHERE id = ?', [id]);
         res.json({ status: "success", message: "Connection removed." });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Connection delete error:", err);
+        console.log("[ADMIN] Connection delete error:", err);
         res.status(500).json({ error: "Failed to remove connection" });
     }
 });
@@ -3822,13 +3831,13 @@ app.post('/api/admin/broadcast-chat', authenticateToken, isAdmin, async (req, re
             lastMessage: message
         };
 
-        ((..._args) => { })(`[BROADCAST] Starting for ${allUsers.length} users...`);
+        console.log(`[BROADCAST] Starting for ${allUsers.length} users...`);
         // Trigger background loop
         sendNextBroadcastMessage(allUsers, 0, message);
 
         res.json({ status: "success", message: "Broadcast sequence initiated.", total: allUsers.length });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Chat broadcast error:", err);
+        console.log("[ADMIN] Chat broadcast error:", err);
         res.status(500).json({ error: "Failed to initialize broadcast" });
     }
 });
@@ -3855,7 +3864,7 @@ app.get('/api/blogs', async (req, res) => {
         const blogs = await db.all('SELECT * FROM blogs ORDER BY id DESC');
         res.json({ blogs });
     } catch (err) {
-        ((..._args) => { })("[BLOGS] Fetch error:", err);
+        console.log("[BLOGS] Fetch error:", err);
         res.status(500).json({ error: "Failed to fetch blogs" });
     }
 });
@@ -3876,7 +3885,7 @@ app.post('/api/blogs', authenticateToken, isAdmin, async (req, res) => {
         }
         res.json({ status: "success" });
     } catch (err) {
-        ((..._args) => { })("[BLOGS] Save error:", err);
+        console.log("[BLOGS] Save error:", err);
         res.status(500).json({ error: "Failed to save blogs" });
     }
 });
@@ -3904,11 +3913,11 @@ app.post('/api/report', authenticateToken, async (req, res) => {
         await db.run('UPDATE users SET status = ? WHERE LOWER(username) = ? AND status = ?', ['InReview', target.toLowerCase(), 'Active']);
 
         // 3. Notify Admin (Optional Log)
-        ((..._args) => { })(`[SAFETY] Report submitted against @${target} by @${reporter}. Evidence Attached.`);
+        console.log(`[SAFETY] Report submitted against @${target} by @${reporter}. Evidence Attached.`);
 
         res.json({ success: true, status: "success", message: "Report received and queued for review." });
     } catch (err) {
-        ((..._args) => { })("[SAFETY] Report error:", err);
+        console.log("[SAFETY] Report error:", err);
         res.status(500).json({ error: "Failed to process report." });
     }
 });
@@ -3920,7 +3929,7 @@ app.get('/api/admin/reports', authenticateToken, isAdmin, async (req, res) => {
         const reports = await db.all('SELECT * FROM reports ORDER BY id DESC');
         res.json({ status: "success", reports });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Reports fetch error:", err);
+        console.log("[ADMIN] Reports fetch error:", err);
         res.status(500).json({ error: "Failed to fetch reports" });
     }
 });
@@ -3936,7 +3945,7 @@ app.patch('/api/admin/reports/:id/status', authenticateToken, isAdmin, async (re
         await db.run('UPDATE reports SET status = ? WHERE id = ?', [status, id]);
         res.json({ status: "success", message: "Report status updated." });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] Report update error:", err);
+        console.log("[ADMIN] Report update error:", err);
         res.status(500).json({ error: "Failed to update report" });
     }
 });
@@ -3959,7 +3968,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
 
         res.json({ status: "success", message: `User @${username} status updated to ${status}.` });
     } catch (err) {
-        ((..._args) => { })("[ADMIN] User status error:", err);
+        console.log("[ADMIN] User status error:", err);
         res.status(500).json({ error: "Failed to update user status" });
     }
 });

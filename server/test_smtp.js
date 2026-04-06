@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const nodemailer = require('nodemailer');
 
 const emailTransporter = nodemailer.createTransport({
@@ -11,14 +11,14 @@ const emailTransporter = nodemailer.createTransport({
     },
 });
 
-((..._args) => {})(`[TEST] Verifying SMTP connection for: ${process.env.GMAIL_USER}...`);
+console.log(`[TEST] Verifying SMTP connection for: ${process.env.GMAIL_USER}...`);
 
 emailTransporter.verify((error, success) => {
     if (error) {
-        ((..._args) => {})('[FAILED] SMTP Connection Error:', error);
+        console.log('[FAILED] SMTP Connection Error:', error);
         process.exit(1);
     } else {
-        ((..._args) => {})('[SUCCESS] SMTP Relay is operational.');
+        console.log('[SUCCESS] SMTP Relay is operational.');
         process.exit(0);
     }
 });

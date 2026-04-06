@@ -34,7 +34,7 @@ export async function nexoraFetch(endpoint: string, options: RequestInit = {}, r
         ...options.headers,
       },
       // Added moderate timeout for local network sanity
-      signal: AbortController ? AbortSignal.timeout(10000) : undefined,
+      signal: AbortController ? AbortSignal.timeout(25000) : undefined,
     } as any);
     
     const contentType = response.headers.get("content-type");
