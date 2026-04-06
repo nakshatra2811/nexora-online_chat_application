@@ -1,10 +1,11 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import path from "path";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
   turbopack: {
-    root: './',
+    root: path.resolve(__dirname),
   },
   images: {
     remotePatterns: [

@@ -12,13 +12,26 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Prevent re-initialization in hot-reload dev mode
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Initialize Firebase only on the client side and ONLY if we have an API key
+// This prevents 'auth/invalid-api-key' errors during static build time (prerendering)
+let app;
+let auth: any = null;
 
-export const auth = getAuth(app);
+if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
+  try {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    auth = getAuth(app);
+  } catch (err) {
+    console.error("Firebase Initialization Error:", err);
+  }
+}
+
+export { auth };
 
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
+if (googleProvider) {
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+}
 
 /**
  * Opens Google sign-in popup and returns the Firebase ID token.
