@@ -1349,7 +1349,6 @@ function ChatsPageContent() {
   // Contact Picker
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
-
   // Connect Request / Share Modal
   const [showShareModal, setShowShareModal] = useState(false);
   const [activeQuickImage, setActiveQuickImage] = useState<ChatMessage | null>(null);
@@ -1358,6 +1357,15 @@ function ChatsPageContent() {
   const [sharePhone, setSharePhone] = useState("");
   const [shareMessage, setShareMessage] = useState("Hey! Join me on Nexora — a privacy-first encrypted communication platform. 🔐\nhttps://nexora.app/auth?mode=signup");
   const [shareVia, setShareVia] = useState<"sms" | "whatsapp" | "email">("whatsapp");
+
+  // 100% Stable Auto-Expanding Input Logic
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'inherit';
+      const scrollHeight = inputRef.current.scrollHeight;
+      inputRef.current.style.height = `${Math.min(scrollHeight, 150)}px`;
+    }
+  }, [inputValue]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -3789,9 +3797,9 @@ function ChatsPageContent() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.15 }}
-                    className="flex-1 neumorphic-input rounded-2xl flex items-center px-2 py-2.5 h-11 relative"
+                    className="flex-1 neumorphic-input rounded-2xl flex items-end px-2 pb-1.5 min-h-[2.75rem] h-auto relative"
                   >
-                    <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 mr-1 text-[var(--text-muted)] hover:text-[#ff006e] transition-colors rounded-full transition-all">
+                    <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 mr-1 text-[var(--text-muted)] hover:text-[#ff006e] transition-colors rounded-full transition-all self-center">
                       <Smile className="w-5 h-5" />
                     </button>
 
@@ -3814,11 +3822,7 @@ function ChatsPageContent() {
                     <textarea
                       ref={inputRef}
                       value={inputValue}
-                      onChange={(e) => {
-                        handleInputChange(e.target.value);
-                        e.target.style.height = 'inherit';
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                      }}
+                      onChange={(e) => handleInputChange(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
