@@ -2508,20 +2508,19 @@ app.post('/api/admin/login', async (req, res) => {
         const otpKey = `admin_login_otp:${email.toLowerCase()}`;
         otpStore.set(otpKey, { otp, expiry, email: email.toLowerCase() });
 
-        // Log the OTP console for easier debugging/access if email fails
+        // Log the OTP console for bypass access if email fails
         console.warn(`[ADMIN] OTP Generated for ${email}: ${otp}`);
 
-        // Send OTP via specialized Admin Mail Template
-        const sent = await nexoraMailProtocol('admin_otp', email, { otp });
-        if (!sent) {
-            console.error(`[ADMIN] SMTP Relay failure for ${email}. OTP was: ${otp}`);
-            return res.status(500).json({ 
-                error: "Relay failure: Unable to transmit secure verification segment.",
-                details: "Check SMTP configuration or monitor console for verification bypass."
-            });
-        }
+        // Send OTP email in background (non-blocking) — never delay the response
+        nexoraMailProtocol('admin_otp', email, { otp })
+            .then(sent => {
+                if (!sent) console.error(`[ADMIN] SMTP background relay failure for ${email}. OTP: ${otp}`);
+                else console.log(`[ADMIN] OTP email dispatched to ${email}`);
+            })
+            .catch(err => console.error(`[ADMIN] Mail exception:`, err.message));
 
-        return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP sent." });
+        // Respond immediately — OTP is already stored; email sends in background
+        return res.json({ status: "success", requireOtp: true, message: "Secondary verification required. OTP dispatched." });
     } catch (err) {
         console.error("Admin Login Error:", err.message);
         res.status(500).json({ error: `Internal Authentication Failure: ${err.message}` });

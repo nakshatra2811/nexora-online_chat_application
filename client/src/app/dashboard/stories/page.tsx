@@ -953,12 +953,13 @@ export default function StoriesPage() {
               animate={{ opacity: 1, scale: 1 }}
               className="grid grid-cols-2 gap-4"
             >
-              {(showAllSuggestions ? suggestions : suggestions.slice(0, 4)).map((s, i) => (
+              {/* Show first 3 cards + "See More" as 4th, OR all cards when expanded */}
+              {(showAllSuggestions ? suggestions : suggestions.slice(0, 3)).map((s, i) => (
                 <motion.div 
                   key={s.username} 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
+                  transition={{ delay: i * 0.08 }}
                   whileHover={{ y: -5, scale: 1.02 }}
                   className="relative p-5 rounded-[2rem] border transition-all duration-300 shadow-xl flex flex-col items-center text-center group overflow-hidden cursor-pointer"
                   style={{ 
@@ -1002,19 +1003,83 @@ export default function StoriesPage() {
                   </div>
                 </motion.div>
               ))}
+
+              {/* 4th slot: "See More" card (only when not expanded and there are more suggestions) */}
+              {!showAllSuggestions && suggestions.length > 3 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  whileHover={{ y: -5, scale: 1.02 }}
+                  onClick={() => setShowAllSuggestions(true)}
+                  className="relative p-5 rounded-[2rem] border transition-all duration-300 shadow-xl flex flex-col items-center justify-center text-center group overflow-hidden cursor-pointer"
+                  style={{
+                    background: isDark ? "rgba(108,92,231,0.06)" : "rgba(108,92,231,0.04)",
+                    backdropFilter: "blur(20px)",
+                    borderColor: "rgba(108,92,231,0.15)",
+                  }}
+                >
+                  {/* Background glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#6c5ce720] to-[#00d4ff10] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-[2rem]" />
+
+                  {/* Avatar stack of remaining users */}
+                  <div className="relative flex -space-x-3 mb-4 z-10">
+                    {suggestions.slice(3, 6).map((s, i) => (
+                      <div
+                        key={s.username}
+                        className="w-10 h-10 rounded-full border-2 border-[#1a1a2e] overflow-hidden bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] flex items-center justify-center text-white text-xs font-black shadow-lg"
+                        style={{ zIndex: 10 - i }}
+                      >
+                        {s.avatar_url ? (
+                          <img src={s.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          (s.full_name || s.username)?.[0]?.toUpperCase()
+                        )}
+                      </div>
+                    ))}
+                    {suggestions.length - 3 > 3 && (
+                      <div className="w-10 h-10 rounded-full border-2 border-[#1a1a2e] bg-[#6c5ce7]/20 flex items-center justify-center text-[10px] font-black text-[#6c5ce7]" style={{ zIndex: 7 }}>
+                        +{suggestions.length - 6}
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[13px] font-black z-10 relative" style={{ color: "var(--text-primary)" }}>
+                    See More
+                  </p>
+                  <p className="text-[11px] font-bold mt-1 z-10 relative" style={{ color: "#6c5ce7" }}>
+                    {suggestions.length - 3}+ people to connect
+                  </p>
+
+                  <motion.div
+                    whileHover={{ scale: 1.1 }}
+                    className="mt-4 w-10 h-10 rounded-full flex items-center justify-center z-10 relative border border-[#6c5ce7]/30"
+                    style={{ background: "rgba(108,92,231,0.15)" }}
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" strokeWidth={2.5}>
+                      <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </motion.div>
+                </motion.div>
+              )}
+
+              {/* "Show Less" button when expanded (full-width, bottom of grid) */}
+              {showAllSuggestions && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="col-span-2"
+                >
+                  <button
+                    onClick={() => setShowAllSuggestions(false)}
+                    className="w-full mt-2 py-3.5 rounded-2xl border text-[11px] font-black tracking-widest uppercase hover:bg-white/5 transition-all"
+                    style={{ borderColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" }}
+                  >
+                    Show Less ↑
+                  </button>
+                </motion.div>
+              )}
             </motion.div>
-            
-            {suggestions.length > 4 && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowAllSuggestions(!showAllSuggestions)}
-                className="mt-6 flex w-full items-center justify-center py-4 rounded-2xl border transition-all text-[11px] font-black tracking-widest uppercase hover:bg-white/5"
-                style={{ borderColor: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)" }}
-              >
-                {showAllSuggestions ? "Show Less" : `See More (${suggestions.length - 4}+)`}
-              </motion.button>
-            )}
             </>
           ) : (
             <div className="p-10 text-center rounded-[2rem] bg-white/5 border border-white/5">

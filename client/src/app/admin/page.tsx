@@ -73,18 +73,26 @@ export const TABS: { id: TabId; label: string; icon: any; color: string; group?:
 
 // ─── HELPERS ───
 async function adminFetch(endpoint: string, options: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
   try {
     const token = localStorage.getItem("nexora_token");
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
+      signal: controller.signal,
       headers: { 
         "Content-Type": "application/json", 
         "Authorization": token ? `Bearer ${token}` : "",
         ...options.headers 
       },
     });
+    clearTimeout(timeout);
     return await res.json();
-  } catch { return null; }
+  } catch (err: any) {
+    clearTimeout(timeout);
+    if (err.name === "AbortError") return { error: "Request timed out. Server may be busy." };
+    return null;
+  }
 }
 
 // ─── STAT CARD ───
