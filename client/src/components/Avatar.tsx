@@ -101,6 +101,8 @@ export const Avatar: React.FC<AvatarProps> = ({
         whileHover={{ scale: 1.05 }} 
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        className="inline-block rounded-full overflow-hidden"
+        style={{ transform: "translateZ(0)" }} // Fixes clipping issues in some browsers
       >
         {content}
       </motion.div>

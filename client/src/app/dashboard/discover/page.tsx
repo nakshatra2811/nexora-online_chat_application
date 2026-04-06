@@ -19,12 +19,14 @@ function ProfileModal({
   onConnect,
   requested,
   isDark,
+  router,
 }: {
   user: any;
   onClose: () => void;
   onConnect: (u: string) => void;
   requested: boolean;
   isDark: boolean;
+  router: any;
 }) {
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -130,6 +132,20 @@ function ProfileModal({
                   {user.mutualCount} Mutual{user.mutualCount > 1 ? "s" : ""}
                 </div>
               )}
+              {profile?.mutualFriends?.length > 0 && (
+                <div className="flex -space-x-2 ml-1">
+                    {profile.mutualFriends.slice(0, 3).map((mf: any) => (
+                        <div key={mf.username} className="w-6 h-6 rounded-full border border-black/20 overflow-hidden ring-1 ring-white/10 shadow-lg">
+                            <Avatar src={mf.avatarUrl} name={mf.fullName} color={mf.color} size={24} animate={false} showBorder={false} />
+                        </div>
+                    ))}
+                    {profile.mutualFriends.length > 3 && (
+                        <div className="w-6 h-6 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-[8px] font-black border border-white/10" style={{ color: "var(--text-primary)" }}>
+                            +{profile.mutualFriends.length - 3}
+                        </div>
+                    )}
+                </div>
+              )}
               {joinedDate && (
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider"
                   style={{ color: "var(--text-muted)", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -152,22 +168,37 @@ function ProfileModal({
             )}
 
             {/* Action buttons */}
-            {!requested ? (
+            <div className="w-full flex gap-2">
+              {!requested && !profile?.isFriend && !profile?.requestSent ? (
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => { onConnect(user.username); }}
+                  className="flex-[2] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest text-white shadow-lg shadow-[#6c5ce7]/30"
+                  style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
+                >
+                  <UserPlus className="w-4 h-4" /> {profile?.requestReceived ? "Request Back" : "Connect"}
+                </motion.button>
+              ) : (
+                <div className={`flex-[2] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest ${
+                  profile?.isFriend 
+                    ? "text-green-500 bg-green-500/10 border border-green-500/20" 
+                    : "text-amber-500 bg-amber-500/10 border border-amber-500/20"
+                }`}>
+                  {profile?.isFriend ? <><Shield className="w-4 h-4" /> Connected</> : <><UserCheck className="w-4 h-4" /> Request Sent</>}
+                </div>
+              )}
+              
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => { onConnect(user.username); }}
-                className="w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest text-white shadow-lg shadow-[#6c5ce7]/30"
-                style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
+                onClick={() => { router.push(`/dashboard/chats?u=${user.username}`); }}
+                className="flex-1 py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+                style={{ color: "var(--text-primary)" }}
               >
-                <UserPlus className="w-4 h-4" /> Connect
+                <MessageSquare className="w-4 h-4" />
               </motion.button>
-            ) : (
-              <div className="w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest text-green-400"
-                style={{ background: "rgba(0,212,100,0.1)", border: "1px solid rgba(0,212,100,0.25)" }}>
-                <UserCheck className="w-4 h-4" /> Request Sent
-              </div>
-            )}
+            </div>
           </div>
         </motion.div>
       </motion.div>
@@ -453,6 +484,7 @@ export default function DiscoverPage() {
             user={selectedUser}
             isDark={isDark}
             requested={!!requested[selectedUser.username]}
+            router={router}
             onConnect={(u) => { handleConnect(u); }}
             onClose={() => setSelectedUser(null)}
           />

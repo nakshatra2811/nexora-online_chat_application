@@ -575,6 +575,7 @@ emailTransporter.verify((error, success) => {
 const emailTemplateOverrides = new Map(); // type -> { subject, html }
 
 async function nexoraMailProtocol(type, to, data) {
+    console.log(`[SMTP] Nexora Protocol - Dispatch initiated. Type: ${type}, Recipient: ${to}`);
     const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
     const GMAIL_USER = process.env.GMAIL_USER;
     const GMAIL_NAME = process.env.GMAIL_NAME || "Nexora Private Chat";
@@ -598,6 +599,7 @@ async function nexoraMailProtocol(type, to, data) {
             customHtml = customHtml.split(key).join(val);
         }
         try {
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) - Attempting relay to: ${to}`);
             await emailTransporter.sendMail({
                 from: `"${GMAIL_NAME}" <${GMAIL_USER}>`,
                 to: to,
@@ -605,10 +607,10 @@ async function nexoraMailProtocol(type, to, data) {
                 text: `Nexora Notice: Your request was processed.`,
                 html: customHtml
             });
-            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relayed to: ${to}`);
+            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) Transmission Relayed Successfully to: ${to}`);
             return true;
         } catch (err) {
-            console.log(`[SMTP] ${type.toUpperCase()} (CUSTOM) FAILED:`, err.message);
+            console.error(`[SMTP] ${type.toUpperCase()} (CUSTOM) Relay FAILED:`, err.message);
             return false;
         }
     }
@@ -913,6 +915,7 @@ async function nexoraMailProtocol(type, to, data) {
     }
 
     try {
+        console.log(`[SMTP] ${type.toUpperCase()} - Attempting standard relay to: ${to}`);
         await emailTransporter.sendMail({
             from: `"${GMAIL_NAME}" <${GMAIL_USER}>`,
             to: to,
@@ -923,7 +926,7 @@ async function nexoraMailProtocol(type, to, data) {
         console.log(`[SMTP] ${type.toUpperCase()} Transmission Successfully Relayed to: ${to}`);
         return true;
     } catch (err) {
-        console.log(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
+        console.error(`[SMTP] ${type.toUpperCase()} Transmission FAILED:`, err.message);
         return false;
     }
 }
@@ -1724,11 +1727,11 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
 
         // 1. Get my current connections & pending requests to exclude them
         const myConnections = await db.all(
-            'SELECT user_a, user_b FROM connections WHERE user_a = ? OR user_b = ?',
+            'SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?',
             [myUser, myUser]
         );
         const myRequestLog = await db.all(
-            'SELECT from_username, to_username FROM connection_requests WHERE from_username = ? OR to_username = ?',
+            'SELECT from_username, to_username FROM connection_requests WHERE LOWER(from_username) = ? OR LOWER(to_username) = ?',
             [myUser, myUser]
         );
 
@@ -1742,15 +1745,15 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
             excluded.add(r.to_username.toLowerCase());
         });
 
-        // 2. Mutual Friends Logic
-        // Get list of my friends' usernames
-        const myFriends = Array.from(excluded).filter(u => u !== myUser && u !== 'nexora_31' && u !== 'me');
+        const excludedList = Array.from(excluded);
+        const myFriendsOnly = excludedList.filter(u => u !== myUser && u !== 'nexora_31' && u !== 'me' && 
+            myConnections.some(c => c.user_a.toLowerCase() === u || c.user_b.toLowerCase() === u));
         
         let suggestions = [];
 
-        if (myFriends.length > 0) {
-            // Find friends of my friends with mutual friend counts in a single query
-            const placeholders = myFriends.map(() => '?').join(',');
+        // 2. Mutual Friends Logic
+        if (myFriendsOnly.length > 0) {
+            const placeholders = myFriendsOnly.map(() => '?').join(',');
             const potentialMutuals = await db.all(`
                 SELECT 
                     u.username, u.full_name, u.avatar_url, u.color,
@@ -1758,43 +1761,43 @@ app.get('/api/users/suggestions', authenticateToken, async (req, res) => {
                 FROM connections c
                 JOIN users u ON LOWER(u.username) = LOWER(CASE WHEN LOWER(c.user_a) IN (${placeholders}) THEN c.user_b ELSE c.user_a END)
                 WHERE (LOWER(c.user_a) IN (${placeholders}) OR LOWER(c.user_b) IN (${placeholders}))
-                  AND LOWER(u.username) NOT IN (${myFriends.map(() => '?').join(',')}, ?)
+                  AND LOWER(u.username) NOT IN (${excludedList.map(() => '?').join(',')})
                 GROUP BY u.username, u.full_name, u.avatar_url, u.color
                 ORDER BY mutual_count DESC
-                LIMIT 10
-            `, [...myFriends, ...myFriends, ...myFriends, myUser]);
+                LIMIT 15
+            `, [...myFriendsOnly, ...myFriendsOnly, ...myFriendsOnly, ...excludedList]);
             
-            for (const m of potentialMutuals) {
-                if (!excluded.has(m.username.toLowerCase())) {
-                    suggestions.push({
-                        ...m,
-                        full_name: decryptField(m.full_name),
-                        mutualCount: m.mutual_count
-                    });
-                }
-            }
+            suggestions = potentialMutuals.map(m => ({
+                username: m.username,
+                full_name: decryptField(m.full_name),
+                avatar_url: m.avatar_url, // No decryption for public images
+                color: m.color,
+                mutualCount: parseInt(m.mutual_count) || 0
+            }));
         }
 
-        // 3. Fallback to random users to fill up suggestions list
-        const needed = Math.max(0, 30 - suggestions.length);
+        // 3. Fallback to random users
+        const needed = 30 - suggestions.length;
         if (needed > 0) {
-            const excludedList = Array.from(excluded);
+            const alreadySuggested = suggestions.map(s => s.username.toLowerCase());
+            const finalExcluded = [...new Set([...excludedList, ...alreadySuggested])];
+            
             const randomUsers = await db.all(`
                 SELECT username, full_name, avatar_url, color 
                 FROM users 
-                WHERE LOWER(username) NOT IN (${excludedList.map(() => '?').join(',')})
+                WHERE LOWER(username) NOT IN (${finalExcluded.map(() => '?').join(',')})
                 ORDER BY RANDOM()
                 LIMIT ?
-            `, [...excludedList, needed]);
+            `, [...finalExcluded, needed]);
 
             for (const u of randomUsers) {
-                if (!suggestions.find(s => s.username === u.username)) {
-                    suggestions.push({
-                        ...u,
-                        full_name: decryptField(u.full_name),
-                        mutualCount: 0
-                    });
-                }
+                suggestions.push({
+                    username: u.username,
+                    full_name: decryptField(u.full_name),
+                    avatar_url: u.avatar_url,
+                    color: u.color,
+                    mutualCount: 0
+                });
             }
         }
 
@@ -2859,19 +2862,78 @@ app.post('/api/connections/sync', authenticateToken, async (req, res) => {
 
 // NEW: Endpoint to get specific user profile and check username
 app.get('/api/users/profile', authenticateToken, async (req, res) => {
-    const username = (req.query.username || '').toLowerCase();
+    const targetUsername = (req.query.username || '').toLowerCase();
+    const myUsername = req.user.username.toLowerCase();
+    
     try {
-        if (!db || !username) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, last_visit FROM users WHERE LOWER(username) = LOWER(?)', [username]);
+        if (!db || !targetUsername) return res.status(400).json({ error: "Invalid username" });
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, last_visit FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        // Decrypt sensitive info for the client
+        // Decrypt mapping for standard UI fields
         user.fullName = decryptField(user.fullName);
         user.phoneNumber = decryptField(user.phoneNumber);
-        user.avatarUrl = decryptField(user.avatarUrl); // Decrypt avatar URL for UI
+        // avatarUrl is kept as plain text (Cloudinary/Native)
+        // bio is usually plain but we check if it was encrypted by mistake
+        user.bio = decryptField(user.bio);
 
-        res.json({ user });
+        // Calculate Mutual Friends
+        let mutualFriends = [];
+        if (targetUsername !== myUsername) {
+            const mutualsSql = `
+                SELECT u.username, u.full_name AS "fullName", u.avatar_url AS "avatarUrl", u.color
+                FROM connections c1
+                JOIN connections c2 ON (
+                    (LOWER(c1.user_a) = LOWER(c2.user_a) AND LOWER(c1.user_a) != LOWER(?) AND LOWER(c1.user_a) != LOWER(?)) OR
+                    (LOWER(c1.user_a) = LOWER(c2.user_b) AND LOWER(c1.user_a) != LOWER(?) AND LOWER(c1.user_a) != LOWER(?)) OR
+                    (LOWER(c1.user_b) = LOWER(c2.user_a) AND LOWER(c1.user_b) != LOWER(?) AND LOWER(c1.user_b) != LOWER(?)) OR
+                    (LOWER(c1.user_b) = LOWER(c2.user_b) AND LOWER(c1.user_b) != LOWER(?) AND LOWER(c1.user_b) != LOWER(?))
+                )
+                JOIN users u ON LOWER(u.username) = 
+                    CASE 
+                        WHEN LOWER(c1.user_a) = LOWER(? ) OR LOWER(c1.user_a) = LOWER(?) THEN LOWER(c1.user_b)
+                        ELSE LOWER(c1.user_a)
+                    END
+                WHERE (LOWER(c1.user_a) = LOWER(?) OR LOWER(c1.user_b) = LOWER(?))
+                  AND (LOWER(c2.user_a) = LOWER(?) OR LOWER(c2.user_b) = LOWER(?))
+                GROUP BY u.username
+            `;
+            // Simplified approach for better clarity: Get my friends, get their friends, find intersection
+            const myFriendsRows = await db.all('SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', [myUsername, myUsername]);
+            const targetFriendsRows = await db.all('SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', [targetUsername, targetUsername]);
+            
+            const myFriends = new Set(myFriendsRows.map(r => r.user_a.toLowerCase() === myUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase()));
+            const targetFriends = new Set(targetFriendsRows.map(r => r.user_a.toLowerCase() === targetUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase()));
+            
+            const mutualUsernames = [...myFriends].filter(u => targetFriends.has(u));
+            
+            if (mutualUsernames.length > 0) {
+                const placeholders = mutualUsernames.map(() => '?').join(',');
+                const mutualDetails = await db.all(`SELECT username, full_name AS "fullName", avatar_url AS "avatarUrl", color FROM users WHERE LOWER(username) IN (${placeholders})`, mutualUsernames);
+                mutualFriends = mutualDetails.map(m => ({
+                    ...m,
+                    fullName: decryptField(m.fullName),
+                    avatarUrl: m.avatarUrl // No decryption
+                }));
+            }
+        }
+
+        // Check if I sent a request or am friends
+        const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = ? AND LOWER(user_b) = ?) OR (LOWER(user_a) = ? AND LOWER(user_b) = ?)`, [myUsername, targetUsername, targetUsername, myUsername]);
+        const sentRequest = await db.get(`SELECT id FROM connection_requests WHERE LOWER(from_username) = ? AND LOWER(to_username) = ? AND status = 'pending'`, [myUsername, targetUsername]);
+        const receivedRequest = await db.get(`SELECT id FROM connection_requests WHERE LOWER(from_username) = ? AND LOWER(to_username) = ? AND status = 'pending'`, [targetUsername, myUsername]);
+
+        res.json({ 
+            user: {
+                ...user,
+                mutualFriends,
+                isFriend: !!isFriend,
+                requestSent: !!sentRequest,
+                requestReceived: !!receivedRequest
+            } 
+        });
     } catch (err) {
+        console.error("Profile fetch error:", err);
         res.status(500).json({ error: "Server error" });
     }
 });
@@ -3081,19 +3143,35 @@ app.get('/api/connections/sent', authenticateToken, async (req, res) => {
     if (!username) return res.json({ requests: [] });
     try {
         if (!db) return res.json({ requests: [] });
-        const reqs = await db.all(
-            'SELECT id, to_username AS "to", created_at AS time FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND status = \'pending\'',
-            [username]
-        );
+        const reqs = await db.all(`
+            SELECT cr.id, cr.to_username AS "to", u.full_name AS "name", u.color AS "color", u.avatar_url AS "avatarUrl", cr.created_at AS "time"
+            FROM connection_requests cr
+            LEFT JOIN users u ON LOWER(u.username) = LOWER(cr.to_username)
+            WHERE LOWER(cr.from_username) = LOWER(?) AND cr.status = 'pending'
+        `, [username]);
         const formatted = reqs.map(r => ({
             ...r,
-            toName: r.to,
-            toColor: 'from-gray-400 to-gray-600',
+            name: decryptField(r.name) || r.to,
+            avatarUrl: decryptField(r.avatarUrl),
+            color: r.color || 'from-gray-400 to-gray-600',
             time: new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
         res.json({ requests: formatted });
     } catch (err) {
         res.status(500).json({ requests: [] });
+    }
+});
+
+// Cancel a sent request
+app.delete('/api/connections/request/:id', authenticateToken, async (req, res) => {
+    const username = req.user.username;
+    const { id } = req.params;
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+        await db.run('DELETE FROM connection_requests WHERE id = ? AND LOWER(from_username) = LOWER(?)', [id, username]);
+        res.json({ status: "success" });
+    } catch (err) {
+        res.status(500).json({ error: "Server Error" });
     }
 });
 

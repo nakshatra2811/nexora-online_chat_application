@@ -449,7 +449,6 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    // Load dynamic data
     const defaultThreads: any[] = [];
     
     const threadsStr = localStorage.getItem("nexora_secure_connections");
@@ -459,8 +458,17 @@ export default function ProfilePage() {
     setBlockedThreads(blocked);
     setFriends(threads.filter((t: any) => !blocked.includes(t.id)));
 
-    const storedPending = localStorage.getItem("nexora_pending_requests");
-    if (storedPending) setPendingSent(JSON.parse(storedPending));
+    // Fetch sent requests precisely from the node
+    const fetchSent = async () => {
+       try {
+           const { nexoraFetch } = await import("@/lib/config");
+           const data = await nexoraFetch('/api/connections/sent');
+           if (data && data.requests) setPendingSent(data.requests);
+       } catch (e) {
+           ((..._args: any[]) => {})("Sent requests fetch failed:", e);
+       }
+    };
+    fetchSent();
 
     const totalSent = localStorage.getItem("nexora_stats_messages_sent") || "0";
     setSentCount(parseInt(totalSent));
@@ -537,11 +545,20 @@ export default function ProfilePage() {
   const handleUnblock = (id: number) => {
     const updated = blockedThreads.filter(tid => tid !== id);
     setBlockedThreads(updated);
-    localStorage.setItem("nexora_blocked_threads", JSON.stringify(updated));
   };
 
   const handleDisconnect = (id: number) => setFriends(prev => prev.filter(f => f.id !== id));
-  const handleCancelRequest = (id: number) => setPendingSent(prev => prev.filter(r => r.id !== id));
+  const handleCancelRequest = async (id: number) => {
+    try {
+      const { nexoraFetch } = await import("@/lib/config");
+      const resp = await nexoraFetch(`/api/connections/request/${id}`, { method: "DELETE" });
+      if (resp && resp.status === "success") {
+        setPendingSent(prev => prev.filter(r => r.id !== id));
+      }
+    } catch (e) {
+      ((..._args: any[]) => {})("Failed to cancel request:", e);
+    }
+  };
 
   return (
     <>
@@ -738,10 +755,10 @@ export default function ProfilePage() {
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Active Nodes", value: friends.length, color: "text-[#00d4ff]" },
+                { label: "Friends", value: friends.length, color: "text-[#00d4ff]" },
                 { label: "Vault Sync", value: "Active", color: "text-[#ff006e]" },
                 { label: "Messages Sent", value: sentCount > 0 ? sentCount : "0", color: "text-[#2ed573]" },
-                { label: "E2E Tunnels", value: friends.length, color: "text-[#ffbe0b]" },
+                { label: "Pending Sent", value: pendingSent.length, color: "text-[#ffbe0b]" },
               ].map(stat => (
                 <div key={stat.label} className="bg-white/5 p-3.5 rounded-2xl border border-white/5">
                   <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>{stat.label}</p>

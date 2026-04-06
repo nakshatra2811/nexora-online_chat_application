@@ -1549,8 +1549,25 @@ export default function StoriesPage() {
                     <h3 className="text-sm font-black mb-1" style={{ color: "var(--text-primary)" }}>
                       {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
                     </h3>
-                    <p className="text-xs font-bold opacity-60 mb-1" style={{ color: "var(--text-muted)" }}>
-                      {selectedProfileUser.is_friend ? "Node Connected" : "Discovery Protocol"}
+                    <p className="text-xs font-bold opacity-60 mb-3 flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
+                      <span>{selectedProfileUser.is_friend ? "Node Connected" : "Discovery Protocol"}</span>
+                      {profileData?.mutualFriends?.length > 0 && (
+                        <>
+                          <span className="w-1 h-1 rounded-full bg-white/20" />
+                          <div className="flex -space-x-2">
+                            {profileData.mutualFriends.slice(0, 3).map((mf: any) => (
+                              <div key={mf.username} className="w-5 h-5 rounded-full border border-black/20 overflow-hidden ring-1 ring-white/10 shadow-lg">
+                                <Avatar src={mf.avatarUrl} name={mf.fullName} color={mf.color} size={20} animate={false} showBorder={false} />
+                              </div>
+                            ))}
+                            {profileData.mutualFriends.length > 3 && (
+                                <div className="w-5 h-5 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-[7px] font-black border border-white/10">
+                                    +{profileData.mutualFriends.length - 3}
+                                </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </p>
                     <p className="text-[13px] font-medium leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                       {loadingProfile ? (
@@ -1561,11 +1578,19 @@ export default function StoriesPage() {
 
                   <div className="w-full mb-6 flex gap-2">
                     <motion.button 
-                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                      onClick={() => handleAddFriend(selectedProfileUser.username)}
-                      className="flex-[2] py-3.5 rounded-xl bg-[#6c5ce7] text-white font-black uppercase text-[11px] tracking-widest transition-all shadow-lg shadow-purple-500/20"
+                      whileHover={{ scale: profileData?.isFriend || profileData?.requestSent ? 1 : 1.02 }} 
+                      whileTap={{ scale: profileData?.isFriend || profileData?.requestSent ? 1 : 0.96 }}
+                      onClick={() => !profileData?.isFriend && !profileData?.requestSent && handleAddFriend(selectedProfileUser.username)}
+                      disabled={profileData?.isFriend || profileData?.requestSent}
+                      className={`flex-[2] py-3.5 rounded-xl font-black uppercase text-[11px] tracking-widest transition-all shadow-lg ${
+                        profileData?.isFriend 
+                          ? 'bg-green-500/20 text-green-500 shadow-none border border-green-500/20' 
+                          : profileData?.requestSent 
+                            ? 'bg-amber-500/20 text-amber-500 shadow-none border border-amber-500/20' 
+                            : 'bg-[#6c5ce7] text-white shadow-purple-500/20'
+                      }`}
                     >
-                      Connect
+                      {profileData?.isFriend ? "Connected" : profileData?.requestSent ? "Pending..." : profileData?.requestReceived ? "Request Back" : "Connect"}
                     </motion.button>
                     <motion.button 
                       whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
