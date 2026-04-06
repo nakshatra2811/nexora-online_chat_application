@@ -106,8 +106,9 @@ interface LockSetupProps {
 }
 
 function LockSetupModal({ type, onClose, onSave, isDark }: LockSetupProps) {
+  const username = typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "";
   const questions = type === "global_chat" ? GLOBAL_CHAT_LOCK_QUESTIONS : APP_LOCK_QUESTIONS;
-  const prefix = type === "global_chat" ? "nexora_global_chat_lock" : "nexora_app_lock";
+  const prefix = type === "global_chat" ? `${username}_global_chat_lock` : `${username}_app_lock`;
   const title = type === "global_chat" ? "Chat Page Lock Setup" : "App Lock Setup";
   const icon = type === "global_chat" ? "💬" : "📱";
 
@@ -214,7 +215,8 @@ function LockSetupModal({ type, onClose, onSave, isDark }: LockSetupProps) {
 
 // ─── Lock Card ─── (shown in settings for each lock type)
 function LockCard({ type, isDark }: { type: LockType; isDark: boolean }) {
-  const prefix = type === "global_chat" ? "nexora_global_chat_lock" : "nexora_app_lock";
+  const username = typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") || "" : "";
+  const prefix = type === "global_chat" ? `${username}_global_chat_lock` : `${username}_app_lock`;
   const title = type === "global_chat" ? "Chat Page Lock" : "App Lock";
   const desc = type === "global_chat" ? "Lock entire Chats Dashboard" : "Require PIN on app open after login";
   const color = type === "global_chat" ? "from-[#ff006e] to-[#a29bfe]" : "from-[#6c5ce7] to-[#00d4ff]";
@@ -380,14 +382,11 @@ export default function SettingsPage() {
   };
 
   const handleLogout = () => {
-    // Clear cookies and local user data
-    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    localStorage.removeItem("nexora_assigned_role");
+    localStorage.removeItem("nexora_token");
     localStorage.removeItem("nexora_signup_username");
-    localStorage.removeItem("nexora_signup_name");
     localStorage.removeItem("nexora_signup_email");
-    localStorage.removeItem("nexora_signup_phone");
-    localStorage.removeItem("nexora_signup_color");
+    localStorage.removeItem("nexora_signup_role");
+    document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
     router.push("/auth");
   };
 

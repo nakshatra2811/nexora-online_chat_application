@@ -119,9 +119,11 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
     setContacts(prev => {
       const contact = prev.find(c => c.id === id);
       if (contact) {
-        const savedRequests = JSON.parse(localStorage.getItem("nexora_pending_requests") || "[]");
+        const username = localStorage.getItem("nexora_signup_username") || "";
+        const storageKey = username ? `${username}_pending_requests` : "nexora_pending_requests";
+        const savedRequests = JSON.parse(localStorage.getItem(storageKey) || "[]");
         const newReq = { id: Math.random(), name: contact.name, color: contact.color, time: "Just now" };
-        localStorage.setItem("nexora_pending_requests", JSON.stringify([newReq, ...savedRequests]));
+        localStorage.setItem(storageKey, JSON.stringify([newReq, ...savedRequests]));
         window.dispatchEvent(new Event("storage"));
       }
       return prev.map(c => c.id === id ? { ...c, invited: true } : c);
@@ -294,7 +296,7 @@ export default function ProfilePage() {
         phone: signupPhone,
         bio: "",
         joinedDate: "March 2026",
-        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
+        avatarUrl: localStorage.getItem(`${signupUsername}_avatar_url`) || "",
       };
 
       // 3. Try fetching from server
@@ -312,7 +314,7 @@ export default function ProfilePage() {
                   currentProfile.bio = data.user.bio;
                 }
                 // Cache avatar separately for quick cross-page access
-                if (data.user.avatarUrl) localStorage.setItem("nexora_avatar_url", data.user.avatarUrl);
+                if (data.user.avatarUrl) localStorage.setItem(`${signupUsername}_avatar_url`, data.user.avatarUrl);
                 if (data.user.created_at) {
                     const d = new Date(data.user.created_at);
                     currentProfile.joinedDate = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
@@ -323,7 +325,7 @@ export default function ProfilePage() {
         ((..._args: any[]) => {})("Failed to fetch fresh profile data", err);
       }
 
-      const saved = localStorage.getItem("nexora_user_profile");
+      const saved = localStorage.getItem(`${signupUsername}_user_profile`);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -336,7 +338,7 @@ export default function ProfilePage() {
       }
 
       setProfile(currentProfile);
-      localStorage.setItem("nexora_user_profile", JSON.stringify(currentProfile));
+      localStorage.setItem(`${signupUsername}_user_profile`, JSON.stringify(currentProfile));
     };
 
     loadProfile();
@@ -382,13 +384,13 @@ export default function ProfilePage() {
           if (resp && resp.status === "success") {
             setProfile(prev => ({ ...prev, avatarUrl: avatarBase64 }));
             // Cache in dedicated key for all pages to read quickly
-            localStorage.setItem("nexora_avatar_url", avatarBase64);
+            localStorage.setItem(`${profile.username}_avatar_url`, avatarBase64);
             // Also update main profile cache
-            const cached = localStorage.getItem("nexora_user_profile");
+            const cached = localStorage.getItem(`${profile.username}_user_profile`);
             if (cached) {
                const p = JSON.parse(cached);
                p.avatarUrl = avatarBase64;
-               localStorage.setItem("nexora_user_profile", JSON.stringify(p));
+               localStorage.setItem(`${profile.username}_user_profile`, JSON.stringify(p));
             }
           } else {
              alert(resp.error || "Failed to update profile picture");
@@ -439,7 +441,7 @@ export default function ProfilePage() {
           const data = await nexoraFetch(`/api/connections?username=${encodeURIComponent(myUsername)}`);
           if (data && data.connections) {
             setFriends(data.connections);
-            localStorage.setItem("nexora_secure_connections", JSON.stringify(data.connections));
+            localStorage.setItem(`${myUsername}_secure_connections`, JSON.stringify(data.connections));
           }
         }
       }
@@ -449,12 +451,12 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
+    const myUsername = localStorage.getItem("nexora_signup_username") || "";
     const defaultThreads: any[] = [];
-    
-    const threadsStr = localStorage.getItem("nexora_secure_connections");
+    const threadsStr = localStorage.getItem(`${myUsername}_secure_connections`);
     const threads = threadsStr ? JSON.parse(threadsStr) : defaultThreads;
     
-    const blocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
+    const blocked = JSON.parse(localStorage.getItem(`${myUsername}_blocked_threads`) || "[]");
     setBlockedThreads(blocked);
     setFriends(threads.filter((t: any) => !blocked.includes(t.id)));
 
@@ -470,7 +472,7 @@ export default function ProfilePage() {
     };
     fetchSent();
 
-    const totalSent = localStorage.getItem("nexora_stats_messages_sent") || "0";
+    const totalSent = localStorage.getItem(`${myUsername}_stats_messages_sent`) || "0";
     setSentCount(parseInt(totalSent));
   }, []);
 
@@ -506,7 +508,7 @@ export default function ProfilePage() {
 
       const handleAccepted = (data: any) => {
         // If someone accepted OUR request, refresh friends
-        const threadsStr = localStorage.getItem("nexora_secure_connections");
+        const threadsStr = localStorage.getItem(`${myUsername}_secure_connections`);
         if (threadsStr) setFriends(JSON.parse(threadsStr));
       };
 
@@ -520,21 +522,21 @@ export default function ProfilePage() {
     }
 
     // Load blocked threads
-    const stored = localStorage.getItem("nexora_blocked_threads");
+    const stored = localStorage.getItem(`${myUsername}_blocked_threads`);
     if (stored) setBlockedThreads(JSON.parse(stored));
 
     // Listen for storage changes (to sync between tabs)
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === "nexora_blocked_threads") {
+      if (e.key === `${myUsername}_blocked_threads`) {
         setBlockedThreads(JSON.parse(e.newValue || "[]"));
-      } else if (e.key === "nexora_pending_requests") {
+      } else if (e.key === `${myUsername}_pending_requests`) {
         setPendingSent(JSON.parse(e.newValue || "[]"));
-      } else if (e.key === "nexora_secure_connections") {
+      } else if (e.key === `${myUsername}_secure_connections`) {
         const defaultThreads: any[] = [];
         const threads = e.newValue ? JSON.parse(e.newValue) : defaultThreads;
-        const currentBlocked = JSON.parse(localStorage.getItem("nexora_blocked_threads") || "[]");
+        const currentBlocked = JSON.parse(localStorage.getItem(`${myUsername}_blocked_threads`) || "[]");
         setFriends(threads.filter((t: any) => !currentBlocked.includes(t.id)));
-      } else if (e.key === "nexora_stats_messages_sent") {
+      } else if (e.key === `${myUsername}_stats_messages_sent`) {
         setSentCount(parseInt(e.newValue || "0"));
       }
     };

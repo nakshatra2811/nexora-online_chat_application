@@ -252,15 +252,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const isCurrentlyViewingChat = typeof window !== "undefined" && window.location.pathname?.includes("/dashboard/chats");
       if (isCurrentlyViewingChat) return;
 
-      // 1. Update Unread Count in storage
-      const counts = JSON.parse(localStorage.getItem("nexora_unread_counts") || "{}");
+      const threadUserKey = `${username}_unread_counts`;
+      const threadsUserKey = `${username}_secure_connections`;
+      
+      const counts = JSON.parse(localStorage.getItem(threadUserKey) || "{}");
       // Update thread preview in storage
-      const threadsStr = localStorage.getItem("nexora_secure_connections") || "[]";
+      const threadsStr = localStorage.getItem(threadsUserKey) || "[]";
       let threads = JSON.parse(threadsStr);
       const threadIndex = threads.findIndex((t: any) => t.username?.toLowerCase() === sender.toLowerCase());
 
       counts[sender] = (counts[sender] || 0) + 1;
-      localStorage.setItem("nexora_unread_counts", JSON.stringify(counts));
+      localStorage.setItem(threadUserKey, JSON.stringify(counts));
 
       if (threadIndex !== -1) {
         threads[threadIndex] = {
@@ -270,14 +272,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           unread: counts[sender]
         };
         threads = [threads[threadIndex], ...threads.filter((_: any, i: number) => i !== threadIndex)];
-        localStorage.setItem("nexora_secure_connections", JSON.stringify(threads));
+        localStorage.setItem(threadsUserKey, JSON.stringify(threads));
 
         // ✅ CRITICAL FIX: Save the actual message to the thread's message list
         // so it appears when user opens the chat - WhatsApp/Instagram style
         const threadId = threads[0]?.id;
         if (threadId) {
           try {
-            const msgKey = `nexora_msgs_${threadId}`;
+            const msgKey = `${username}_msgs_${threadId}`;
             const storedMsgs = localStorage.getItem(msgKey);
             let existingMsgs: any[] = [];
             // Only process if not encrypted storage (plain JSON)
@@ -313,7 +315,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
 
       // 2. Trigger Toast if NOT muted
-      const muted = JSON.parse(localStorage.getItem("nexora_muted") || "[]");
+      const muted = JSON.parse(localStorage.getItem(`${username}_muted`) || "[]");
       const threadId2 = threadIndex !== -1 ? (threads[0]?.id || -1) : -1;
       const isMuted = muted.includes(threadId2);
 
@@ -422,7 +424,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           "from-green-400 to-teal-500", "from-pink-500 to-rose-500",
           "from-orange-400 to-red-500"
         ];
-        const existing = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const existing = JSON.parse(localStorage.getItem(`${username}_secure_connections`) || "[]");
         const alreadyExists = existing.find((t: any) => t.username === req.from);
         if (!alreadyExists) {
           const newThread = {
@@ -434,7 +436,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             preview: "Connected! Start chatting.",
             unread: 1,
           };
-          localStorage.setItem("nexora_secure_connections", JSON.stringify([...existing, newThread]));
+          localStorage.setItem(`${username}_secure_connections`, JSON.stringify([...existing, newThread]));
           window.dispatchEvent(new Event("storage"));
         }
       }
@@ -497,7 +499,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const handleLogout = () => {
+    // Session-only removal to allow scoped data persistence
     localStorage.removeItem("nexora_token");
+    localStorage.removeItem("nexora_signup_username");
+    localStorage.removeItem("nexora_signup_role");
     document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
     router.push("/");
   };

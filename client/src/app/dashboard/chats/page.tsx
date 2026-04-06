@@ -98,6 +98,12 @@ function ChatsPageContent() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Scoped key helper
+  const sKey = (k: string) => {
+    const user = myUsernameRef.current || (typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") : "");
+    return user ? `${user}_${k}` : `nexora_${k}`;
+  };
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
   const [vaultKey, setVaultKey] = useState<CryptoKey | null>(null);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -128,10 +134,10 @@ function ChatsPageContent() {
         ...thread,
         ...updates,
         lastMessageTime: Date.now(),
-        preview: updates.preview !== undefined ? updates.preview : thread.preview // Used passed preview if available
+        preview: updates.preview !== undefined ? updates.preview : thread.preview 
       };
       const next = [updated, ...otherThreads];
-      localStorage.setItem("nexora_secure_connections", JSON.stringify(next));
+      localStorage.setItem(sKey("secure_connections"), JSON.stringify(next));
       return next;
     });
   };
@@ -803,27 +809,27 @@ function ChatsPageContent() {
     fetchConnections();
 
     try {
-      const saved = localStorage.getItem("nexora_secure_connections");
+      const saved = localStorage.getItem(sKey("secure_connections"));
       if (saved) setThreads(JSON.parse(saved));
-      const savedNicknames = localStorage.getItem("nexora_nicknames");
+      const savedNicknames = localStorage.getItem(sKey("nicknames"));
       if (savedNicknames) setNicknames(JSON.parse(savedNicknames));
-      const blocked = localStorage.getItem("nexora_blocked_threads");
+      const blocked = localStorage.getItem(sKey("blocked_threads"));
       if (blocked) setBlockedThreads(JSON.parse(blocked));
       // Load activity
-      const savedRequests = localStorage.getItem("nexora_sent_requests");
+      const savedRequests = localStorage.getItem(sKey("sent_requests"));
       if (savedRequests) setSentRequests(JSON.parse(savedRequests));
-      const lmap = localStorage.getItem("nexora_locked_chats_map");
+      const lmap = localStorage.getItem(sKey("locked_chats_map"));
       if (lmap) setLockedChatsMap(JSON.parse(lmap));
-      const hidden = localStorage.getItem("nexora_hidden_threads");
+      const hidden = localStorage.getItem(sKey("hidden_threads"));
       if (hidden) setHiddenThreads(JSON.parse(hidden));
-      const history = localStorage.getItem("nexora_search_history");
+      const history = localStorage.getItem(sKey("search_history"));
       if (history) setSearchHistory(JSON.parse(history));
 
       // Load unread counts
-      const savedUnreads = localStorage.getItem("nexora_unread_counts");
+      const savedUnreads = localStorage.getItem(sKey("unread_counts"));
       if (savedUnreads) setUnreadCounts(JSON.parse(savedUnreads));
     } catch (e) {
-      ((..._args: any[]) => { })("[CHATS] LocalStorage parse failed - clearing corrupt entries", e);
+      ((..._args: any[]) => { })("[CHATS] LocalStorage parse failed", e);
     }
   }, []);
 
@@ -835,12 +841,12 @@ function ChatsPageContent() {
     // Purge after_view messages
     if (prevThreadRef.current && activeThread?.id !== prevThreadRef.current.id) {
       const oldId = prevThreadRef.current.id;
-      const oldTimer = localStorage.getItem(`nexora_disappear_${oldId}`);
+      const oldTimer = localStorage.getItem(sKey(`disappear_${oldId}`));
       if (oldTimer === "after_view" || oldTimer === "after") {
-        const currentMsgs = JSON.parse(localStorage.getItem(`nexora_msgs_${oldId}`) || "[]");
+        const currentMsgs = JSON.parse(localStorage.getItem(sKey(`msgs_${oldId}`)) || "[]");
         const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
         if (remaining.length !== currentMsgs.length) {
-          localStorage.setItem(`nexora_msgs_${oldId}`, JSON.stringify(remaining));
+          localStorage.setItem(sKey(`msgs_${oldId}`), JSON.stringify(remaining));
         }
       }
     }
@@ -850,7 +856,7 @@ function ChatsPageContent() {
     if (activeThread?.username) {
       setUnreadCounts(prev => {
         const next = { ...prev, [activeThread.username]: 0 };
-        localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
+        localStorage.setItem(sKey("unread_counts"), JSON.stringify(next));
         return next;
       });
     }
@@ -875,7 +881,7 @@ function ChatsPageContent() {
     const loadMessages = async () => {
       if (!activeThread || !vaultReady) return;
 
-      const savedMsgs = localStorage.getItem(`nexora_msgs_${activeThread.id}`);
+      const savedMsgs = localStorage.getItem(sKey(`msgs_${activeThread.id}`));
 
       if (savedMsgs) {
         try {
@@ -918,8 +924,8 @@ function ChatsPageContent() {
 
       // Strict Disappear Timer Sync
       let savedTimer = null;
-      if (activeThread.username) savedTimer = localStorage.getItem(`nexora_disappear_by_username_${activeThread.username}`);
-      if (!savedTimer) savedTimer = localStorage.getItem(`nexora_disappear_${activeThread.id}`);
+      if (activeThread.username) savedTimer = localStorage.getItem(sKey(`disappear_by_username_${activeThread.username}`));
+      if (!savedTimer) savedTimer = localStorage.getItem(sKey(`disappear_${activeThread.id}`));
 
       if (savedTimer) {
         setDisappearTimer(savedTimer as any);
@@ -936,18 +942,18 @@ function ChatsPageContent() {
     const saveMessages = async () => {
       if (activeThread && vaultKey && vaultReady) {
         const encrypted = await encryptStorageData(messages, vaultKey);
-        localStorage.setItem(`nexora_msgs_${activeThread.id}`, encrypted);
+        localStorage.setItem(sKey(`msgs_${activeThread.id}`), encrypted);
       }
     };
     saveMessages();
   }, [messages, activeThread, vaultKey, vaultReady]);
 
   useEffect(() => {
-    localStorage.setItem("nexora_blocked_threads", JSON.stringify(blockedThreads));
+    localStorage.setItem(sKey("blocked_threads"), JSON.stringify(blockedThreads));
   }, [blockedThreads]);
 
   useEffect(() => {
-    localStorage.setItem("nexora_sent_requests", JSON.stringify(sentRequests));
+    localStorage.setItem(sKey("sent_requests"), JSON.stringify(sentRequests));
   }, [sentRequests]);
 
   useEffect(() => {
@@ -976,28 +982,28 @@ function ChatsPageContent() {
     const match = document.cookie.match(new RegExp('(^| )nexora_role=([^;]+)'));
     const role = match ? match[2] : "Normal User";
     setUserRole(role === "Authorized Account" ? "Authorized Account" : "Standard Account");
-    const isGlobalLock = localStorage.getItem("nexora_global_chat_lock_enabled") === "true";
+    const isGlobalLock = localStorage.getItem(sKey("global_chat_lock_enabled")) === "true";
     if (role === "Authorized Account" && isGlobalLock) {
       setGlobalChatLockEntry({ pin: "", error: "", showPin: false, forgotMode: false, forgotAnswer: "", forgotNewPin: "", forgotStep: "answer", forgotError: "" });
     }
 
-    const stored = localStorage.getItem("nexora_locked_chats_map");
+    const stored = localStorage.getItem(sKey("locked_chats_map"));
     if (stored) setLockedChatsMap(JSON.parse(stored));
 
-    const hidden = localStorage.getItem("nexora_hidden_threads");
+    const hidden = localStorage.getItem(sKey("hidden_threads"));
     if (hidden) setHiddenThreads(JSON.parse(hidden));
   }, []);
 
   // ═══ Persist Nicknames Hook (Fix for Static Nicknames) ═══
   useEffect(() => {
     if (Object.keys(nicknames).length > 0) {
-      localStorage.setItem("nexora_nicknames", JSON.stringify(nicknames));
+      localStorage.setItem(sKey("nicknames"), JSON.stringify(nicknames));
     }
   }, [nicknames]);
 
   const saveLockedChatsMap = (newMap: Record<number, string>) => {
     setLockedChatsMap(newMap);
-    localStorage.setItem("nexora_locked_chats_map", JSON.stringify(newMap));
+    localStorage.setItem(sKey("locked_chats_map"), JSON.stringify(newMap));
   };
 
   const handleOpenThread = (thread: typeof threads[0]) => {
@@ -1026,7 +1032,7 @@ function ChatsPageContent() {
     // Strict recovery: Wipe thread
     const newHidden = [...hiddenThreads, chatLockEntry.threadId];
     setHiddenThreads(newHidden);
-    localStorage.setItem("nexora_hidden_threads", JSON.stringify(newHidden));
+    localStorage.setItem(sKey("hidden_threads"), JSON.stringify(newHidden));
 
     const newMap = { ...lockedChatsMap };
     delete newMap[chatLockEntry.threadId];
@@ -1063,7 +1069,7 @@ function ChatsPageContent() {
 
   const handleGlobalChatLockUnlock = () => {
     if (!globalChatLockEntry) return;
-    const correctPin = localStorage.getItem("nexora_global_chat_lock_pin") || "";
+    const correctPin = localStorage.getItem(sKey("global_chat_lock_pin")) || "";
     if (globalChatLockEntry.pin === correctPin) {
       setGlobalChatLockEntry(null);
     } else {
@@ -1074,14 +1080,14 @@ function ChatsPageContent() {
   const handleGlobalForgotPin = () => {
     if (!globalChatLockEntry) return;
     if (globalChatLockEntry.forgotStep === "answer") {
-      const saved = localStorage.getItem("nexora_global_chat_lock_answer") || "";
+      const saved = localStorage.getItem(sKey("global_chat_lock_answer")) || "";
       if (globalChatLockEntry.forgotAnswer.trim().toLowerCase() !== saved) {
         setGlobalChatLockEntry(prev => prev ? { ...prev, forgotError: "Incorrect answer" } : null); return;
       }
       setGlobalChatLockEntry(prev => prev ? { ...prev, forgotStep: "newpin", forgotError: "" } : null);
     } else {
       if (globalChatLockEntry.forgotNewPin.length < 4) { setGlobalChatLockEntry(prev => prev ? { ...prev, forgotError: "PIN must be 4+ digits" } : null); return; }
-      localStorage.setItem("nexora_global_chat_lock_pin", globalChatLockEntry.forgotNewPin);
+      localStorage.setItem(sKey("global_chat_lock_pin"), globalChatLockEntry.forgotNewPin);
       setGlobalChatLockEntry(null);
     }
   };
@@ -1101,7 +1107,7 @@ function ChatsPageContent() {
   useEffect(() => {
     const threadId = activeThread?.id || 0;
     const username = activeThread?.username || "";
-    const saved = activeThread?.wallpaper || (username ? localStorage.getItem(`nexora_wallpaper_${username}`) : null) || (threadId ? localStorage.getItem(`nexora_wallpaper_${threadId}`) : null);
+    const saved = activeThread?.wallpaper || (username ? localStorage.getItem(sKey(`wallpaper_${username}`)) : null) || (threadId ? localStorage.getItem(sKey(`wallpaper_${threadId}`)) : null);
     setChatWallpaper(saved || null);
   }, [activeThread]);
 
@@ -1110,11 +1116,11 @@ function ChatsPageContent() {
     const threadId = activeThread?.id || 0;
     const username = activeThread?.username || "";
     if (url) {
-      if (threadId) localStorage.setItem(`nexora_wallpaper_${threadId}`, url);
-      if (username) localStorage.setItem(`nexora_wallpaper_${username}`, url);
+      if (threadId) localStorage.setItem(sKey(`wallpaper_${threadId}`), url);
+      if (username) localStorage.setItem(sKey(`wallpaper_${username}`), url);
     } else {
-      if (threadId) localStorage.removeItem(`nexora_wallpaper_${threadId}`);
-      if (username) localStorage.removeItem(`nexora_wallpaper_${username}`);
+      if (threadId) localStorage.removeItem(sKey(`wallpaper_${threadId}`));
+      if (username) localStorage.removeItem(sKey(`wallpaper_${username}`));
     }
 
     // Emit to other user
@@ -1169,7 +1175,7 @@ function ChatsPageContent() {
   useEffect(() => {
     const purgeMessages = () => {
       if (disappearTimer === "after_view" && activeThread) {
-        const key = `nexora_msgs_${activeThread.id}`;
+        const key = sKey(`msgs_${activeThread.id}`);
         const currentMsgs = JSON.parse(localStorage.getItem(key) || "[]");
         // Identify messages to delete (status is 'seen')
         const seenMsgIds = currentMsgs.filter((m: any) => m.status === "seen" && !m.isSystemNotice).map((m: any) => m.id);
@@ -1231,7 +1237,7 @@ function ChatsPageContent() {
         return (Date.now() - m.createdAt) < 2000;
       }));
     }, 2000);
-    return () => clearTimeout(timer);
+    return () => clearInterval(timer);
   }, [messages]);
 
   const handleShareLocation = () => {
@@ -1447,13 +1453,13 @@ function ChatsPageContent() {
           };
 
           const currentThread = activeThreadRef.current;
-          let threads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+          let threads = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
           let senderThread = threads.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
 
           // 🛡️ Proactive Discovery: If sender is unknown, fetch connections now
           if (!senderThread) {
             await fetchConnections();
-            threads = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+            threads = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
             senderThread = threads.find((t: any) => t.username?.toLowerCase() === senderUsername?.toLowerCase());
           }
 
@@ -1467,12 +1473,12 @@ function ChatsPageContent() {
           } else {
             setUnreadCounts(prev => {
               const next = { ...prev, [senderUsername]: (prev[senderUsername] || 0) + 1 };
-              localStorage.setItem("nexora_unread_counts", JSON.stringify(next));
+              localStorage.setItem(sKey("unread_counts"), JSON.stringify(next));
               return next;
             });
 
             if (senderThread) {
-              const key = `nexora_msgs_${senderThread.id}`;
+              const key = sKey(`msgs_${senderThread.id}`);
               const raw = localStorage.getItem(key) || "[]";
               let threadMsgs: any[] = [];
               try {
@@ -1553,7 +1559,7 @@ function ChatsPageContent() {
       socket.on("dm:avatar_update", (data: { from: string; avatarUrl: string }) => {
         setThreads(prev => {
           const updated = prev.map(t => t.username === data.from ? { ...t, avatarUrl: data.avatarUrl } : t);
-          localStorage.setItem("nexora_secure_connections", JSON.stringify(updated));
+          localStorage.setItem(sKey("secure_connections"), JSON.stringify(updated));
           return updated;
         });
 
@@ -1563,9 +1569,9 @@ function ChatsPageContent() {
         }
 
         // Broadly update any cached connection data to ensure persistence
-        const savedConns = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const savedConns = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
         const updatedConns = savedConns.map((c: any) => c.username === data.from ? { ...c, avatarUrl: data.avatarUrl } : c);
-        localStorage.setItem("nexora_secure_connections", JSON.stringify(updatedConns));
+        localStorage.setItem(sKey("secure_connections"), JSON.stringify(updatedConns));
       });
 
       // 8. Initial online users list
@@ -1583,12 +1589,12 @@ function ChatsPageContent() {
         setMessages(prev => prev.filter(m => m.id !== data.msgId));
 
         // Also purge from localStorage for ALL threads
-        const rawConns = localStorage.getItem("nexora_secure_connections") || "[]";
+        const rawConns = localStorage.getItem(sKey("secure_connections")) || "[]";
         let connections = [];
         try { connections = JSON.parse(rawConns); } catch (e) { connections = []; }
 
         connections.forEach(async (conn: any) => {
-          const key = `nexora_msgs_${conn.id}`;
+          const key = sKey(`msgs_${conn.id}`);
           const raw = localStorage.getItem(key) || "[]";
           let currentMsgs: any[] = [];
           try {
@@ -1621,9 +1627,9 @@ function ChatsPageContent() {
         }));
 
         // Persist if it belongs to a stored thread
-        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const connections = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
         connections.forEach(async (conn: any) => {
-          const key = `nexora_msgs_${conn.id}`;
+          const key = sKey(`msgs_${conn.id}`);
           const raw = localStorage.getItem(key) || "[]";
           let currentMsgs: any[] = [];
           try {
@@ -1661,10 +1667,10 @@ function ChatsPageContent() {
         if (activeThreadRef.current?.username === data.from) {
           setMessages([]);
         }
-        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const connections = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
         const conn = connections.find((c: any) => c.username === data.from);
         if (conn) {
-          localStorage.setItem(`nexora_msgs_${conn.id}`, "[]");
+          localStorage.setItem(sKey(`msgs_${conn.id}`), "[]");
         }
       });
 
@@ -1731,7 +1737,7 @@ function ChatsPageContent() {
       // 12. New feature syncs
       socket.on("dm:wallpaper", (data: { from: string; wallpaper: string | null }) => {
         // We need to know who sent it to update their thread's wallpaper
-        localStorage.setItem(`nexora_wallpaper_${data.from}`, data.wallpaper || "");
+        localStorage.setItem(sKey(`wallpaper_${data.from}`), data.wallpaper || "");
         // If we're currently looking at this thread, update state
         if (activeThreadRef.current?.username?.toLowerCase() === data.from?.toLowerCase()) {
           setChatWallpaper(data.wallpaper);
@@ -1757,11 +1763,11 @@ function ChatsPageContent() {
 
       socket.on("dm:disappear_setting", (data: { from: string; timer: string }) => {
         // Enforce the mutual setting by persisting it
-        localStorage.setItem(`nexora_disappear_by_username_${data.from}`, data.timer);
+        localStorage.setItem(sKey(`disappear_by_username_${data.from}`), data.timer);
 
         if (activeThreadRef.current?.username === data.from) {
           setDisappearTimer(data.timer as any);
-          localStorage.setItem(`nexora_disappear_${activeThreadRef.current.id}`, data.timer);
+          localStorage.setItem(sKey(`disappear_${activeThreadRef.current.id}`), data.timer);
           // Show notification
           const notifMsg: ChatMessage = {
             id: Math.random().toString(), senderId: "system", text: `${data.from} set disappearing messages to ${data.timer === "off" ? "Off" : data.timer === "1h" ? "1 Hour" : data.timer === "24h" ? "24 Hours" : "After View"}`, timestamp: formatToIndianTime(), createdAt: Date.now(), isSelf: false, status: "delivered", reactions: {}, isSystemNotice: true
@@ -1789,9 +1795,9 @@ function ChatsPageContent() {
           return { ...m, poll: { ...m.poll, options: newOpts } };
         }));
         // Also persist to localStorage for any matching thread
-        const connections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+        const connections = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
         connections.forEach(async (conn: any) => {
-          const key = `nexora_msgs_${conn.id}`;
+          const key = sKey(`msgs_${conn.id}`);
           const raw = localStorage.getItem(key) || "[]";
           let currentMsgs: any[] = [];
           try {
@@ -1865,7 +1871,7 @@ function ChatsPageContent() {
           const remaining = prev.filter(m => m.status !== "seen" && !m.isSystemNotice);
           if (activeThreadRef.current?.id) {
             encryptStorageData(remaining, vaultKey).then(encrypted => {
-              localStorage.setItem(`nexora_msgs_${activeThreadRef.current!.id}`, encrypted);
+              localStorage.setItem(sKey(`msgs_${activeThreadRef.current!.id}`), encrypted);
             });
           }
           return remaining;
@@ -1875,7 +1881,7 @@ function ChatsPageContent() {
 
     const handleBeforeUnload = async () => {
       if (disappearTimer === "after_view" && activeThreadRef.current?.id && vaultKey && vaultReady) {
-        const stored = localStorage.getItem(`nexora_msgs_${activeThreadRef.current.id}`);
+        const stored = localStorage.getItem(sKey(`msgs_${activeThreadRef.current.id}`));
         if (!stored) return;
 
         let currentMsgs: any[] = [];
@@ -1887,7 +1893,7 @@ function ChatsPageContent() {
 
         const remaining = currentMsgs.filter((m: any) => m.status !== "seen" && !m.isSystemNotice);
         const encrypted = await encryptStorageData(remaining, vaultKey);
-        localStorage.setItem(`nexora_msgs_${activeThreadRef.current.id}`, encrypted);
+        localStorage.setItem(sKey(`msgs_${activeThreadRef.current.id}`), encrypted);
       }
     };
 
@@ -1945,8 +1951,8 @@ function ChatsPageContent() {
     setMessages(prev => [...prev, tempMsg]);
 
     // Update stats
-    const currentSent = parseInt(localStorage.getItem("nexora_stats_messages_sent") || "0");
-    localStorage.setItem("nexora_stats_messages_sent", (currentSent + 1).toString());
+    const currentSent = parseInt(localStorage.getItem(sKey("stats_messages_sent")) || "0");
+    localStorage.setItem(sKey("stats_messages_sent"), (currentSent + 1).toString());
     window.dispatchEvent(new Event("storage"));
 
     try {
