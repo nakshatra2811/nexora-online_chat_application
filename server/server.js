@@ -2088,6 +2088,9 @@ app.post('/api/auth/signup', async (req, res) => {
                     },
                     message: "Identity recognized. Automatic login authorized."
                 });
+
+                // Send Login Alert (Non-blocking)
+                nexoraMailProtocol('login_alert', existing.email, { username: existing.username }).catch((..._args) => { });
             } else {
                 return res.status(400).json({ status: "error", error: "Username or Email already registered. Please log in instead." });
             }
