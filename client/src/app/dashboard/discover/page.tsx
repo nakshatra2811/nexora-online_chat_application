@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Users, UserPlus, RefreshCcw, ArrowLeft, Shield,
   Zap, Globe, Sparkles, ChevronDown, X, MessageSquare,
-  UserCheck, Calendar, Link as LinkIcon
+  UserCheck, Calendar, Link as LinkIcon, Wifi
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
+import { socketService } from "@/lib/socket";
 import { Avatar } from "@/components/Avatar";
 
 // ─── Instagram-style Profile Preview Modal ────────────────────────────────────
@@ -30,16 +31,21 @@ function ProfileModal({
 }) {
   const [fullProfile, setFullProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [mutualDetails, setMutualDetails] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchData = async () => {
       try {
-        const data = await nexoraFetch(`/api/users/profile?username=${encodeURIComponent(user.username)}`);
-        if (data?.user) setFullProfile(data.user);
+        const [profileRes, mutualRes] = await Promise.all([
+          nexoraFetch(`/api/users/profile?username=${encodeURIComponent(user.username)}`),
+          nexoraFetch(`/api/users/mutual-friends/${encodeURIComponent(user.username)}`)
+        ]);
+        if (profileRes?.user) setFullProfile(profileRes.user);
+        if (mutualRes?.mutualFriends) setMutualDetails(mutualRes.mutualFriends);
       } catch {}
       finally { setLoading(false); }
     };
-    fetch();
+    fetchData();
   }, [user.username]);
 
   const profile = fullProfile || user;
@@ -49,6 +55,8 @@ function ProfileModal({
   const joinedDate = fullProfile?.created_at
     ? new Date(fullProfile.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
     : null;
+  const displayMutuals = mutualDetails.length > 0 ? mutualDetails : (profile?.mutualFriends || []);
+  const mutualCount = mutualDetails.length > 0 ? mutualDetails.length : (user.mutualCount || 0);
 
   return (
     <AnimatePresence>
@@ -108,9 +116,9 @@ function ProfileModal({
                   showBorder={false}
                 />
               </div>
-              {user.mutualCount > 0 && (
+              {mutualCount > 0 && (
                 <div className="absolute -bottom-1 -right-1 bg-[#6c5ce7] text-white text-[9px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white/10 shadow-lg">
-                  {user.mutualCount}
+                  {mutualCount}
                 </div>
               )}
             </div>
@@ -125,23 +133,23 @@ function ProfileModal({
 
             {/* Badges row */}
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              {user.mutualCount > 0 && (
+              {mutualCount > 0 && (
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-[#6c5ce7]"
                   style={{ background: "rgba(108,92,231,0.12)", border: "1px solid rgba(108,92,231,0.2)" }}>
                   <Users className="w-3 h-3" />
-                  {user.mutualCount} Mutual{user.mutualCount > 1 ? "s" : ""}
+                  {mutualCount} Mutual{mutualCount > 1 ? "s" : ""}
                 </div>
               )}
-              {profile?.mutualFriends?.length > 0 && (
+              {displayMutuals.length > 0 && (
                 <div className="flex -space-x-2 ml-1">
-                    {profile.mutualFriends.slice(0, 3).map((mf: any) => (
+                    {displayMutuals.slice(0, 3).map((mf: any) => (
                         <div key={mf.username} className="w-6 h-6 rounded-full border border-black/20 overflow-hidden ring-1 ring-white/10 shadow-lg">
-                            <Avatar src={mf.avatarUrl} name={mf.fullName} color={mf.color} size={24} animate={false} showBorder={false} />
+                            <Avatar src={mf.avatarUrl || mf.avatar_url} name={mf.fullName || mf.full_name || mf.username} color={mf.color} size={24} animate={false} showBorder={false} />
                         </div>
                     ))}
-                    {profile.mutualFriends.length > 3 && (
+                    {displayMutuals.length > 3 && (
                         <div className="w-6 h-6 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-[8px] font-black border border-white/10" style={{ color: "var(--text-primary)" }}>
-                            +{profile.mutualFriends.length - 3}
+                            +{displayMutuals.length - 3}
                         </div>
                     )}
                 </div>
@@ -154,6 +162,29 @@ function ProfileModal({
                 </div>
               )}
             </div>
+
+            {/* Mutual Friends Detail Section */}
+            {!loading && displayMutuals.length > 0 && (
+              <div className="mb-5 p-3 rounded-2xl border" style={{ background: isDark ? "rgba(108,92,231,0.06)" : "rgba(108,92,231,0.04)", borderColor: "rgba(108,92,231,0.12)" }}>
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#6c5ce7] mb-2.5 flex items-center gap-1.5">
+                  <Users className="w-3 h-3" /> Mutual Connections
+                </p>
+                <div className="flex flex-col gap-2">
+                  {displayMutuals.slice(0, 5).map((mf: any) => (
+                    <div key={mf.username} className="flex items-center gap-2.5">
+                      <Avatar src={mf.avatarUrl || mf.avatar_url} name={mf.fullName || mf.full_name || mf.username} color={mf.color} size={28} animate={false} showBorder={false} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate" style={{ color: "var(--text-primary)" }}>{mf.fullName || mf.full_name || mf.username}</p>
+                        <p className="text-[9px] font-bold opacity-40">@{mf.username}</p>
+                      </div>
+                      {mf.online && (
+                        <div className="w-2 h-2 rounded-full bg-[#2ed573] shadow-[0_0_6px_#2ed573]" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Bio */}
             {!loading && bio && (
@@ -218,14 +249,15 @@ export default function DiscoverPage() {
   const [requested, setRequested] = useState<Record<string, boolean>>({});
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [isLive, setIsLive] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchSuggestions = async () => {
+  const fetchSuggestions = useCallback(async () => {
     setLoading(true);
     try {
       const res = await nexoraFetch(`/api/users/suggestions`);
       if (res?.suggestions) {
-        // Mutual friends always first (server already sorts, but ensure it)
         const sorted = [...res.suggestions].sort((a, b) => (b.mutualCount || 0) - (a.mutualCount || 0));
         setSuggestions(sorted);
       }
@@ -234,11 +266,58 @@ export default function DiscoverPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchSuggestions();
-  }, []);
+  }, [fetchSuggestions]);
+
+  // ─── Real-time Socket Listeners ───
+  useEffect(() => {
+    const myUsername = localStorage.getItem("nexora_signup_username") || "";
+    if (!myUsername) return;
+
+    const socket = socketService.connect();
+    socket.emit("register", myUsername);
+    setIsLive(true);
+
+    // When server broadcasts suggestion refresh (connection accepted in network)
+    const handleSuggestionsUpdate = () => {
+      // Debounce: wait 800ms to avoid flooding during rapid accepts
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = setTimeout(() => {
+        fetchSuggestions();
+      }, 800);
+    };
+
+    // When a user comes online/offline, update their card in real-time
+    const handleUserStatus = (data: { userId: string; status: string }) => {
+      setSuggestions(prev => prev.map(s =>
+        s.username?.toLowerCase() === data.userId?.toLowerCase()
+          ? { ...s, online: data.status === "online" }
+          : s
+      ));
+    };
+
+    // When a connection request is sent to us, remove that user from suggestions
+    const handleConnectionRequest = (data: { from: string }) => {
+      setSuggestions(prev => prev.filter(s =>
+        s.username?.toLowerCase() !== data.from?.toLowerCase()
+      ));
+    };
+
+    socket.on("suggestions_update", handleSuggestionsUpdate);
+    socket.on("user_status", handleUserStatus);
+    socket.on("connection_request", handleConnectionRequest);
+
+    return () => {
+      socket.off("suggestions_update", handleSuggestionsUpdate);
+      socket.off("user_status", handleUserStatus);
+      socket.off("connection_request", handleConnectionRequest);
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
+  }, [fetchSuggestions]);
 
   const handleConnect = async (targetUsername: string) => {
     const from = localStorage.getItem("nexora_signup_username") || "";

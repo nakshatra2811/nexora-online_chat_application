@@ -877,7 +877,14 @@ export default function ProfilePage() {
                         className="shadow-md border-2 border-white dark:border-[#161622]"
                       />
                       <div>
-                        <h4 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>@{req.from}</h4>
+                        <h4 className="font-bold text-sm flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+                          @{req.from}
+                          {req.mutualCount > 0 && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-[#6c5ce7]/10 text-[#6c5ce7] font-bold">
+                              {req.mutualCount} Mutual
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-xs opacity-60 font-medium" style={{ color: "var(--text-muted)" }}>{req.fromName || "Sent a request"}</p>
                         <div className="flex items-center gap-1 mt-1 text-[9px] font-black uppercase tracking-widest opacity-40">
                           <Clock className="w-2.5 h-2.5" /> {req.time}

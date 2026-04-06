@@ -3259,7 +3259,27 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
     try {
         if (!db) return res.json({ requests: [] });
         const reqs = await db.all(`
-            SELECT cr.id, cr.from_username AS "from", cr.from_name AS "fromName", cr.from_color AS "fromColor", cr.created_at AS "time", u.avatar_url AS "avatarUrl"
+            SELECT 
+                cr.id, 
+                cr.from_username AS "from", 
+                cr.from_name AS "fromName", 
+                cr.from_color AS "fromColor", 
+                cr.created_at AS "time", 
+                u.avatar_url AS "avatarUrl",
+                (
+                    SELECT COUNT(*) 
+                    FROM connections c1
+                    JOIN connections c2 ON (
+                        (LOWER(c1.user_a) = LOWER(c2.user_a) AND LOWER(c1.user_b) != LOWER(c2.user_b)) OR
+                        (LOWER(c1.user_a) = LOWER(c2.user_b) AND LOWER(c1.user_b) != LOWER(c2.user_a)) OR
+                        (LOWER(c1.user_b) = LOWER(c2.user_a) AND LOWER(c1.user_a) != LOWER(c2.user_b)) OR
+                        (LOWER(c1.user_b) = LOWER(c2.user_b) AND LOWER(c1.user_a) != LOWER(c2.user_a))
+                    )
+                    WHERE 
+                      (LOWER(c1.user_a) = LOWER(cr.to_username) OR LOWER(c1.user_b) = LOWER(cr.to_username))
+                      AND 
+                      (LOWER(c2.user_a) = LOWER(cr.from_username) OR LOWER(c2.user_b) = LOWER(cr.from_username))
+                ) as mutual_count
             FROM connection_requests cr
             LEFT JOIN users u ON LOWER(u.username) = LOWER(cr.from_username)
             WHERE LOWER(cr.to_username) = LOWER(?) AND cr.status = 'pending'
@@ -3271,6 +3291,7 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
         // Format time
         const formatted = decryptedReqs.map(r => ({
             ...r,
+            mutualCount: parseInt(r.mutual_count) || 0,
             time: new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }));
         res.json({ requests: formatted });
@@ -3411,6 +3432,9 @@ app.post('/api/connections/respond', authenticateToken, async (req, res) => {
 
             // Notify the receiver via socket
             io.to(username.toLowerCase()).emit('new_notification', { type: 'request_back_prompt', message: `${req_.from_name} started following you.`, from_username: req_.from_username.toLowerCase() });
+
+            // Broadcast mutual friend graph change to update suggestions for all clients organically
+            io.emit('suggestions_update', { timestamp: Date.now() });
         } else {
             await db.run('UPDATE connection_requests SET status = \'declined\' WHERE id = ?', [requestId]);
         }
