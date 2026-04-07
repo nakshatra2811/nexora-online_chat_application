@@ -1315,10 +1315,24 @@ io.on('connection', (socket) => {
     // DIRECT MESSAGE RELAY (per-user routing)
     // Server relays encrypted payload directly to target — ZERO KNOWLEDGE
     // ═══════════════════════════════════════════════
-    socket.on('dm:message', (data) => {
+    socket.on('dm:message', async (data) => {
         // data: { to, from, ciphertext, iv, msgId, timestamp, replyTo? }
         const targetId = (data.to || '').toLowerCase();
         const senderId = socketToUser.get(socket.id);
+        
+        if (senderId && targetId && senderId !== targetId && senderId !== 'nexora_31' && targetId !== 'nexora_31') {
+            try {
+                const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
+                if (!isFriend) {
+                    io.to(senderId).emit('server_error', { message: 'Message rejected: You must be friends to chat. Connection status: none' });
+                    return;
+                }
+            } catch (e) {
+                console.error("Chat validation error:", e);
+                return;
+            }
+        }
+
         const enriched = { ...data, from: senderId || data.from };
 
         // 1. Relay to target user's devices
@@ -1334,9 +1348,22 @@ io.on('connection', (socket) => {
     });
 
     // Media message relay (attachment)
-    socket.on('dm:media', (data) => {
+    socket.on('dm:media', async (data) => {
         const targetId = (data.to || '').toLowerCase();
         const senderId = socketToUser.get(socket.id);
+
+        if (senderId && targetId && senderId !== targetId && senderId !== 'nexora_31' && targetId !== 'nexora_31') {
+            try {
+                const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
+                if (!isFriend) {
+                    io.to(senderId).emit('server_error', { message: 'Media rejected: You must be friends to chat. Connection status: none' });
+                    return;
+                }
+            } catch (e) {
+                return;
+            }
+        }
+
         const enriched = { ...data, from: senderId || data.from, isMedia: true };
 
         // 1. Relay to target user's devices
@@ -1530,6 +1557,17 @@ io.on('connection', (socket) => {
             // RESTRICTION: Self-calling is prohibited
             if (senderId === targetId) {
                 io.to(senderId).emit('call:reject', { from: 'System', reason: 'You cannot call yourself.' });
+                return;
+            }
+
+            // RESTRICTION: Must be friends to call
+            try {
+                const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
+                if (!isFriend) {
+                    io.to(senderId).emit('call:reject', { from: 'System', reason: 'Call rejected: You must be friends to call.' });
+                    return;
+                }
+            } catch (e) {
                 return;
             }
 

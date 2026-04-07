@@ -4123,12 +4123,11 @@ function ChatsPageContent() {
                                     </div>
 
                                     <div className="shrink-0 ml-2">
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
-                                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
-                                      >
-                                        <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
-                                      </button>
+                                      <ConnectionButton
+                                        targetUsername={user.username}
+                                        initialStatus="friends"
+                                        size="md"
+                                      />
                                     </div>
                                   </motion.div>
                                 );
@@ -4180,32 +4179,29 @@ function ChatsPageContent() {
                                     </div>
 
                                     <div className="shrink-0 ml-2">
-                                      {alreadyConnected ? (
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setCurrentChatUser(user.username); setShowGlobalSearch(false); }}
-                                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center border border-[#6c5ce7]/20 shadow-xl hover:scale-110 active:scale-90 transition-all text-white" title="Open Chat"
-                                        >
-                                          <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
-                                        </button>
-                                      ) : alreadyRequested ? (
-                                        <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 transition-all">
-                                          <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
-                                        </div>
-                                      ) : (
-                                        <motion.button
-                                          whileHover={{ scale: 1.05, y: -2 }}
-                                          whileTap={{ scale: 0.95 }}
-                                          onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
-                                          className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
-                                          style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}
-                                        >
-                                          <span className="relative z-10 flex items-center gap-2">
-                                            <Plus className="w-3.5 h-3.5" />
-                                            Request
-                                          </span>
-                                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
-                                        </motion.button>
-                                      )}
+                                      <ConnectionButton
+                                        targetUsername={user.username}
+                                        initialStatus={
+                                          alreadyConnected 
+                                            ? "friends"
+                                            : alreadyRequested
+                                            ? "pending_sent"
+                                            : pendingRequests.some(r => r.from === user.username)
+                                            ? "pending_received"
+                                            : "none"
+                                        }
+                                        requestId={pendingRequests.find(r => r.from === user.username)?.id}
+                                        size="md"
+                                        onStatusChange={(newStatus) => {
+                                          if (newStatus === "pending_sent") {
+                                            setSentRequests(prev => Array.from(new Set([...prev, user.username])));
+                                          } else if (newStatus === "none") {
+                                            setSentRequests(prev => prev.filter(r => r !== user.username));
+                                          } else if (newStatus === "friends") {
+                                            // Optional: Handle auto-accept UX
+                                          }
+                                        }}
+                                      />
                                     </div>
                                   </motion.div>
                                 );
