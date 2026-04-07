@@ -351,6 +351,26 @@ let pgPool;
                 status TEXT DEFAULT 'Pending',
                 created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
             );
+
+            CREATE TABLE IF NOT EXISTS chats (
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                user_a TEXT NOT NULL,
+                user_b TEXT NOT NULL,
+                last_message_preview TEXT,
+                last_message_time ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'},
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                updated_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                UNIQUE(user_a, user_b)
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id ${dbType === 'postgres' ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT'},
+                chat_id INTEGER NOT NULL,
+                sender_id TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                type TEXT DEFAULT 'text',
+                timestamp ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+            );
         `);
 
         // Migration for phone_number and phone_hash (Run for both SQLite and Postgres)
@@ -373,6 +393,7 @@ let pgPool;
         try { await db.run("ALTER TABLE users ADD COLUMN privacy_last_seen TEXT DEFAULT 'everyone'"); } catch (e) { }
         try { await db.run("ALTER TABLE users ADD COLUMN privacy_online TEXT DEFAULT 'everyone'"); } catch (e) { }
         try { await db.run("ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) { }
+        try { await db.run("ALTER TABLE connections ADD COLUMN chat_id INTEGER"); } catch (e) { }
 
         // Migration for Avatar System (Modernization)
         // Clear old static logo from existing users so they get the new premium dynamic avatars
@@ -1318,34 +1339,58 @@ io.on('connection', (socket) => {
     // Server relays encrypted payload directly to target — ZERO KNOWLEDGE
     // ═══════════════════════════════════════════════
     socket.on('dm:message', async (data) => {
-        // data: { to, from, ciphertext, iv, msgId, timestamp, replyTo? }
+        // data: { to, from, ciphertext, iv, msgId, timestamp, replyTo?, chatId? }
         const targetId = (data.to || '').toLowerCase();
         const senderId = socketToUser.get(socket.id);
         
         if (senderId && targetId && senderId !== targetId && senderId !== 'nexora_31' && targetId !== 'nexora_31') {
             try {
-                const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
-                if (!isFriend) {
-                    io.to(senderId).emit('server_error', { message: 'Message rejected: You must be friends to chat. Connection status: none' });
+                const connection = await db.get(`SELECT id, chat_id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
+                if (!connection) {
+                    io.to(senderId).emit('server_error', { message: 'Message rejected: You must be friends to chat.' });
                     return;
                 }
+
+                // Persistence logic
+                let chatId = data.chatId || connection.chat_id;
+                if (!chatId) {
+                    const [u1, u2] = [senderId.toLowerCase(), targetId.toLowerCase()].sort();
+                    const chat = await db.get('SELECT id FROM chats WHERE user_a = ? AND user_b = ?', [u1, u2]);
+                    chatId = chat ? chat.id : (await db.run('INSERT INTO chats (user_a, user_b) VALUES (?, ?)', [u1, u2])).lastID;
+                    await db.run('UPDATE connections SET chat_id = ? WHERE id = ?', [chatId, connection.id]);
+                }
+
+                const enriched = { ...data, from: senderId || data.from, chatId };
+
+                // Save to Database
+                await db.run(
+                    'INSERT INTO messages (chat_id, sender_id, payload, type) VALUES (?, ?, ?, ?)',
+                    [chatId, senderId, JSON.stringify(enriched), 'text']
+                );
+
+                // Update chat metadata
+                await db.run(
+                    'UPDATE chats SET last_message_preview = ?, last_message_time = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                    ['Encrypted Message', Date.now(), chatId]
+                );
+
+                // 1. Relay to target user's devices
+                io.to(targetId).emit('dm:message', enriched);
+
+                // 2. Sync to sender's OTHER devices
+                socket.to(senderId).emit('dm:message', enriched);
+
+                // 3. Fallback: Queue for push notifications (not replacing persistence, just for push/offline markers)
+                queueMessageForUser(targetId, enriched);
+
             } catch (e) {
-                console.error("Chat validation error:", e);
-                return;
+                console.error("Chat persistence error:", e);
+                io.to(senderId).emit('server_error', { message: 'Server failed to secure message.' });
             }
-        }
-
-        const enriched = { ...data, from: senderId || data.from };
-
-        // 1. Relay to target user's devices
-        io.to(targetId).emit('dm:message', enriched);
-
-        // 2. Always queue for background/offline delivery & push notification
-        queueMessageForUser(targetId, enriched);
-
-        // 2. Sync to sender's OTHER devices
-        if (senderId) {
-            socket.to(senderId).emit('dm:message', enriched);
+        } else {
+            // Support for system accounts or self-messages (minimal relay)
+            const enriched = { ...data, from: senderId || data.from };
+            io.to(targetId).emit('dm:message', enriched);
         }
     });
 
@@ -1356,27 +1401,50 @@ io.on('connection', (socket) => {
 
         if (senderId && targetId && senderId !== targetId && senderId !== 'nexora_31' && targetId !== 'nexora_31') {
             try {
-                const isFriend = await db.get(`SELECT id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
-                if (!isFriend) {
-                    io.to(senderId).emit('server_error', { message: 'Media rejected: You must be friends to chat. Connection status: none' });
+                const connection = await db.get(`SELECT id, chat_id FROM connections WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?)) OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`, [senderId, targetId, targetId, senderId]);
+                if (!connection) {
+                    io.to(senderId).emit('server_error', { message: 'Media rejected: You must be friends to chat.' });
                     return;
                 }
+
+                let chatId = data.chatId || connection.chat_id;
+                if (!chatId) {
+                    const [u1, u2] = [senderId.toLowerCase(), targetId.toLowerCase()].sort();
+                    const chat = await db.get('SELECT id FROM chats WHERE user_a = ? AND user_b = ?', [u1, u2]);
+                    chatId = chat ? chat.id : (await db.run('INSERT INTO chats (user_a, user_b) VALUES (?, ?)', [u1, u2])).lastID;
+                    await db.run('UPDATE connections SET chat_id = ? WHERE id = ?', [chatId, connection.id]);
+                }
+
+                const enriched = { ...data, from: senderId || data.from, isMedia: true, chatId };
+
+                // Save to Database
+                await db.run(
+                    'INSERT INTO messages (chat_id, sender_id, payload, type) VALUES (?, ?, ?, ?)',
+                    [chatId, senderId, JSON.stringify(enriched), 'media']
+                );
+
+                // Update chat metadata
+                await db.run(
+                    'UPDATE chats SET last_message_preview = ?, last_message_time = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                    ['Media Attachment', Date.now(), chatId]
+                );
+
+                // 1. Relay to target user's devices
+                io.to(targetId).emit('dm:media', enriched);
+
+                // 2. Sync to sender's OTHER devices
+                socket.to(senderId).emit('dm:media', enriched);
+
+                // 3. Fallback: Queue for push notifications
+                queueMessageForUser(targetId, enriched);
+
             } catch (e) {
-                return;
+                console.error("Media persistence error:", e);
+                io.to(senderId).emit('server_error', { message: 'Server failed to secure media.' });
             }
-        }
-
-        const enriched = { ...data, from: senderId || data.from, isMedia: true };
-
-        // 1. Relay to target user's devices
-        io.to(targetId).emit('dm:media', enriched);
-
-        // 2. Always queue for background/offline delivery & push notification
-        queueMessageForUser(targetId, enriched);
-
-        // Sync to sender's OTHER devices
-        if (senderId) {
-            socket.to(senderId).emit('dm:media', enriched);
+        } else {
+             const enriched = { ...data, from: senderId || data.from, isMedia: true };
+             io.to(targetId).emit('dm:media', enriched);
         }
     });
 
@@ -3598,23 +3666,24 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
 // Get established connections for a user
 app.get('/api/connections', authenticateToken, async (req, res) => {
     const username = req.user.username;
-    // (Existing placeholder check removed as it's now handled by the JWT identity)
     if (!username) return res.json({ connections: [] });
     try {
         if (!db) return res.json({ connections: [] });
         const connectionsRows = await db.all(`
             SELECT 
-                CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END as peer_username,
-                c.wallpaper
+                id,
+                CASE WHEN LOWER(user_a) = LOWER(?) THEN user_b ELSE user_a END as peer_username,
+                chat_id,
+                wallpaper
             FROM connections c
-            WHERE c.user_a = ? OR c.user_b = ?
+            WHERE LOWER(c.user_a) = LOWER(?) OR LOWER(c.user_b) = LOWER(?)
         `, [username, username, username]);
 
         const enriched = [];
-        for (const c of connectionsRows) {
-            const peer = c.peer_username;
+        for (const conn of connectionsRows) {
+            const peer = conn.peer_username;
             let userData = null;
-            if (peer === 'nexora_31') {
+            if (peer.toLowerCase() === 'nexora_31') {
                 userData = {
                     id: 999999,
                     username: 'Nexora_31',
@@ -3623,20 +3692,44 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
                     avatarUrl: encryptField('https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg')
                 };
             } else {
-                userData = await db.get(`SELECT id, username, full_name as name, color, avatar_url as avatarUrl, last_visit FROM users WHERE LOWER(username) = ?`, [peer]);
+                userData = await db.get(`SELECT id, username, full_name as name, color, avatar_url as avatarUrl, last_visit FROM users WHERE LOWER(username) = ?`, [peer.toLowerCase()]);
             }
 
             if (userData) {
+                let chatId = conn.chat_id;
+                
+                // Lazy Chat Creation: If no chatId exists for this connection, create one
+                if (!chatId) {
+                    const u1 = username.toLowerCase();
+                    const u2 = peer.toLowerCase();
+                    const [first, second] = [u1, u2].sort();
+                    
+                    try {
+                        const existingChat = await db.get('SELECT id FROM chats WHERE (user_a = ? AND user_b = ?)', [first, second]);
+                        if (existingChat) {
+                            chatId = existingChat.id;
+                        } else {
+                            const result = await db.run('INSERT INTO chats (user_a, user_b) VALUES (?, ?)', [first, second]);
+                            chatId = result.lastID || (result.rows && result.rows[0]?.id);
+                        }
+                        await db.run('UPDATE connections SET chat_id = ? WHERE id = ?', [chatId, conn.id]);
+                    } catch (e) {
+                        console.error("[CHATS] Lazy creation failure:", e);
+                    }
+                }
+
                 const room = io.sockets.adapter.rooms.get(userData.username.toLowerCase());
                 enriched.push({
                     id: userData.id,
+                    connectionId: conn.id,
+                    chatId: chatId,
                     username: userData.username,
                     name: decryptField(userData.name),
                     color: userData.color,
                     avatarUrl: userData.avatarUrl ? decryptField(userData.avatarUrl) : null,
-                    wallpaper: c.wallpaper,
-                    online: (room && room.size > 0) || peer === 'nexora_31',
-                    preview: peer === 'nexora_31' ? 'Official Announcements' : 'Secure tunnel established',
+                    wallpaper: conn.wallpaper,
+                    online: (room && room.size > 0) || peer.toLowerCase() === 'nexora_31',
+                    preview: peer.toLowerCase() === 'nexora_31' ? 'Official Announcements' : 'Secure tunnel established',
                     unread: 0,
                     lastVisit: userData.last_visit
                 });
@@ -3644,7 +3737,59 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
         }
         res.json({ connections: enriched });
     } catch (err) {
+        console.error("[CONNECTIONS] Fetch error:", err);
         res.status(500).json({ connections: [] });
+    }
+});
+
+// NEW: Chat History API
+app.get('/api/chats/:chatId/messages', authenticateToken, async (req, res) => {
+    const { chatId } = req.params;
+    const { limit = 50, beforeId } = req.query;
+    const username = req.user.username;
+
+    try {
+        if (!db) return res.status(503).json({ error: "DB offline" });
+
+        // 1. Verify access: User must be part of this chat
+        const chat = await db.get('SELECT user_a, user_b FROM chats WHERE id = ?', [chatId]);
+        if (!chat) return res.status(404).json({ error: "Chat thread not found" });
+
+        if (chat.user_a.toLowerCase() !== username.toLowerCase() && chat.user_b.toLowerCase() !== username.toLowerCase()) {
+            return res.status(403).json({ error: "Access Denied: You are not a participant in this chat." });
+        }
+
+        // 2. Fetch history
+        let sql = 'SELECT * FROM messages WHERE chat_id = ?';
+        let params = [chatId];
+
+        if (beforeId) {
+            sql += ' AND id < ?';
+            params.push(beforeId);
+        }
+
+        sql += ' ORDER BY id DESC LIMIT ?';
+        params.push(parseInt(limit));
+
+        const messages = await db.all(sql, params);
+
+        // Map database records to client-friendly format
+        // Return latest messages at the end of the array (reverse the DESC order)
+        const formatted = messages.reverse().map(m => {
+            const payload = JSON.parse(m.payload);
+            return {
+                ...payload,
+                dbId: m.id,
+                chatId: m.chat_id,
+                sender: m.sender_id,
+                timestamp: m.timestamp
+            };
+        });
+
+        res.json({ messages: formatted });
+    } catch (err) {
+        console.error("[HISTORY] Fetch error:", err);
+        res.status(500).json({ error: "Failed to retrieve history" });
     }
 });
 

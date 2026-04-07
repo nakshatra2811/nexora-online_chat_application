@@ -78,6 +78,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [appForgotStep, setAppForgotStep] = useState<"answer" | "newpin">("answer");
   const [appForgotError, setAppForgotError] = useState("");
   const [accountStatus, setAccountStatus] = useState("Active");
+  const [accounts, setAccounts] = useState<{ username: string; name: string; avatarUrl: string; email: string; token: string; role: string }[]>([]);
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+
   
   // Advanced Global Search System
   const [searchQuery, setSearchQuery] = useState("");
@@ -157,6 +160,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const name = localStorage.getItem("nexora_signup_name") || signupEmail.split("@")[0];
       const username = localStorage.getItem("nexora_signup_username") || signupEmail.split("@")[0];
       setGlobalProfile({ name, username, email: signupEmail, avatarUrl: localStorage.getItem("nexora_avatar_url") || "" });
+
+      // Build/Sync Account List for Dual Login
+      const existingAccounts = JSON.parse(localStorage.getItem("nexora_accounts") || "[]");
+      const currentAccount = {
+        username,
+        name,
+        email: signupEmail,
+        avatarUrl: localStorage.getItem("nexora_avatar_url") || "",
+        token: localStorage.getItem("nexora_token") || "",
+        role: localStorage.getItem("nexora_signup_role") || "Standard Account"
+      };
+
+      if (username && !existingAccounts.find((a: any) => a.username?.toLowerCase() === username.toLowerCase())) {
+        const updated = [...existingAccounts, currentAccount];
+        localStorage.setItem("nexora_accounts", JSON.stringify(updated));
+        setAccounts(updated);
+      } else {
+        setAccounts(existingAccounts);
+      }
     }
   }, []);
 
@@ -560,12 +582,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const handleLogout = () => {
+    const myUsername = localStorage.getItem("nexora_signup_username");
     // Session-only removal to allow scoped data persistence
     localStorage.removeItem("nexora_token");
     localStorage.removeItem("nexora_signup_username");
     localStorage.removeItem("nexora_signup_role");
+    
+    // Also remove from nexora_accounts if logging out completely
+    if (myUsername) {
+       const existing = JSON.parse(localStorage.getItem("nexora_accounts") || "[]");
+       const updated = existing.filter((a: any) => a.username?.toLowerCase() !== myUsername.toLowerCase());
+       localStorage.setItem("nexora_accounts", JSON.stringify(updated));
+    }
+
     document.cookie = "nexora_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax;";
     router.push("/");
+  };
+
+  const handleSwitchAccount = (acc: any) => {
+    // 1. Save current state (redundant but safe)
+    // 2. Load new session
+    localStorage.setItem("nexora_token", acc.token);
+    localStorage.setItem("nexora_signup_username", acc.username);
+    localStorage.setItem("nexora_signup_name", acc.name);
+    localStorage.setItem("nexora_signup_email", acc.email);
+    localStorage.setItem("nexora_signup_role", acc.role);
+    localStorage.setItem("nexora_avatar_url", acc.avatarUrl);
+    
+    // 3. Force reload to reset all states (simplest and most robust for dual login)
+    window.location.reload();
   };
 
   const triggerAction = (href: string | null, type: string = "navigate") => {
