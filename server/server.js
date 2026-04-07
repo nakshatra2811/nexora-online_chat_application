@@ -4798,7 +4798,8 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
 Sentry.setupExpressErrorHandler(app);
 
 // --- SPA Fallback Routing ---
-app.get('/:path*', (req, res) => {
+// Using Regex literal to bypass Express 5's strict path-to-regexp string parser
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
