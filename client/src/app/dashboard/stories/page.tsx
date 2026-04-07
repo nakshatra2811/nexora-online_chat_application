@@ -128,7 +128,6 @@ export default function StoriesPage() {
   }, []); // Run only once on mount
 
   useEffect(() => {
-    // Fetch threads to check connections for calling (re-runs when selectedProfileUser changes)
     const fetchThreads = async () => {
       try {
         const username = localStorage.getItem("nexora_signup_username");
@@ -139,6 +138,53 @@ export default function StoriesPage() {
 
     fetchThreads();
   }, [selectedProfileUser]);
+
+  // ─── Real-time Avatar Synchronization ───
+  useEffect(() => {
+    const { socketService } = require("@/lib/socket");
+    const socket = socketService.connect();
+
+    const handleAvatarUpdate = (data: { username: string; avatarUrl: string }) => {
+      // 1. Update current user if it's us
+      if (myUsername && data.username.toLowerCase() === myUsername.toLowerCase()) {
+        setCurrentUser((prev: any) => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
+        localStorage.setItem("nexora_avatar_url", data.avatarUrl);
+      }
+
+      // 2. Update suggestions
+      setSuggestions(prev => prev.map(s => 
+        s.username.toLowerCase() === data.username.toLowerCase() 
+          ? { ...s, avatar_url: data.avatarUrl } 
+          : s
+      ));
+
+      // 3. Update active profile data if open
+      if (profileData && profileData.username.toLowerCase() === data.username.toLowerCase()) {
+        setProfileData((prev: any) => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
+      }
+
+      // 4. Update viewer/liker lists
+      const updateList = (list: any[]) => list.map(v => 
+        v.username.toLowerCase() === data.username.toLowerCase() 
+          ? { ...v, avatar_url: data.avatarUrl, avatarUrl: data.avatarUrl } 
+          : v
+      );
+      setViewersList(updateList);
+      setLikersList(updateList);
+
+      // 5. Update stories groups
+      setOtherStories(prev => prev.map(group => 
+        group.username.toLowerCase() === data.username.toLowerCase()
+          ? { ...group, avatarUrl: data.avatarUrl }
+          : group
+      ));
+    };
+
+    socket.on("user:avatar_update", handleAvatarUpdate);
+    return () => {
+      socket.off("user:avatar_update", handleAvatarUpdate);
+    };
+  }, [myUsername, profileData]);
 
   const handleBlockUser = (threadId: number) => {
     if (!threadId) return;

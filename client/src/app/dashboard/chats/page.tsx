@@ -1594,21 +1594,31 @@ function ChatsPageContent() {
       });
 
       // 7b. Real-time Full Avatar Sync Update
-      socket.on("dm:avatar_update", (data: { from: string; avatarUrl: string }) => {
+      socket.on("user:avatar_update", (data: { username: string; avatarUrl: string }) => {
         setThreads(prev => {
-          const updated = prev.map(t => t.username === data.from ? { ...t, avatarUrl: data.avatarUrl } : t);
+          const updated = prev.map(t => t.username === data.username ? { ...t, avatarUrl: data.avatarUrl } : t);
           localStorage.setItem(sKey("secure_connections"), JSON.stringify(updated));
           return updated;
         });
 
         // Update currently active chat if it's the person who changed their DP
-        if (activeThreadRef.current?.username === data.from) {
+        if (activeThreadRef.current?.username === data.username) {
           setActiveThread(prev => prev ? { ...prev, avatarUrl: data.avatarUrl } : null);
         }
 
+        // Update Global Search results if they are visible
+        setGlobalSearchResults(prev => prev.map((u: any) => 
+          u.username === data.username ? { ...u, avatar_url: data.avatarUrl } : u
+        ));
+
+        // Update selected profile view if open
+        setSelectedProfileUser(prev => 
+          (prev && prev.username === data.username) ? { ...prev, avatarUrl: data.avatarUrl } : prev
+        );
+
         // Broadly update any cached connection data to ensure persistence
         const savedConns = JSON.parse(localStorage.getItem(sKey("secure_connections")) || "[]");
-        const updatedConns = savedConns.map((c: any) => c.username === data.from ? { ...c, avatarUrl: data.avatarUrl } : c);
+        const updatedConns = savedConns.map((c: any) => c.username === data.username ? { ...c, avatarUrl: data.avatarUrl } : c);
         localStorage.setItem(sKey("secure_connections"), JSON.stringify(updatedConns));
       });
 

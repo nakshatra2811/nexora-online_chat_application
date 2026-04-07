@@ -3378,18 +3378,41 @@ app.post('/api/users/avatar', authenticateToken, async (req, res) => {
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
 
-        // Encrypt profile picture URL/Base64 in database
-        const encryptedAvatar = encryptField(avatarBase64);
-        await db.run('UPDATE users SET avatar_url = ? WHERE LOWER(username) = LOWER(?)', [encryptedAvatar, username]);
+        let finalUrl = avatarBase64;
+        
+        // If it's a new base64 upload, store in Cloudinary
+        const matches = avatarBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+            const imageBuffer = Buffer.from(matches[2], 'base64');
+            const uploadResult = await new Promise((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: "nexora_avatars",
+                        public_id: username.toLowerCase() + "_avatar",
+                        overwrite: true,
+                        resource_type: "image"
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    }
+                );
+                const stream = Readable.from(imageBuffer);
+                stream.pipe(uploadStream);
+            });
+            // Append timestamp for cache busting
+            finalUrl = uploadResult.secure_url + "?t=" + Date.now();
+        }
 
-        // Broadcast the avatar update to all connected friends
-        const connections = await db.all('SELECT user_a, user_b FROM connections WHERE user_a = LOWER(?) OR user_b = LOWER(?)', [username, username]);
-        const friends = connections.map(c => c.user_a === username.toLowerCase() ? c.user_b : c.user_a);
-        friends.forEach(f => {
-            io.to(f).emit('dm:avatar_update', { from: username, avatarUrl: avatarBase64 });
-        });
+        // Encrypt profile picture URL in database
+        const encryptedAvatar = encryptField(finalUrl);
+        await db.run('UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(username) = LOWER(?)', [encryptedAvatar, username]);
 
-        res.json({ status: "success", message: "Profile picture updated." });
+        // Real-Time Sync Across All Users
+        // We broadcast globally because avatars are public in directory search
+        io.emit('user:avatar_update', { username, avatarUrl: finalUrl });
+
+        res.json({ status: "success", message: "Profile picture updated.", avatarUrl: finalUrl });
     } catch (err) {
         console.log("Avatar update error:", err);
         res.status(500).json({ error: "Failed to update avatar." });

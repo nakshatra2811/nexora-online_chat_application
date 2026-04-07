@@ -336,11 +336,21 @@ export default function DiscoverPage() {
       ));
     };
 
+    // When a user updates their profile picture globally
+    const handleAvatarUpdate = (data: { username: string; avatarUrl: string }) => {
+      setSuggestions(prev => prev.map(s =>
+        s.username?.toLowerCase() === data.username?.toLowerCase()
+          ? { ...s, avatar_url: data.avatarUrl }
+          : s
+      ));
+    };
+
     socket.on("suggestions_update", handleSuggestionsUpdate);
     socket.on("user_status", handleUserStatus);
     socket.on("connection_request", handleConnectionRequest);
     socket.on("friendship_established", handleFriendshipEstablished);
     socket.on("connection_accepted", handleConnectionAccepted);
+    socket.on("user:avatar_update", handleAvatarUpdate);
 
     return () => {
       socket.off("suggestions_update", handleSuggestionsUpdate);
@@ -348,6 +358,7 @@ export default function DiscoverPage() {
       socket.off("connection_request", handleConnectionRequest);
       socket.off("friendship_established", handleFriendshipEstablished);
       socket.off("connection_accepted", handleConnectionAccepted);
+      socket.off("user:avatar_update", handleAvatarUpdate);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [fetchSuggestions]);

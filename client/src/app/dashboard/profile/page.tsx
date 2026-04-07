@@ -394,16 +394,18 @@ export default function ProfilePage() {
           });
           
           if (resp && resp.status === "success") {
-            setProfile(prev => ({ ...prev, avatarUrl: avatarBase64 }));
+            const finalAvatar = resp.avatarUrl || avatarBase64;
+            setProfile(prev => ({ ...prev, avatarUrl: finalAvatar }));
             // Cache in dedicated key for all pages to read quickly
-            localStorage.setItem(`${profile.username}_avatar_url`, avatarBase64);
+            localStorage.setItem(`${profile.username}_avatar_url`, finalAvatar);
             // Also update main profile cache
             const cached = localStorage.getItem(`${profile.username}_user_profile`);
             if (cached) {
                const p = JSON.parse(cached);
-               p.avatarUrl = avatarBase64;
+               p.avatarUrl = finalAvatar;
                localStorage.setItem(`${profile.username}_user_profile`, JSON.stringify(p));
             }
+            alert("Profile picture updated successfully!");
           } else {
              alert(resp.error || "Failed to update profile picture");
           }
@@ -547,14 +549,25 @@ export default function ProfilePage() {
         }
       };
 
+      const handleAvatarUpdate = (data: { username: string; avatarUrl: string }) => {
+        if (profile.username?.toLowerCase() === data.username.toLowerCase()) {
+          setProfile(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
+        }
+        setFriends(prev => prev.map(f => f.username?.toLowerCase() === data.username.toLowerCase() ? { ...f, avatarUrl: data.avatarUrl } : f));
+        setPendingSent(prev => prev.map(p => p.username?.toLowerCase() === data.username.toLowerCase() ? { ...p, avatarUrl: data.avatarUrl } : p));
+        setPendingReceived(prev => prev.map(p => p.username?.toLowerCase() === data.username.toLowerCase() ? { ...p, avatarUrl: data.avatarUrl } : p));
+      };
+
       socket.on("connection_request", handleRequest);
       socket.on("connection_accepted", handleAccepted);
       socket.on("friendship_established", handleFriendshipEstablished);
+      socket.on("user:avatar_update", handleAvatarUpdate);
 
       return () => {
         socket.off("connection_request", handleRequest);
         socket.off("connection_accepted", handleAccepted);
         socket.off("friendship_established", handleFriendshipEstablished);
+        socket.off("user:avatar_update", handleAvatarUpdate);
       };
     }
 
@@ -627,16 +640,22 @@ export default function ProfilePage() {
 
             {/* Avatar */}
               <div className="relative mb-5 group/avatar">
-                <Avatar 
-                  src={profile.avatarUrl} 
-                  name={profile.name} 
-                  color="from-[#6c5ce7] to-[#00d4ff]" 
-                  size={112} 
-                  animate={true}
-                  className="shadow-xl ring-4 ring-[var(--bg-surface-solid)]"
-                />
-              <button onClick={() => fileInputRef.current?.click()} className="absolute bottom-1 right-1 p-2 rounded-full shadow-lg border hover:scale-110 transition-transform cursor-pointer z-10"
-                style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)", color: "#6c5ce7" }}>
+                {isUploadingAvatar ? (
+                  <div className="w-[112px] h-[112px] flex items-center justify-center rounded-full shadow-xl ring-4 ring-[var(--bg-surface-solid)] bg-black/5 dark:bg-white/5">
+                    <LoadingAnimation variant="spinner" size="md" color="#6c5ce7" />
+                  </div>
+                ) : (
+                  <Avatar 
+                    src={profile.avatarUrl} 
+                    name={profile.name} 
+                    color="from-[#6c5ce7] to-[#00d4ff]" 
+                    size={112} 
+                    animate={true}
+                    className="shadow-xl ring-4 ring-[var(--bg-surface-solid)]"
+                  />
+                )}
+              <button disabled={isUploadingAvatar} onClick={() => fileInputRef.current?.click()} className="absolute bottom-1 right-1 p-2 rounded-full shadow-lg border hover:scale-110 transition-transform cursor-pointer z-10"
+                style={{ background: "var(--bg-surface-solid)", borderColor: "var(--border-subtle)", color: "#6c5ce7", opacity: isUploadingAvatar ? 0.5 : 1 }}>
                 <Camera className="w-4 h-4" />
               </button>
             </div>

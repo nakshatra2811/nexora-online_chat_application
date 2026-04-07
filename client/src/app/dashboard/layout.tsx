@@ -380,6 +380,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setSentRequests(prev => prev.filter(r => r.to?.toLowerCase() !== peer.username.toLowerCase()));
     };
 
+    const handleAvatarUpdate = (data: { username: string; avatarUrl: string }) => {
+      // 1. Update own profile icon if it's us
+      const myUsername = localStorage.getItem("nexora_signup_username");
+      if (myUsername && data.username.toLowerCase() === myUsername.toLowerCase()) {
+        setGlobalProfile(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
+        localStorage.setItem("nexora_avatar_url", data.avatarUrl);
+      }
+
+      // 2. Update layout search results
+      setSearchResults(prev => prev.map(u =>
+        u.username?.toLowerCase() === data.username.toLowerCase()
+          ? { ...u, avatar_url: data.avatarUrl }
+          : u
+      ));
+
+      // 3. Update pending requests avatars
+      setPendingRequests(prev => prev.map(r =>
+        r.from?.toLowerCase() === data.username.toLowerCase()
+          ? { ...r, avatarUrl: data.avatarUrl }
+          : r
+      ));
+    };
+
+    socket.on("user:avatar_update", handleAvatarUpdate);
     socket.on("connection_request", handleNewRequest);
     socket.on("connection_accepted", handleAccepted);
     socket.on("friendship_established", handleFriendshipEstablished);
@@ -392,6 +416,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     return () => {
       socket.off("connect", doRegister);
+      socket.off("user:avatar_update", handleAvatarUpdate);
       socket.off("connection_request", handleNewRequest);
       socket.off("connection_accepted", handleAccepted);
       socket.off("friendship_established", handleFriendshipEstablished);
