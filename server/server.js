@@ -590,6 +590,8 @@ const emailTransporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
+    // Force IPv4 to prevent ENETUNREACH errors on servers without IPv6 routing
+    family: 4,
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_APP_PASSWORD,
