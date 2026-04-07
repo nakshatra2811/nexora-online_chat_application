@@ -218,8 +218,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         // Look up caller display info from local saved connections
         let connections: any[] = [];
         try {
+          const user = localStorage.getItem("nexora_signup_username");
+          const key = user ? `${user}_secure_connections` : "nexora_secure_connections";
           connections = JSON.parse(
-            localStorage.getItem("nexora_secure_connections") || "[]"
+            localStorage.getItem(key) || localStorage.getItem("nexora_secure_connections") || "[]"
           );
         } catch {}
         const caller = connections.find(

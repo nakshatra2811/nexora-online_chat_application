@@ -246,6 +246,18 @@ export default function ProfilePage() {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [userRole, setUserRole] = useState("Standard Account");
+  const myUsernameRef = useRef("");
+
+  // Scoped key helper
+  const sKey = (k: string) => {
+    const user = myUsernameRef.current || (typeof window !== "undefined" ? localStorage.getItem("nexora_signup_username") : "");
+    return user ? `${user}_${k}` : `nexora_${k}`;
+  };
+
+  useEffect(() => {
+    myUsernameRef.current = localStorage.getItem("nexora_signup_username") || "";
+  }, []);
+
   const [profile, setProfile] = useState({
     name: "Loading...",
     username: "...",
@@ -1002,7 +1014,7 @@ export default function ProfilePage() {
               <div key="blocked-list-container" className="flex flex-col gap-3">
                 {blockedThreads.map((id, idx) => {
                   // Find name from mocks (for demo)
-                  const savedConnections = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+                  const savedConnections = JSON.parse(localStorage.getItem(sKey("secure_connections")) || localStorage.getItem("nexora_secure_connections") || "[]");
                   const user = savedConnections.find((u: any) => u.id === id) || { name: `Unknown Account ${id}`, color: "from-gray-500 to-gray-700" };
                   
                   return (

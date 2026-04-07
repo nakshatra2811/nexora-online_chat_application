@@ -179,10 +179,11 @@ function ChatsPageContent() {
   // Sync threads to local storage whenever they are bumped or updated
   useEffect(() => {
     if (threads.length > 0) {
-      const current = localStorage.getItem("nexora_secure_connections");
+      const key = sKey("secure_connections");
+      const current = localStorage.getItem(key);
       const next = JSON.stringify(threads);
       if (current !== next) {
-        localStorage.setItem("nexora_secure_connections", next);
+        localStorage.setItem(key, next);
       }
     }
   }, [threads]);
@@ -720,7 +721,9 @@ function ChatsPageContent() {
     if (!myUsername) return;
     try {
       const data = await nexoraFetch(`/api/connections?username=${encodeURIComponent(myUsername)}`);
-      const stored = JSON.parse(localStorage.getItem("nexora_secure_connections") || "[]");
+      const key = sKey("secure_connections");
+      const stored = JSON.parse(localStorage.getItem(key) || localStorage.getItem("nexora_secure_connections") || "[]");
+      
       const mapped = data.connections.map((c: any) => {
         if (c.wallpaper) {
           localStorage.setItem(`nexora_wallpaper_${c.username}`, c.wallpaper);
@@ -733,7 +736,7 @@ function ChatsPageContent() {
           preview: existing?.preview || c.preview || "Connected! Start chatting.",
         };
       }).sort((a: any, b: any) => {
-        const pinned = JSON.parse(localStorage.getItem("nexora_pinned") || "[]");
+        const pinned = JSON.parse(localStorage.getItem(sKey("pinned")) || localStorage.getItem("nexora_pinned") || "[]");
         const aPinned = pinned.includes(a.id);
         const bPinned = pinned.includes(b.id);
         if (aPinned && !bPinned) return -1;
@@ -741,13 +744,35 @@ function ChatsPageContent() {
         return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
       });
 
-      const hidden = JSON.parse(localStorage.getItem("nexora_hidden") || "[]");
+      // ── MIGRATION: Restore "missing" legacy friends to DB ──
+      const legacyToRestore = stored.filter((ls: any) => 
+        !mapped.find((m: any) => m.username?.toLowerCase() === ls.username?.toLowerCase())
+      );
+      if (legacyToRestore.length > 0) {
+        ((..._args: any[]) => {})("[Migration] Found legacy friends to restore:", legacyToRestore.length);
+        legacyToRestore.forEach(async (f: any) => {
+           if (f.username && f.username !== 'Nexora_31') {
+              await nexoraFetch("/api/connections/restore", {
+                method: "POST",
+                body: JSON.stringify({ target: f.username })
+              });
+           }
+        });
+        // Re-fetch after small delay once restored
+        setTimeout(fetchConnections, 2000);
+      }
+
+      const hidden = JSON.parse(localStorage.getItem(sKey("hidden")) || localStorage.getItem("nexora_hidden") || "[]");
       const filtered = mapped.filter((t: any) => !hidden.includes(t.id));
 
       const mappedStr = JSON.stringify(filtered);
       if (JSON.stringify(threads) !== mappedStr) {
         setThreads(filtered);
-        localStorage.setItem("nexora_secure_connections", mappedStr);
+        localStorage.setItem(key, mappedStr);
+        // Clean up legacy global key if we migrated
+        if (localStorage.getItem("nexora_secure_connections")) {
+           localStorage.removeItem("nexora_secure_connections");
+        }
       }
 
       // Fetch pending requests for Instagram-style sidebar

@@ -3700,6 +3700,30 @@ app.get('/api/connections/status/:targetUsername', authenticateToken, async (req
     }
 });
 
+// ─── Legacy connection restoration (Migration Tool) ──────────────────────────
+app.post('/api/connections/restore', authenticateToken, async (req, res) => {
+    const me = req.user.username;
+    const { target } = req.body;
+    if (!me || !target) return res.status(400).json({ error: "usernames required" });
+    try {
+        if (!db) return res.status(500).json({ error: "DB not ready" });
+
+        // Ensure user exists
+        const user = await db.get('SELECT username FROM users WHERE LOWER(username) = LOWER(?)', [target]);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        const u1 = me.toLowerCase();
+        const u2 = user.username.toLowerCase();
+        const [first, second] = [u1, u2].sort();
+
+        await db.run('INSERT INTO connections (user_a, user_b) VALUES (?, ?)', [first, second]);
+        res.json({ status: "restored" });
+    } catch (err) {
+        // Silently ignore already-connected
+        res.json({ status: "ignored" });
+    }
+});
+
 // Notifications API
 app.get('/api/notifications', authenticateToken, async (req, res) => {
     const username = req.user.username;
