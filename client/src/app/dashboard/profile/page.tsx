@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Edit3, Camera, Shield, Zap, MapPin, Network, Link2, UserCheck, X, ChevronLeft,
   Share2, Copy, Check, UserPlus, Mail, Phone, Search,
-  MessageCircle, Send, ShieldOff, Bell, UserX, Clock, RefreshCcw
+  MessageCircle, Send, ShieldOff, Bell, UserX, Clock, RefreshCcw,
+  Eye, EyeOff, Lock
 } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
@@ -258,6 +259,12 @@ export default function ProfilePage() {
     myUsernameRef.current = localStorage.getItem("nexora_signup_username") || "";
   }, []);
 
+  const [privacySettings, setPrivacySettings] = useState({
+    lastSeen: "everyone",
+    online: "everyone"
+  });
+  const [isUpdatingPrivacy, setIsUpdatingPrivacy] = useState(false);
+
   const [profile, setProfile] = useState({
     name: "Loading...",
     username: "...",
@@ -327,6 +334,12 @@ export default function ProfilePage() {
                 }
                 // Cache avatar separately for quick cross-page access
                 if (data.user.avatarUrl) localStorage.setItem(`${signupUsername}_avatar_url`, data.user.avatarUrl);
+                // Load privacy settings
+                setPrivacySettings({
+                    lastSeen: data.user.privacy_last_seen || 'everyone',
+                    online: data.user.privacy_online || 'everyone'
+                });
+                
                 if (data.user.created_at) {
                     const d = new Date(data.user.created_at);
                     currentProfile.joinedDate = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
@@ -431,6 +444,29 @@ export default function ProfilePage() {
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleUpdatePrivacy = async (key: 'lastSeen' | 'online', value: string) => {
+    const newSettings = { ...privacySettings, [key]: value };
+    setPrivacySettings(newSettings);
+    setIsUpdatingPrivacy(true);
+    
+    try {
+      const { nexoraFetch } = await import("@/lib/config");
+      const res = await nexoraFetch("/api/user/privacy", {
+        method: "POST",
+        body: JSON.stringify(newSettings)
+      });
+      if (res && res.status === "success") {
+        // Option for success feedback
+      } else {
+        alert("Failed to sync privacy protocols.");
+      }
+    } catch (e) {
+      console.error("Privacy update error:", e);
+    } finally {
+      setIsUpdatingPrivacy(false);
+    }
   };
 
   const [friends, setFriends] = useState<any[]>([]);
@@ -818,6 +854,71 @@ export default function ProfilePage() {
                   <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{profile.phone}</p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Privacy Protocols Card */}
+          <div className="glass-panel p-6 shadow-xl rounded-2xl"
+            style={{ background: "var(--bg-surface)", borderColor: "var(--border-subtle)" }}>
+            <div className="flex items-center gap-2 mb-4 border-b pb-2" style={{ borderColor: "var(--border-subtle)" }}>
+              <Lock className="w-4 h-4 text-[#6c5ce7]" />
+              <h3 className="font-bold text-sm uppercase tracking-wider" style={{ color: "var(--text-primary)" }}>Privacy Protocols</h3>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Last Seen */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-widest font-black" style={{ color: "var(--text-muted)" }}>Last Seen Transmission</p>
+                  <Clock className="w-3 h-3 opacity-30" />
+                </div>
+                <div className="flex p-1 bg-black/5 dark:bg-white/5 rounded-xl border border-[var(--border-subtle)]">
+                  {['everyone', 'contacts', 'nobody'].map((opt) => (
+                    <button
+                      key={`ls-${opt}`}
+                      onClick={() => handleUpdatePrivacy('lastSeen', opt)}
+                      disabled={isUpdatingPrivacy}
+                      className="flex-1 py-2 text-[10px] font-bold rounded-lg transition-all capitalize"
+                      style={{
+                        background: privacySettings.lastSeen === opt ? "var(--bg-surface-solid)" : "transparent",
+                        color: privacySettings.lastSeen === opt ? "#6c5ce7" : "var(--text-muted)",
+                        boxShadow: privacySettings.lastSeen === opt ? "0 2px 8px rgba(0,0,0,0.1)" : "none"
+                      }}
+                    >
+                      {opt === 'contacts' ? 'Connections' : opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Online Status */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-widest font-black" style={{ color: "var(--text-muted)" }}>Live Presence Sync</p>
+                  <div className="w-2 h-2 rounded-full bg-[#2ed573] animate-pulse" />
+                </div>
+                <div className="flex p-1 bg-black/5 dark:bg-white/5 rounded-xl border border-[var(--border-subtle)]">
+                  {['everyone', 'contacts', 'nobody'].map((opt) => (
+                    <button
+                      key={`on-${opt}`}
+                      onClick={() => handleUpdatePrivacy('online', opt)}
+                      disabled={isUpdatingPrivacy}
+                      className="flex-1 py-2 text-[10px] font-bold rounded-lg transition-all capitalize"
+                      style={{
+                        background: privacySettings.online === opt ? "var(--bg-surface-solid)" : "transparent",
+                        color: privacySettings.online === opt ? "#2ed573" : "var(--text-muted)",
+                        boxShadow: privacySettings.online === opt ? "0 2px 8px rgba(0,0,0,0.1)" : "none"
+                      }}
+                    >
+                      {opt === 'contacts' ? 'Connections' : opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[9px] font-medium opacity-50 px-1" style={{ color: "var(--text-muted)" }}>
+                 * Protocol changes are synchronized globally across all connected Nexora instances.
+              </p>
             </div>
           </div>
 

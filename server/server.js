@@ -211,8 +211,13 @@ let pgPool;
                         pgSql = pgSql + ' ON CONFLICT DO NOTHING';
                     }
 
+                    if (pgSql.toLowerCase().trim().startsWith('insert into') && !pgSql.toLowerCase().includes('returning')) {
+                        pgSql += ' RETURNING id';
+                    }
+
                     const res = await pgPool.query(pgSql, params);
-                    return { lastID: res.oid, changes: res.rowCount };
+                    const lastId = res.rows && res.rows[0] ? (res.rows[0].id || res.rows[0].lastid || res.oid) : res.oid;
+                    return { lastID: lastId, changes: res.rowCount, rows: res.rows };
                 }
             };
         } else {
@@ -588,9 +593,8 @@ if (process.env.FIREBASE_PROJECT_ID && (process.env.FIREBASE_PRIVATE_KEY || proc
 
 const emailTransporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    // Force IPv4 to prevent ENETUNREACH errors on servers without IPv6 routing
+    port: 587,
+    secure: false, // STARTTLS
     family: 4,
     auth: {
         user: process.env.GMAIL_USER,
@@ -599,10 +603,9 @@ const emailTransporter = nodemailer.createTransport({
     tls: {
         rejectUnauthorized: false
     },
-    // Prevent server from hanging on slow SMTP
-    connectionTimeout: 10000,  // 10s to establish TCP connection
-    greetingTimeout: 10000,    // 10s for SMTP greeting
-    socketTimeout: 20000,      // 20s idle socket timeout
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 45000,
 });
 
 emailTransporter.verify((error, success) => {
@@ -3376,19 +3379,23 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
         }
 
         res.json({
-            username: user.username,
-            fullName: decryptField(user.fullName),
-            email: user.email,
-            role: user.role,
-            createdAt: user.created_at,
-            color: user.color,
-            phoneNumber: decryptField(user.phoneNumber),
-            avatarUrl: decryptField(user.avatarUrl),
-            bio: user.bio,
-            lastVisit: lastVisit,
-            isOnline: displayOnline,
-            isFriend: isFriend,
-            mutualFriends: mutualFriends
+            user: {
+                username: user.username,
+                fullName: decryptField(user.fullName),
+                email: user.email,
+                role: user.role,
+                createdAt: user.created_at,
+                color: user.color,
+                phoneNumber: decryptField(user.phoneNumber),
+                avatarUrl: decryptField(user.avatarUrl),
+                bio: user.bio,
+                lastVisit: lastVisit,
+                isOnline: displayOnline,
+                isFriend: isFriend,
+                privacy_last_seen: user.privacy_last_seen || 'everyone',
+                privacy_online: user.privacy_online || 'everyone',
+                mutualFriends: mutualFriends
+            }
         });
     } catch (err) {
         console.error("Profile fetch error:", err);
