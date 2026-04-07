@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserPlus, UserCheck, Check, X, Users, Clock } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
@@ -71,15 +71,16 @@ export function ConnectionButton({
     };
   }, [targetUsername, onStatusChange]);
 
+  const lastExternalStatus = useRef(initialStatus);
+
   // Sync internal state with props if they change after mount (Prevents UI resetting)
   useEffect(() => {
-    // Only overwrite if we are not currently performing an action.
-    // If our current state is 'pending_sent' and parent says 'none', it's likely stale, so we keep ours.
-    if (!isLoading) {
-       setStatus(prev => {
-         if (prev === "pending_sent" && initialStatus === "none") return prev;
-         return initialStatus;
-       });
+    // If the external prop actually changed (not just a re-render)
+    if (initialStatus !== lastExternalStatus.current) {
+       lastExternalStatus.current = initialStatus;
+       if (!isLoading) {
+         setStatus(initialStatus);
+       }
     }
   }, [initialStatus, isLoading]);
 
@@ -121,21 +122,22 @@ export function ConnectionButton({
       });
 
       if (res?.status === "accepted") {
-        // Auto-accepted (mutual / bidirectional request)
         updateStatus("friends", res);
+        alert(`Success! You and ${targetUsername} are now connected.`);
       } else if (res?.status === "sent") {
         setPendingReqId(res.requestId);
         updateStatus("pending_sent");
+        alert("Encrypted friend request sent successfully.");
       } else if (res?.status === "already_connected") {
         updateStatus("friends");
       } else if (res?.status === "already_sent") {
         updateStatus("pending_sent");
       } else {
-        // Rollback on genuine failure
         updateStatus("none");
       }
     } catch {
       updateStatus("none");
+      alert("Encryption handshake failed. Protocol error.");
     } finally {
       setIsLoading(false);
     }

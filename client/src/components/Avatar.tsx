@@ -15,6 +15,7 @@ interface AvatarProps {
   animate?: boolean;
   onClick?: (e: React.MouseEvent) => void;
   icon?: React.ReactNode;
+  timestamp?: string | number;
 }
 
 const sizeMap = {
@@ -39,6 +40,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   animate = true,
   onClick,
   icon,
+  timestamp,
 }) => {
   const sizeClass = typeof size === "string" ? sizeMap[size as keyof typeof sizeMap] : "";
   const customSizeStyle = typeof size === "number" ? { width: size, height: size, fontSize: size * 0.4 } : {};
@@ -77,7 +79,11 @@ export const Avatar: React.FC<AvatarProps> = ({
       onClick={onClick}
     >
       {src ? (
-        <img src={src} alt={name} className="w-full h-full object-cover rounded-full" />
+        <img 
+          src={timestamp ? `${src}${src.includes('?') ? '&' : '?'}v=${timestamp}` : src} 
+          alt={name} 
+          className="w-full h-full object-cover rounded-full" 
+        />
       ) : (
         <>
           {/* Glassmorphism Overlay */}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   MessageSquare, LayoutTemplate, Lock, Users, Settings, User, Search,
   LogOut, Sun, Moon, Shield, Menu, X, Eye, EyeOff, KeyRound, HelpCircle, ChevronLeft,
@@ -21,7 +21,20 @@ import { LegalInfo } from "@/components/LegalInfo";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
+
+  // Global Navigation Tracker: Store the last non-chatting page to return to
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const currentFull = pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
+    const inChat = pathname === "/dashboard/chats" && searchParams.get("u");
+    
+    // If we are not currently viewing a specific chat thread, this is a valid 'back' destination
+    if (!inChat) {
+      sessionStorage.setItem("nexora_last_active_route", currentFull);
+    }
+  }, [pathname, searchParams]);
   const [userRole, setUserRole] = useState("Standard Account");
   const { isDark, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -33,6 +46,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showLegal, setShowLegal] = useState(false);
   const [legalTab, setLegalTab] = useState<"privacy" | "terms" | "disclaimer">("privacy");
   const [globalProfile, setGlobalProfile] = useState({ name: "", username: "", email: "", avatarUrl: "" });
+
+  // Initialize return path if empty
+  useEffect(() => {
+    if (typeof window !== "undefined" && !sessionStorage.getItem("nexora_last_active_route")) {
+      sessionStorage.setItem("nexora_last_active_route", "/dashboard/chats");
+    }
+  }, []);
 
   // Notifications
   const [showNotifPanel, setShowNotifPanel] = useState(false);
@@ -1066,7 +1086,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               key="mobile-back-button"
               initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}
               whileTap={{ scale: 0.92 }}
-              onClick={() => router.push('/dashboard/chats')}
+              onClick={() => {
+                const lastRoute = sessionStorage.getItem("nexora_last_active_route");
+                if (lastRoute && lastRoute !== window.location.pathname + window.location.search) {
+                  router.push(lastRoute);
+                } else {
+                  router.push('/dashboard/chats');
+                }
+              }}
               className="md:hidden fixed top-2 left-4 z-[90] flex items-center justify-center w-10 h-10 rounded-full shadow-xl backdrop-blur-xl"
               style={{
                 background: isDark ? "rgba(16,16,30,0.85)" : "rgba(255,255,255,0.9)",

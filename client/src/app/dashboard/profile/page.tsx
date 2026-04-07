@@ -360,6 +360,17 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Validation: Type and Size (Requirement 1)
+    const validTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!validTypes.includes(file.type)) {
+      alert("Invalid format! Please use JPG, PNG or WebP.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image too large! Maximum limit is 5MB.");
+      return;
+    }
+
     setIsUploadingAvatar(true);
     const reader = new FileReader();
     reader.onload = (event) => {

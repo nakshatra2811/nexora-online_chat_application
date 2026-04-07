@@ -181,13 +181,18 @@ function ChatsPageContent() {
   useEffect(() => {
     if (threads.length > 0) {
       const key = sKey("secure_connections");
-      const current = localStorage.getItem(key);
-      const next = JSON.stringify(threads);
-      if (current !== next) {
-        localStorage.setItem(key, next);
-      }
+      localStorage.setItem(key, JSON.stringify(threads));
     }
   }, [threads]);
+
+  // Sync Sent & Pending requests to local storage (Requirement 3: Persistence)
+  useEffect(() => {
+    localStorage.setItem(sKey("sent_requests"), JSON.stringify(sentRequests));
+  }, [sentRequests]);
+
+  useEffect(() => {
+    localStorage.setItem(sKey("pending_requests"), JSON.stringify(pendingRequests));
+  }, [pendingRequests]);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -669,7 +674,7 @@ function ChatsPageContent() {
 
     try {
       if (currentChatUser) {
-        const found = threads.find(t => t.username === currentChatUser || (t as any).id?.toString() === currentChatUser);
+        const found = threads.find(t => t.username?.toLowerCase() === currentChatUser.toLowerCase() || (t as any).id?.toString() === currentChatUser);
         if (found) {
           // Stable state update check
           if (activeThreadRef.current?.username !== found.username) {
@@ -688,6 +693,22 @@ function ChatsPageContent() {
             originalReplaceState.current?.({ ...window.history.state }, "", url.toString());
             setCallInitiation(null);
           }
+          return;
+        } else if (profileData?.username?.toLowerCase() === currentChatUser.toLowerCase()) {
+          // Requirement 4: Handle newly added friends or direct navigation
+          const tempThread: any = {
+            id: profileData.id || Date.now(),
+            username: profileData.username,
+            name: profileData.fullName || profileData.username,
+            color: profileData.color || "from-purple-500 to-indigo-500",
+            avatarUrl: profileData.avatarUrl || "",
+            online: true,
+            preview: "Connected! Start chatting.",
+            unread: 0,
+            lastMessageTime: Date.now()
+          };
+          setActiveThread(tempThread);
+          document.body.classList.add("chat-active");
           return;
         }
       }
@@ -1598,9 +1619,9 @@ function ChatsPageContent() {
       });
 
       // 7b. Real-time Full Avatar Sync Update
-      socket.on("user:avatar_update", (data: { username: string; avatarUrl: string }) => {
+      socket.on("user:avatar_update", (data: { username: string; avatarUrl: string; updatedAt?: number }) => {
         setThreads(prev => {
-          const updated = prev.map(t => t.username === data.username ? { ...t, avatarUrl: data.avatarUrl } : t);
+          const updated = prev.map(t => t.username === data.username ? { ...t, avatarUrl: data.avatarUrl, updatedAt: data.updatedAt } : t);
           localStorage.setItem(sKey("secure_connections"), JSON.stringify(updated));
           return updated;
         });
@@ -1914,8 +1935,21 @@ function ChatsPageContent() {
       // ═══ INCOMING CONTACT ═══
     };
     initProtocol();
+
+    // 🛡️ SYNC: Listen for storage changes from DashboardLayout (e.g. accepting requests)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === sKey("secure_connections")) {
+        try {
+          const updated = JSON.parse(e.newValue || "[]");
+          setThreads(updated);
+        } catch (err) { }
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
     // 🛡️ REMOVED: Global socket disconnect — Dashboard Layout needs it for notifications
     return () => {
+      window.removeEventListener("storage", handleStorageChange);
       const socket = socketService.getSocket();
       if (socket) {
         socket.off("connect", (window as any)._nexoraRegisterUser);
@@ -3243,7 +3277,12 @@ function ChatsPageContent() {
                 <>
                   <motion.button whileTap={{ scale: 0.9 }}
                     onClick={() => {
-                      router.push('/dashboard/chats');
+                      const lastRoute = sessionStorage.getItem("nexora_last_active_route");
+                      if (lastRoute && lastRoute !== window.location.pathname + window.location.search) {
+                         router.push(lastRoute);
+                      } else {
+                         router.push('/dashboard/chats');
+                      }
                     }}
                     className="p-2 md:p-2.5 rounded-2xl sm:hidden mr-1 md:mr-2 transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
                     style={{ color: "var(--text-primary)" }}>
@@ -4517,26 +4556,26 @@ function ChatsPageContent() {
                     )}
                   </div>
 
-                    <div className="text-center mb-8">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
-                          {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
-                        </h2>
-                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30' : 'bg-purple-500/10 text-purple-500 border border-purple-500/10'}`}>
-                          {selectedProfileUser.username === 'nexora_31' ? 'Official Protocol' : 'Verified'}
-                        </span>
-                      </div>
-                      <p className="text-base font-black opacity-30 tracking-tight mb-2" style={{ color: "var(--text-muted)" }}>
-                        @{selectedProfileUser.username}
-                      </p>
-                      
-                      <div className="flex justify-center h-6">
-                         <LastSeenBadge 
-                           isOnline={selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)} 
-                           lastVisit={selectedProfileUser.lastVisit || selectedProfileUser.last_visit} 
-                           username={selectedProfileUser.username}
-                         />
-                      </div>
+                  <div className="text-center mb-8">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <h2 className="text-3xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
+                        {nicknames[selectedProfileUser.username] || selectedProfileUser.name || selectedProfileUser.username}
+                      </h2>
+                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/20 text-[#00d4ff] border border-[#00d4ff]/30' : 'bg-purple-500/10 text-purple-500 border border-purple-500/10'}`}>
+                        {selectedProfileUser.username === 'nexora_31' ? 'Official Protocol' : 'Verified'}
+                      </span>
+                    </div>
+                    <p className="text-base font-black opacity-30 tracking-tight mb-2" style={{ color: "var(--text-muted)" }}>
+                      @{selectedProfileUser.username}
+                    </p>
+                    
+                    <div className="flex justify-center h-6">
+                       <LastSeenBadge 
+                         isOnline={selectedProfileUser.online || liveOnlineUsers.includes(selectedProfileUser.username)} 
+                         lastVisit={selectedProfileUser.lastVisit || selectedProfileUser.last_visit} 
+                         username={selectedProfileUser.username}
+                       />
+                    </div>
 
                     <div className="flex flex-wrap items-center justify-center gap-2 mt-4 px-4">
                       <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${selectedProfileUser.username === 'nexora_31' ? 'bg-[#00d4ff]/10 text-[#00d4ff] border-[#00d4ff]/20' : 'bg-purple-500/10 text-purple-500 border-purple-500/10'} shadow-sm text-center leading-tight whitespace-nowrap overflow-hidden text-ellipsis`}>
@@ -4593,38 +4632,27 @@ function ChatsPageContent() {
                       return (
                         <>
                           <div className="flex gap-3 w-full">
-                            {isFriend ? (
-                              <motion.button
-                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                                onClick={() => {
-                                  const thread = threads.find(t => t.username === selectedProfileUser.username);
-                                  if (thread) { handleOpenThread(thread); setSelectedProfileUser(null); }
-                                }}
-                                className="flex-1 py-4.5 rounded-[28px] bg-gradient-to-r from-[#6c5ce7] to-[#8c7ae6] text-white font-black uppercase text-[11px] tracking-widest shadow-xl"
-                              >
-                                Message
-                              </motion.button>
-                            ) : (
-                              <div className="flex-1">
-                                <ConnectionButton
-                                  targetUsername={selectedProfileUser.username}
-                                  initialStatus={
-                                    pendReq ? "pending_received"
-                                    : isRequested ? "pending_sent"
-                                    : "none"
+                            <div className="flex-1">
+                              <ConnectionButton
+                                targetUsername={selectedProfileUser.username}
+                                initialStatus={
+                                  isFriend ? "friends"
+                                  : pendReq ? "pending_received"
+                                  : isRequested ? "pending_sent"
+                                  : "none"
+                                }
+                                requestId={pendReq?.id}
+                                size="md"
+                                fullWidth
+                                onStatusChange={(newStatus) => {
+                                  if (newStatus === "friends") {
+                                    fetchConnections();
+                                  } else if (newStatus === "pending_sent") {
+                                    setSentRequests(prev => Array.from(new Set([...prev, selectedProfileUser.username])));
                                   }
-                                  requestId={pendReq?.id}
-                                  size="md"
-                                  fullWidth
-                                  onStatusChange={(newStatus) => {
-                                    if (newStatus === "friends") {
-                                      // Re-fetch connections to add thread
-                                      fetchConnections();
-                                    }
-                                  }}
-                                />
-                              </div>
-                            )}
+                                }}
+                              />
+                            </div>
 
                             {blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
                               <motion.button
@@ -4958,13 +4986,29 @@ function ChatsPageContent() {
                                   </div>
                                 )}
 
-                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                                  disabled={isRequested || isConnected}
-                                  onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
-                                  className="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition-all disabled:opacity-50"
-                                  style={{ background: isRequested ? "#ffa502" : isConnected ? "#2ed573" : "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
-                                  {isConnected ? "Connected" : isRequested ? "Pending" : "Connect"}
-                                </motion.button>
+                                {(() => {
+                                  const isConnected = threads.some(t => t.username?.toLowerCase() === user.username.toLowerCase());
+                                  const isRequested = sentRequests.includes(user.username);
+                                  const pendReq = pendingRequests.find(r => r.from === user.username);
+                                  const isPending = !!pendReq;
+
+                                  return (
+                                    <ConnectionButton 
+                                      targetUsername={user.username}
+                                      initialStatus={isConnected ? "friends" : isRequested ? "pending_sent" : isPending ? "pending_received" : "none"}
+                                      requestId={pendReq?.id}
+                                      size="md"
+                                      className="w-full"
+                                      onStatusChange={(newStatus) => {
+                                        if (newStatus === "pending_sent") {
+                                          setSentRequests(prev => Array.from(new Set([...prev, user.username])));
+                                        } else if (newStatus === "none") {
+                                          setSentRequests(prev => prev.filter(r => r !== user.username));
+                                        }
+                                      }}
+                                    />
+                                  );
+                                })()}
                               </motion.div>
                             );
                           })}
@@ -5108,34 +5152,19 @@ function ChatsPageContent() {
                                   )}
                                 </div>
                                 <div className="shrink-0 ml-2" onClick={e => e.stopPropagation()}>
-                                  {isConnected ? (
-                                    <button onClick={() => { setCurrentChatUser(user.username); setShowSyncModal(false); }}
-                                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#6c5ce7] flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-all text-white">
-                                      <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6" />
-                                    </button>
-                                  ) : isPending ? (
-                                    <div className="flex flex-col gap-1.5">
-                                      <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
-                                        onClick={() => { if (pendReq) handleRespond(pendReq.id, pendReq.from, 'accept'); }}
-                                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider text-white"
-                                        style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>Accept</motion.button>
-                                      <button onClick={() => { if (pendReq) handleRespond(pendReq.id, pendReq.from, 'decline'); }}
-                                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
-                                        style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: "var(--text-secondary)" }}>Decline</button>
-                                    </div>
-                                  ) : isRequested ? (
-                                    <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
-                                      <span className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Sent ✓</span>
-                                    </div>
-                                  ) : (
-                                    <motion.button whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
-                                      onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
-                                      className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
-                                      style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}>
-                                      <span className="relative z-10 flex items-center gap-2"><Plus className="w-3.5 h-3.5" />Request</span>
-                                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
-                                    </motion.button>
-                                  )}
+                                  <ConnectionButton 
+                                    targetUsername={user.username}
+                                    initialStatus={isConnected ? "friends" : isRequested ? "pending_sent" : isPending ? "pending_received" : "none"}
+                                    requestId={pendReq?.id}
+                                    size="md"
+                                    onStatusChange={(newStatus) => {
+                                      if (newStatus === "pending_sent") {
+                                        setSentRequests(prev => Array.from(new Set([...prev, user.username])));
+                                      } else if (newStatus === "none") {
+                                        setSentRequests(prev => prev.filter(r => r !== user.username));
+                                      }
+                                    }}
+                                  />
                                 </div>
                               </motion.div>
                             );

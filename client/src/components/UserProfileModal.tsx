@@ -13,6 +13,7 @@ import {
 import { Avatar } from "./Avatar";
 import { LastSeenBadge } from "./LastSeenBadge";
 import { ConnectionButton, ConnectionStatus } from "./ConnectionButton";
+import { socketService } from "@/lib/socket";
 
 // ─── Unique QR per username (same canvas logic but seeded on username) ───
 function generateUniqueQR(username: string, size = 160): string {
@@ -84,15 +85,34 @@ interface UserProfileModalProps {
   onConnectionChange?: (newStatus: ConnectionStatus, peerData?: any) => void;
 }
 
-export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall, onVideoCall, onBlock, isChatLocked, onToggleLock, connectionStatus: initialConnectionStatus = "friends", requestId, onConnectionChange }: UserProfileModalProps) {
+export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall, onVideoCall, onBlock, isChatLocked, onToggleLock, connectionStatus: initialConnectionStatus = "none", requestId, onConnectionChange }: UserProfileModalProps) {
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrUrl, setQrUrl] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(initialConnectionStatus);
   const [shareMode, setShareMode] = useState(false);
 
+  const [displayFriend, setDisplayFriend] = useState(friend);
+
   useEffect(() => {
     setQrUrl(generateUniqueQR(friend.username));
+    setDisplayFriend(friend);
+  }, [friend.username, friend]);
+
+  useEffect(() => {
+    const socket = socketService.getSocket();
+    if (!socket) return;
+
+    const handleAvatarUpdate = (data: { username: string; avatarUrl: string }) => {
+      if (data.username?.toLowerCase() === friend.username?.toLowerCase()) {
+        setDisplayFriend(prev => ({ ...prev, avatarUrl: data.avatarUrl }));
+      }
+    };
+
+    socket.on("user:avatar_update", handleAvatarUpdate);
+    return () => {
+      socket.off("user:avatar_update", handleAvatarUpdate);
+    };
   }, [friend.username]);
 
   const [profileUrl, setProfileUrl] = useState(`https://nexora31.vercel.app/auth?connect=${friend.username}`);
@@ -171,9 +191,9 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
               >
                 <div className="hidden sm:block">
                   <Avatar
-                    src={friend.avatarUrl}
-                    name={friend.name || friend.username}
-                    color={friend.color}
+                    src={displayFriend.avatarUrl}
+                    name={displayFriend.name || displayFriend.username}
+                    color={displayFriend.color}
                     size={128}
                     animate={true}
                     showBorder={true}
@@ -183,9 +203,9 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                 </div>
                 <div className="sm:hidden">
                   <Avatar
-                    src={friend.avatarUrl}
-                    name={friend.name || friend.username}
-                    color={friend.color}
+                    src={displayFriend.avatarUrl}
+                    name={displayFriend.name || displayFriend.username}
+                    color={displayFriend.color}
                     size={96}
                     animate={true}
                     showBorder={true}

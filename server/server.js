@@ -244,6 +244,7 @@ let pgPool;
                 last_visit ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'},
                 google_uid TEXT,
                 avatar_url TEXT,
+                updated_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
                 privacy_last_seen TEXT DEFAULT 'everyone',
                 privacy_online TEXT DEFAULT 'everyone'
             );
@@ -371,6 +372,7 @@ let pgPool;
         // Migration for Privacy Settings
         try { await db.run("ALTER TABLE users ADD COLUMN privacy_last_seen TEXT DEFAULT 'everyone'"); } catch (e) { }
         try { await db.run("ALTER TABLE users ADD COLUMN privacy_online TEXT DEFAULT 'everyone'"); } catch (e) { }
+        try { await db.run("ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) { }
 
         // Migration for Avatar System (Modernization)
         // Clear old static logo from existing users so they get the new premium dynamic avatars
@@ -1814,7 +1816,7 @@ app.post('/api/users/sync-contacts', authenticateToken, async (req, res) => {
 
         // 2. Fetch matched identities
         const placeholders = hashedContacts.map((_, i) => (dbType === 'postgres' ? `$${i + 2}` : '?')).join(',');
-        const sql = `SELECT username, full_name, color, phone_hash FROM users WHERE username != ${dbType === 'postgres' ? '$1' : '?'} AND phone_hash IN (${placeholders}) LIMIT 50`;
+        const sql = `SELECT username, full_name, color, avatar_url, phone_hash FROM users WHERE username != ${dbType === 'postgres' ? '$1' : '?'} AND phone_hash IN (${placeholders}) LIMIT 50`;
         const params = [me || '', ...hashedContacts];
 
         const users = await db.all(sql, params);
@@ -1824,6 +1826,7 @@ app.post('/api/users/sync-contacts', authenticateToken, async (req, res) => {
         const suggestions = users.map(u => ({
             username: u.username,
             fullName: decryptField(u.full_name),
+            avatarUrl: decryptField(u.avatar_url),
             reason: 'In your contacts',
             color: u.color || 'from-[#6c5ce7] to-[#00d4ff]'
         }));
@@ -3161,6 +3164,8 @@ app.get('/api/users/search', async (req, res) => {
         const mappedUsers = users.map(u => ({
             ...u,
             fullName: decryptField(u.fullName),
+            avatar_url: decryptField(u.avatarUrl),
+            avatarUrl: decryptField(u.avatarUrl),
             isFriend: !!u.isFriend,
             online: true
         }));
@@ -3306,7 +3311,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
             createdAt: user.created_at,
             color: user.color,
             phoneNumber: decryptField(user.phoneNumber),
-            avatarUrl: user.avatarUrl,
+            avatarUrl: decryptField(user.avatarUrl),
             bio: user.bio,
             lastVisit: lastVisit,
             isOnline: displayOnline,
@@ -3374,7 +3379,14 @@ app.patch('/api/users/bio', authenticateToken, async (req, res) => {
 app.post('/api/users/avatar', authenticateToken, async (req, res) => {
     const { avatarBase64 } = req.body;
     const username = req.user.username;
+    
     if (!username || !avatarBase64) return res.status(400).json({ error: "username and avatarBase64 required" });
+    
+    // Validation: Limit base64 size to ~5MB (approx 6.7MB base64 string length)
+    if (avatarBase64.length > 7000000) {
+        return res.status(400).json({ error: "Image too large. Max 5MB." });
+    }
+
     try {
         if (!db) return res.status(500).json({ error: "DB not ready" });
 
@@ -3390,7 +3402,10 @@ app.post('/api/users/avatar', authenticateToken, async (req, res) => {
                         folder: "nexora_avatars",
                         public_id: username.toLowerCase() + "_avatar",
                         overwrite: true,
-                        resource_type: "image"
+                        resource_type: "image",
+                        transformation: [
+                            { width: 320, height: 320, crop: "fill", gravity: "face" }
+                        ]
                     },
                     (error, result) => {
                         if (error) reject(error);
@@ -3406,15 +3421,22 @@ app.post('/api/users/avatar', authenticateToken, async (req, res) => {
 
         // Encrypt profile picture URL in database
         const encryptedAvatar = encryptField(finalUrl);
-        await db.run('UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(username) = LOWER(?)', [encryptedAvatar, username]);
+        
+        // Update both the URL and the updated_at timestamp
+        const updateSql = dbType === 'postgres' 
+            ? 'UPDATE users SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(username) = LOWER(?)'
+            : 'UPDATE users SET avatar_url = ?, updated_at = datetime(\'now\') WHERE LOWER(username) = LOWER(?)';
+            
+        await db.run(updateSql, [encryptedAvatar, username]);
 
         // Real-Time Sync Across All Users
         // We broadcast globally because avatars are public in directory search
-        io.emit('user:avatar_update', { username, avatarUrl: finalUrl });
+        const now = Date.now();
+        io.emit('user:avatar_update', { username, avatarUrl: finalUrl, updatedAt: now });
 
-        res.json({ status: "success", message: "Profile picture updated.", avatarUrl: finalUrl });
+        res.json({ status: "success", message: "Profile picture updated.", avatarUrl: finalUrl, updatedAt: now });
     } catch (err) {
-        console.log("Avatar update error:", err);
+        console.error("Avatar update error:", err);
         res.status(500).json({ error: "Failed to update avatar." });
     }
 });
@@ -3490,15 +3512,30 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         }
 
         // 3. Insert into DB (Standard pending request)
-        const result = await db.run(
+        await db.run(
             'INSERT INTO connection_requests (from_username, to_username, from_name, from_color) VALUES (?, ?, ?, ?)',
             [from.toLowerCase(), to.toLowerCase(), fromName || from, fromColor || COLORS[0]]
         );
         
-        const requestId = dbType === 'postgres' ? result.id : result.lastID;
+        // 4. Create persistent notification record
+        await db.run(
+            'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
+            [to.toLowerCase(), from.toLowerCase(), 'request_received', `${fromName || from} sent you a friend request.`]
+        );
+
+        const resData = await db.get('SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = \'pending\'', [from, to]);
+        const requestId = resData?.id;
 
         // Notify via socket if target is online
-        io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor, requestId });
+        io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor, requestId, time: new Date() });
+        io.to(to.toLowerCase()).emit('new_notification', { 
+            id: Date.now() + Math.random(),
+            type: 'request_received', 
+            message: `${fromName || from} sent you a friend request.`, 
+            from_username: from,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+
         res.json({ status: 'sent', requestId });
     } catch (err) {
         console.log("Connection Request Error:", err);
@@ -3539,8 +3576,12 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
             WHERE LOWER(cr.to_username) = LOWER(?) AND cr.status = 'pending'
         `, [username]);
 
-        // Decrypt sender names if they were encrypted (older requests might be raw)
-        const decryptedReqs = reqs.map(r => ({ ...r, fromName: decryptField(r.fromName) }));
+        // Decrypt sender names and avatars if they were encrypted
+        const decryptedReqs = reqs.map(r => ({ 
+            ...r, 
+            fromName: decryptField(r.fromName),
+            avatarUrl: decryptField(r.avatarUrl) 
+        }));
 
         // Format time
         const formatted = decryptedReqs.map(r => ({
