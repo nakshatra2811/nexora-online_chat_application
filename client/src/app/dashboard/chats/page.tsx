@@ -1612,7 +1612,7 @@ function ChatsPageContent() {
         ));
 
         // Update selected profile view if open
-        setSelectedProfileUser(prev => 
+        setSelectedProfileUser((prev: any) => 
           (prev && prev.username === data.username) ? { ...prev, avatarUrl: data.avatarUrl } : prev
         );
 
