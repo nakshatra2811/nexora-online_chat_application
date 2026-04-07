@@ -3080,9 +3080,9 @@ function ChatsPageContent() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 max-w-[85%] pr-2">
                         <h3 className={`font-bold text-sm truncate ${isLockedDisplay ? 'italic text-white/50' : ''}`}
-                          style={{ color: "var(--text-primary)" }}>
+                          style={{ color: "var(--text-primary)", maxWidth: "100%", display: "block" }}>
                           {isLockedDisplay ? "Locked Conversation" : (nicknames[thread.username] || thread.name)}
                         </h3>
                         {isPinned && <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />}

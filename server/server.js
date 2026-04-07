@@ -3429,16 +3429,16 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         }
 
         // 3. Insert into DB (Standard pending request)
-        await db.run(
+        const result = await db.run(
             'INSERT INTO connection_requests (from_username, to_username, from_name, from_color) VALUES (?, ?, ?, ?)',
             [from.toLowerCase(), to.toLowerCase(), fromName || from, fromColor || COLORS[0]]
         );
+        
+        const requestId = dbType === 'postgres' ? result.id : result.lastID;
 
         // Notify via socket if target is online
-        // Also we don't send avatar here, but it can be fetched by the client via profile if needed,
-        // or we could look it up. For now, keep it simple.
-        io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor });
-        res.json({ status: 'sent' });
+        io.to(to.toLowerCase()).emit('connection_request', { from, fromName, fromColor, requestId });
+        res.json({ status: 'sent', requestId });
     } catch (err) {
         console.log("Connection Request Error:", err);
         res.status(500).json({ error: "Server Error" });

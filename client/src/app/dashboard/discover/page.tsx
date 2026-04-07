@@ -513,11 +513,11 @@ export default function DiscoverPage() {
                         </div>
 
                         {/* Name + username */}
-                        <div className="text-center w-full mb-4">
-                          <h3 className="text-sm font-black truncate w-full leading-tight mb-0.5" style={{ color: "var(--text-primary)" }}>
+                        <div className="text-center w-full mb-4 px-2">
+                          <h3 className="text-sm font-black truncate w-full leading-tight mb-0.5 block" style={{ color: "var(--text-primary)" }}>
                             {user.full_name || user.username}
                           </h3>
-                          <p className="text-[10px] font-bold opacity-30 truncate w-full">
+                          <p className="text-[10px] font-bold opacity-30 truncate w-full block">
                             @{user.username}
                           </p>
 

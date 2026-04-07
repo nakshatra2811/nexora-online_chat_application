@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserPlus, UserCheck, Check, X, Users, Clock } from "lucide-react";
 import { nexoraFetch } from "@/lib/config";
+import { socketService } from "@/lib/socket";
 
 export type ConnectionStatus =
   | "none"
@@ -41,6 +42,44 @@ export function ConnectionButton({
   const [pendingReqId, setPendingReqId] = useState<number | undefined>(requestId);
   const [showCancelHint, setShowCancelHint] = useState(false);
 
+  // Scoped key for persistence check (optional, but helps avoid flickering)
+  // ─── Real-time update listener ───
+
+  useEffect(() => {
+    const socket = socketService.getSocket();
+    if (!socket) return;
+
+    const handleEstablished = (data: any) => {
+      if (data.peer?.username?.toLowerCase() === targetUsername?.toLowerCase()) {
+         setStatus("friends");
+         onStatusChange?.("friends", data.peer);
+      }
+    };
+
+    const handleAccepted = (data: any) => {
+      if (data.by?.toLowerCase() === targetUsername?.toLowerCase()) {
+         setStatus("friends");
+         onStatusChange?.("friends");
+      }
+    };
+
+    socket.on("friendship_established", handleEstablished);
+    socket.on("connection_accepted", handleAccepted);
+    return () => {
+      socket.off("friendship_established", handleEstablished);
+      socket.off("connection_accepted", handleAccepted);
+    };
+  }, [targetUsername, onStatusChange]);
+
+  // Sync internal state with props if they change after mount (Prevents UI resetting)
+  useEffect(() => {
+    setStatus(initialStatus);
+  }, [initialStatus]);
+
+  useEffect(() => {
+    if (requestId !== undefined) setPendingReqId(requestId);
+  }, [requestId]);
+
   const sz = sizeMap[size];
   const widthCls = fullWidth ? "w-full justify-center" : "";
 
@@ -77,9 +116,14 @@ export function ConnectionButton({
       if (res?.status === "accepted") {
         // Auto-accepted (mutual / bidirectional request)
         updateStatus("friends", res);
+      } else if (res?.status === "sent") {
+        setPendingReqId(res.requestId);
+        updateStatus("pending_sent");
       } else if (res?.status === "already_connected") {
         updateStatus("friends");
-      } else if (!res || (res.status !== "sent" && res.status !== "already_sent")) {
+      } else if (res?.status === "already_sent") {
+        updateStatus("pending_sent");
+      } else {
         // Rollback on genuine failure
         updateStatus("none");
       }
