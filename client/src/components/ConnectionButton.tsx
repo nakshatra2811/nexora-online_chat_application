@@ -73,8 +73,15 @@ export function ConnectionButton({
 
   // Sync internal state with props if they change after mount (Prevents UI resetting)
   useEffect(() => {
-    setStatus(initialStatus);
-  }, [initialStatus]);
+    // Only overwrite if we are not currently performing an action.
+    // If our current state is 'pending_sent' and parent says 'none', it's likely stale, so we keep ours.
+    if (!isLoading) {
+       setStatus(prev => {
+         if (prev === "pending_sent" && initialStatus === "none") return prev;
+         return initialStatus;
+       });
+    }
+  }, [initialStatus, isLoading]);
 
   useEffect(() => {
     if (requestId !== undefined) setPendingReqId(requestId);

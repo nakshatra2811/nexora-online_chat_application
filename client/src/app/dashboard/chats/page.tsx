@@ -93,6 +93,7 @@ export interface Thread {
   wallpaper?: string;
   lastMessageTime?: number; // Unix ms timestamp of last message — used for sorting
   lastVisit?: number;
+  isInitialized?: boolean; 
 }
 
 function ChatsPageContent() {
@@ -1044,6 +1045,9 @@ function ChatsPageContent() {
   };
 
   const handleOpenThread = (thread: typeof threads[0]) => {
+    if (!thread.isInitialized) {
+      setThreads(prev => prev.map(t => t.id === thread.id ? { ...t, isInitialized: true } : t));
+    }
     if (lockedChatsMap[thread.id] && !unlockedSessionThreads.includes(thread.id)) {
       setChatLockEntry({ threadId: thread.id, error: "", pin: "", showPin: false, forgotMode: false, forgotError: "" });
     } else {
@@ -1786,9 +1790,10 @@ function ChatsPageContent() {
         ((..._args: any[]) => { })("[Protocol] Incoming request from:", data.from);
         // Add real-time incoming request to sidebar
         setPendingRequests(prev => {
-          if (prev.find(r => r.from === data.from)) return prev; // de-dup
+          // Normalize check to prevent same person showing twice
+          if (prev.find(r => r.from?.toLowerCase() === data.from?.toLowerCase())) return prev;
           return [{
-            id: Date.now(),
+            id: data.requestId, // Server requestId is MANDATORY for accepting
             from: data.from,
             fromName: data.fromName || data.from,
             fromColor: data.fromColor || 'from-purple-500 to-indigo-500',
@@ -2784,12 +2789,7 @@ function ChatsPageContent() {
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <motion.button whileTap={{ scale: 0.9 }}
-                onClick={() => router.push('/dashboard/chats')}
-                className="p-2 -ml-2 rounded-xl sm:hidden transition-all bg-black/[0.03] dark:bg-white/[0.05] active:scale-95"
-                style={{ color: "var(--text-primary)" }}>
-                <ArrowLeft className="w-5 h-5" />
-              </motion.button>
+
               <h2 className="text-xl font-extrabold" style={{ color: "var(--text-primary)" }}>Messages</h2>
             </div>
             <div className="flex items-center gap-2">
@@ -2817,7 +2817,7 @@ function ChatsPageContent() {
               </motion.button>
             </div>
           </div>
-          <div className="flex items-center rounded-2xl px-4 py-3 gap-3 neumorphic-input transition-all focus-within:ring-2 focus-within:ring-[#6c5ce7]/20 border border-transparent focus-within:border-[#6c5ce7]/30">
+          <div className="hidden md:flex items-center rounded-2xl px-4 py-3 gap-3 neumorphic-input transition-all focus-within:ring-2 focus-within:ring-[#6c5ce7]/20 border border-transparent focus-within:border-[#6c5ce7]/30">
             <Search className="h-4 w-4 shrink-0 transition-colors group-focus-within:text-[#6c5ce7]" style={{ color: "var(--text-muted)" }} />
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-transparent text-sm outline-none font-medium placeholder:text-muted/50" placeholder="Search conversations..."
@@ -3018,108 +3018,118 @@ function ChatsPageContent() {
           </div>
           <div className="h-px w-full mb-3" style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)" }} />
 
-          {threads
-            .filter(t => !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id))
-            .filter(t => !t.name.includes("Clearance"))
-            .filter(t => {
-              const q = searchQuery.toLowerCase();
-              return t.name.toLowerCase().includes(q) || 
-                     t.username.toLowerCase().includes(q) || 
-                     (t.preview && t.preview.toLowerCase().includes(q));
-            })
-            .sort((a, b) => {
-              const aPinned = pinnedThreads.includes(a.id) ? 1 : 0;
-              const bPinned = pinnedThreads.includes(b.id) ? 1 : 0;
-              if (bPinned !== aPinned) return bPinned - aPinned; // Pinned first
-              // Then sort by most recent message time (newest at top)
-              return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
-            })
-            .map((thread, i) => {
-              const isActive = activeThread?.id === thread.id;
-              const isPinned = pinnedThreads.includes(thread.id);
-              const isLockedDisplay = lockedChatsMap[thread.id] && !unlockedSessionThreads.includes(thread.id);
-              return (
-                <motion.button key={thread.id}
-                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
-                  whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}
-                  onClick={() => handleOpenThread(thread)}
-                  onContextMenu={(e) => {
-                    if (thread.username === 'nexora_31') return;
-                    e.preventDefault();
-                    setThreadContextMenu({ id: thread.id, x: e.clientX, y: e.clientY });
-                  }}
-                  onTouchStart={(e) => {
-                    if (thread.username === 'nexora_31') return;
-                    const touch = e.touches[0];
-                    const x = touch.clientX;
-                    const y = touch.clientY;
-                    longPressTimerRef.current = setTimeout(() => {
-                      setThreadContextMenu({ id: thread.id, x, y });
-                    }, 700);
-                  }}
-                  onTouchEnd={() => {
-                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-                  }}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all relative group/thread"
-                  style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
-                  <div className="relative shrink-0">
-                    <Avatar
-                      src={thread.avatarUrl}
-                      name={nicknames[thread.username] || thread.name || thread.username}
-                      color={thread.color}
-                      size={44}
-                      animate={true}
-                      onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}
-                      className={isLockedDisplay ? 'grayscale opacity-50' : ''}
-                      icon={isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : undefined}
-                    />
-                    {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
-                      <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
-                        style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
-                    )}
-                    {!isLockedDisplay && !(thread.online || liveOnlineUsers.includes(thread.username)) && thread.lastVisit && (
-                      <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20 flex items-center justify-center">
-                        <span className="text-[6.5px] font-black text-[#6c5ce7] uppercase tracking-tighter leading-none">{formatLastSeenShort(thread.lastVisit)}</span>
-                      </div>
-                    )}
-                    {mutedThreads.includes(thread.id) && (
-                      <div className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20">
-                        <BellOff className="w-2.5 h-2.5 text-orange-400" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-1.5 min-w-0 max-w-[85%] pr-2">
-                        <h3 className={`font-bold text-sm truncate ${isLockedDisplay ? 'italic text-white/50' : ''}`}
-                          style={{ color: "var(--text-primary)", maxWidth: "100%", display: "block" }}>
-                          {isLockedDisplay ? "Locked Conversation" : (nicknames[thread.username] || thread.name)}
-                        </h3>
-                        {isPinned && <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {!isLockedDisplay && thread.unread > 0 && (
-                          <span className="h-5 min-w-5 px-1 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
-                            style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>{thread.unread}</span>
-                        )}
-                      </div>
+          {/* ─── CHAT LIST SECTIONS ─── */}
+          {(() => {
+            const filtered = threads
+              .filter(t => !hiddenThreads.includes(t.id) && !blockedThreads.includes(t.id))
+              .filter(t => !t.name.includes("Clearance"))
+              .filter(t => {
+                const q = searchQuery.toLowerCase();
+                return t.name.toLowerCase().includes(q) || 
+                       t.username.toLowerCase().includes(q) || 
+                       (t.preview && t.preview.toLowerCase().includes(q));
+              });
+
+            const activeThreads = filtered.filter(t => (t.preview && t.preview !== "Secure tunnel established") || t.unread > 0 || t.isInitialized)
+              .sort((a, b) => {
+                const aPinned = pinnedThreads.includes(a.id) ? 1 : 0;
+                const bPinned = pinnedThreads.includes(b.id) ? 1 : 0;
+                if (bPinned !== aPinned) return bPinned - aPinned;
+                return (b.lastMessageTime || 0) - (a.lastMessageTime || 0);
+              });
+
+            const newFriends = filtered.filter(t => !activeThreads.includes(t));
+
+            return (
+              <>
+                {/* 1. ACTIVE CHATS SECTION */}
+                <div className="px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] opacity-40">
+                  Chats
+                </div>
+                {activeThreads.length > 0 ? (
+                  activeThreads.map((thread, i) => {
+                    const isActive = activeThread?.id === thread.id;
+                    const isPinned = pinnedThreads.includes(thread.id);
+                    const isLockedDisplay = lockedChatsMap[thread.id] && !unlockedSessionThreads.includes(thread.id);
+                    return (
+                      <motion.button key={thread.id}
+                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+                        whileHover={{ x: 2 }} whileTap={{ scale: 0.98 }}
+                        onClick={() => handleOpenThread(thread)}
+                        onContextMenu={(e) => { if (thread.username === 'nexora_31') return; e.preventDefault(); setThreadContextMenu({ id: thread.id, x: e.clientX, y: e.clientY }); }}
+                        className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-all relative group/thread"
+                        style={{ background: isActive ? (isDark ? "rgba(108,92,231,0.14)" : "rgba(108,92,231,0.08)") : "transparent" }}>
+                        <div className="relative shrink-0">
+                          <Avatar src={thread.avatarUrl} name={nicknames[thread.username] || thread.name || thread.username} color={thread.color} size={44} animate={true}
+                            onClick={(e) => { e.stopPropagation(); isLockedDisplay ? handleOpenThread(thread) : setSelectedProfileUser(thread); }}
+                            className={isLockedDisplay ? 'grayscale opacity-50' : ''}
+                            icon={isLockedDisplay ? <Lock className="w-4 h-4 text-white/50" /> : undefined} />
+                          {(!isLockedDisplay && (thread.online || liveOnlineUsers.includes(thread.username))) && (
+                            <div className="absolute bottom-0 -right-0.5 h-3.5 w-3.5 rounded-full bg-[#2ed573] shadow-[0_0_8px_#2ed573] z-10 animate-pulse-slow"
+                              style={{ border: `2.5px solid ${isDark ? "#12121c" : "#ffffff"}` }} />
+                          )}
+                          {!isLockedDisplay && !(thread.online || liveOnlineUsers.includes(thread.username)) && thread.lastVisit && (
+                            <div className="absolute -top-1 -left-1 px-1.5 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 z-20 flex items-center justify-center">
+                              <span className="text-[6.5px] font-black text-[#6c5ce7] uppercase tracking-tighter leading-none">{formatLastSeenShort(thread.lastVisit)}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                              <h3 className={`font-bold text-sm truncate ${isLockedDisplay ? 'italic text-white/50' : ''}`} style={{ color: "var(--text-primary)" }}>
+                                {isLockedDisplay ? "Locked Conversation" : (nicknames[thread.username] || thread.name)}
+                              </h3>
+                              {isPinned && <Pin className="h-3 w-3 shrink-0" style={{ color: "#6c5ce7", transform: "rotate(-45deg)" }} />}
+                            </div>
+                            {thread.unread > 0 && (
+                              <span className="h-5 min-w-5 px-1 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0"
+                                style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>{thread.unread}</span>
+                            )}
+                          </div>
+                          {!isLockedDisplay && (
+                            <p className="text-[11px] mt-0.5 line-clamp-1 font-medium opacity-60" style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)" }}>
+                              {thread.preview}
+                            </p>
+                          )}
+                        </div>
+                      </motion.button>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center opacity-20 text-[10px] font-black uppercase tracking-[0.2em]">No active nodes</div>
+                )}
+
+                {/* 2. START CHAT WITH FRIENDS SECTION */}
+                {newFriends.length > 0 && (
+                  <div className="mt-8 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] opacity-40">
+                      Start Chat with Friends
                     </div>
-                    {!isLockedDisplay && (
-                      <p 
-                        className="text-[11px] mt-0.5 line-clamp-2 leading-[1.3] font-medium overflow-hidden" 
-                        style={{ color: isActive ? "#6c5ce7" : "var(--text-muted)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
-                      >
-                        {thread.preview}
-                      </p>
-                    )}
+                    {newFriends.map((thread, i) => (
+                      <motion.div key={thread.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                        className="flex items-center gap-3 p-4 mx-2 my-1 rounded-[1.25rem] bg-black/5 dark:bg-white/5 border border-transparent hover:border-[#6c5ce7]/10 transition-all">
+                        <Avatar src={thread.avatarUrl} name={nicknames[thread.username] || thread.name || thread.username} color={thread.color} size={40} animate={true} />
+                        <div className="flex-1 min-w-0 pr-2">
+                           <h4 className="font-bold text-xs truncate" style={{ color: "var(--text-primary)" }}>{nicknames[thread.username] || thread.name}</h4>
+                           <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-0.5">New Connection</p>
+                        </div>
+                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => handleOpenThread(thread)}
+                          className="px-4 py-2 rounded-xl bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] text-white text-[9px] font-black uppercase tracking-widest shadow-lg shadow-purple-500/20 active:scale-95 transition-all">
+                          Start Chat
+                        </motion.button>
+                      </motion.div>
+                    ))}
                   </div>
-                </motion.button>
-              );
-            })}
+                )}
+              </>
+            );
+          })()}
         </div>
 
-        {/* ═══ SELF PROFILE FOOTER ═══ */}
-        <div className="mt-auto p-4 md:pb-4 pb-24 border-t shrink-0 backdrop-blur-md" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", background: isDark ? "rgba(18,18,28,0.4)" : "rgba(255,255,255,0.5)" }}>
+        {/* ═══ SELF PROFILE FOOTER (Hidden on Mobile) ═══ */}
+        <div className="mt-auto hidden md:block p-4 border-t shrink-0 backdrop-blur-md" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", background: isDark ? "rgba(18,18,28,0.4)" : "rgba(255,255,255,0.5)" }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="relative">

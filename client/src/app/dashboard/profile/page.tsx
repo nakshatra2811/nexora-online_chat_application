@@ -511,9 +511,10 @@ export default function ProfilePage() {
 
       const handleRequest = (data: any) => {
         setPendingReceived(prev => {
-          if (prev.find(r => r.from === data.from)) return prev;
+          // Normalize comparison for de-duplication
+          if (prev.find(r => r.from?.toLowerCase() === data.from?.toLowerCase())) return prev;
           return [{
-            id: Date.now() + Math.random(),
+            id: data.requestId, // Mandatory for accepting
             from: data.from,
             fromName: data.fromName || data.from,
             fromColor: data.fromColor || "from-purple-500 to-indigo-500",
