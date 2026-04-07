@@ -331,7 +331,8 @@ let pgPool;
                 username TEXT NOT NULL,
                 endpoint TEXT NOT NULL,
                 subscription TEXT NOT NULL,
-                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'}
+                created_at ${dbType === 'postgres' ? 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' : 'DATETIME DEFAULT CURRENT_TIMESTAMP'},
+                UNIQUE(username, endpoint)
             );
 
             CREATE TABLE IF NOT EXISTS offline_messages (
@@ -465,40 +466,41 @@ let pgPool;
         }
 
         console.log(`[DATABASE] ${dbType === 'postgres' ? 'PostgreSQL Connection Established' : 'SQLite Initialized Successfully'}`);
+        
+        // ------------------------------------------------------------------
+        // START SERVER AFTER DB IS READY (Resolves race conditions)
+        // ------------------------------------------------------------------
+        const PORT = process.env.PORT || 5000;
+        console.log(`[CORE] Attempting to listen on PORT ${PORT}...`);
+        server.on('error', (err) => {
+            console.error("[SERVER] Fatal Listener Error:", err.message);
+            if (err.code === 'EADDRINUSE') {
+                console.error(`[SERVER] Port ${PORT} is occupied by another terminal. Release it to proceed.`);
+            }
+        });
+        server.listen(PORT, () => {
+            console.log(`[SERVER] Nexora Core operational on port ${PORT}`);
+            console.log(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
+
+            // --- Render Anti-Sleep Mechanism ---
+            const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+            if (selfUrl.includes('onrender')) {
+                console.log(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
+                setInterval(() => {
+                    const lib = selfUrl.startsWith('https') ? require('https') : require('http');
+                    lib.get(selfUrl, (res) => {
+                        console.log(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
+                    }).on("error", (err) => {
+                        console.error(`[ANTI-SLEEP] Ping Failed:`, err.message);
+                    });
+                }, 10 * 60 * 1000); // 10 minutes
+            }
+        });
+
     } catch (e) {
         console.error("[DATABASE] Critical Initialization Failure:", e);
     }
 })();
-
-// ------------------------------------------------------------------
-// START SERVER (Ensured to run in parallel with DB migrations)
-// ------------------------------------------------------------------
-const PORT = process.env.PORT || 5000;
-console.log(`[CORE] Attempting to listen on PORT ${PORT}...`);
-server.on('error', (err) => {
-    console.error("[SERVER] Fatal Listener Error:", err.message);
-    if (err.code === 'EADDRINUSE') {
-        console.error(`[SERVER] Port ${PORT} is occupied by another terminal. Release it to proceed.`);
-    }
-});
-server.listen(PORT, () => {
-    console.log(`[SERVER] Nexora Core operational on port ${PORT}`);
-    console.log(`[SECURITY] Helmet active | HSTS enabled | Zero-knowledge relay mode`);
-
-    // --- Render Anti-Sleep Mechanism ---
-    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-    if (selfUrl.includes('onrender')) {
-        console.log(`[ANTI-SLEEP] Protocol initiated for backend URL: ${selfUrl}`);
-        setInterval(() => {
-            const lib = selfUrl.startsWith('https') ? require('https') : require('http');
-            lib.get(selfUrl, (res) => {
-                console.log(`[ANTI-SLEEP] Ping Successful! Server kept awake. Status: ${res.statusCode}`);
-            }).on("error", (err) => {
-                console.error(`[ANTI-SLEEP] Ping Failed:`, err.message);
-            });
-        }, 10 * 60 * 1000); // 10 minutes
-    }
-});
 
 // ------------------------------------------------------------------
 // SECURITY HARDENING (Phase 5)
@@ -3296,7 +3298,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 
     try {
         if (!db || !targetUsername) return res.status(400).json({ error: "Invalid username" });
-        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, COALESCE(last_visit, created_at) as last_visit FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
+        const user = await db.get('SELECT username, full_name AS "fullName", email, role, created_at, color, phone_number AS "phoneNumber", avatar_url AS "avatarUrl", bio, COALESCE(last_visit, created_at) as last_visit, privacy_last_seen, privacy_online FROM users WHERE LOWER(username) = LOWER(?)', [targetUsername]);
         if (!user) return res.status(404).json({ error: "User not found" });
 
         // PII Fields will be decrypted in cleanUser mapping below
@@ -4796,7 +4798,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
 Sentry.setupExpressErrorHandler(app);
 
 // --- SPA Fallback Routing ---
-app.get(/.*/, (req, res) => {
+app.get('/:path*', (req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
