@@ -4793,7 +4793,11 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
         res.status(500).json({ error: "Failed to update user status" });
     }
 });
-
 Sentry.setupExpressErrorHandler(app);
+
+// --- SPA Fallback Routing ---
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
 
 // Server startup moved to async initialization block to prevent race conditions.

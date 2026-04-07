@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, User, Lock, Shield, CheckCircle, Clock, Phone, Eye, EyeOff, XCircle, ShieldCheck, FileText, ChevronLeft, Flag } from "lucide-react";
 import { useTheme } from "@/lib/theme";
@@ -630,7 +631,7 @@ function AuthContent() {
                   </div>
                 </div>
                 <span className="text-[11px] font-bold leading-tight" style={{ color: "var(--text-secondary)" }}>
-                  I have read and agree to the <a href="/policies/terms" target="_blank" className="text-[#6c5ce7] underline">Terms of Service</a> and <a href="/policies/privacy" target="_blank" className="text-[#6c5ce7] underline">Privacy Policy</a>.
+                  I have read and agree to the <Link href="/policies" className="text-[#6c5ce7] underline">Terms of Service</Link> and <Link href="/policies" className="text-[#6c5ce7] underline">Privacy Policy</Link>.
                 </span>
               </label>
             </div>
