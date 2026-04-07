@@ -230,7 +230,7 @@ function ContactsModal({ onClose, isDark }: { onClose: () => void; isDark: boole
                     color: contact.invited ? "#2ed573" : "#ffbe0b",
                     border: `1px solid ${contact.invited ? "rgba(46,213,115,0.2)" : "rgba(255,190,11,0.2)"}`
                   }}>
-                  {contact.invited ? <><Check className="w-3.5 h-3.5" /> Sent</> : <><UserPlus className="w-3.5 h-3.5" /> Connect</>}
+                  {contact.invited ? <><Check className="w-3.5 h-3.5" /> Sent</> : <><UserPlus className="w-3.5 h-3.5" /> Request</>}
                 </motion.button>
               )}
             </div>
@@ -432,16 +432,18 @@ export default function ProfilePage() {
     try {
       const resp = await nexoraFetch("/api/connections/respond", {
         method: "POST",
-        body: JSON.stringify({ username: myUsername, requestId: reqId, action })
+        body: JSON.stringify({ requestId: reqId, action })
       });
       if (resp && (resp.status === "accepted" || resp.status === "declined")) {
+        // Instantly remove from pending list
         setPendingReceived(prev => prev.filter(r => r.id !== reqId));
         if (action === "accept") {
-          // Trigger a refresh of connections
+          // Optimistically refresh friends from localStorage (friendship_established will push the real data)
           const data = await nexoraFetch(`/api/connections?username=${encodeURIComponent(myUsername)}`);
           if (data && data.connections) {
             setFriends(data.connections);
             localStorage.setItem(`${myUsername}_secure_connections`, JSON.stringify(data.connections));
+            window.dispatchEvent(new Event("storage"));
           }
         }
       }
@@ -512,12 +514,35 @@ export default function ProfilePage() {
         if (threadsStr) setFriends(JSON.parse(threadsStr));
       };
 
+      const handleFriendshipEstablished = (data: any) => {
+        const peer = data?.peer;
+        if (!peer?.username) return;
+        // Add to friends list immediately
+        setFriends(prev => {
+          const exists = prev.find((f: any) => f.username?.toLowerCase() === peer.username.toLowerCase());
+          if (exists) return prev;
+          return [...prev, peer];
+        });
+        // Remove from pending
+        setPendingReceived(prev => prev.filter(r => r.from?.toLowerCase() !== peer.username.toLowerCase()));
+        // Persist to localStorage
+        const myUsernameKey = localStorage.getItem("nexora_signup_username") || "";
+        const storageKey = `${myUsernameKey}_secure_connections`;
+        const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        if (!existing.find((e: any) => e.username?.toLowerCase() === peer.username.toLowerCase())) {
+          localStorage.setItem(storageKey, JSON.stringify([peer, ...existing]));
+          window.dispatchEvent(new Event("storage"));
+        }
+      };
+
       socket.on("connection_request", handleRequest);
       socket.on("connection_accepted", handleAccepted);
+      socket.on("friendship_established", handleFriendshipEstablished);
 
       return () => {
         socket.off("connection_request", handleRequest);
         socket.off("connection_accepted", handleAccepted);
+        socket.off("friendship_established", handleFriendshipEstablished);
       };
     }
 
@@ -896,13 +921,13 @@ export default function ProfilePage() {
                         onClick={() => handleRespond(req.id, req.from, "decline")}
                         className="flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all"
                         style={{ background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", color: "var(--text-muted)" }}>
-                        Remove
+                        Decline
                       </motion.button>
                       <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.93 }}
                         onClick={() => handleRespond(req.id, req.from, "accept")}
                         className="flex-1 sm:sm:flex-none px-6 py-2 rounded-xl text-xs font-black text-white shadow-lg"
                         style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>
-                        Confirm
+                        Accept
                       </motion.button>
                     </div>
                   </motion.div>

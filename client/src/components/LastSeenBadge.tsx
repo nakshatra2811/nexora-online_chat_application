@@ -15,6 +15,9 @@ interface LastSeenBadgeProps {
 export const LastSeenBadge = ({ isOnline, lastVisit, className = "" }: LastSeenBadgeProps) => {
   const [phase, setPhase] = useState<"initial" | "scanning" | "final">("initial");
 
+  // Privacy Rule: If hidden, show nothing at all
+  if (!isOnline && !lastVisit) return null;
+
   useEffect(() => {
     if (isOnline) {
       setPhase("initial");

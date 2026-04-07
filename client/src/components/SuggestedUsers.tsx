@@ -65,7 +65,7 @@ export function SuggestedUsers() {
     }
   };
 
-  const handleFollow = async (target: string) => {
+  const handleRequest = async (target: string) => {
     const me = localStorage.getItem("nexora_signup_username") || "";
     try {
       await nexoraFetch("/api/connections/request", {
@@ -74,7 +74,7 @@ export function SuggestedUsers() {
       });
       setSentUsernames(prev => [...prev, target]);
     } catch (err) {
-      ((..._args: any[]) => {})("Follow failed", err);
+      ((..._args: any[]) => {})("Request failed", err);
     }
   };
 
@@ -144,15 +144,9 @@ export function SuggestedUsers() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => router.push(`/dashboard/chats?u=${u.username}`)}
+                      onClick={() => handleRequest(u.username)}
                       className="p-2.5 rounded-xl bg-[#6c5ce7] text-white shadow-md hover:scale-110 active:scale-90 transition-all border border-[#6c5ce7]/10"
-                      title="Send Message"
-                    >
-                      <MessageSquare size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleFollow(u.username)}
-                      className="p-2.5 rounded-xl bg-white dark:bg-white/10 text-[#6c5ce7] shadow-sm hover:scale-110 active:scale-90 transition-all border border-[#6c5ce7]/10"
+                      title="Send Friend Request"
                     >
                       <UserPlus size={18} />
                     </button>

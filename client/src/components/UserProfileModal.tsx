@@ -12,6 +12,7 @@ import {
 } from "./SocialIcons";
 import { Avatar } from "./Avatar";
 import { LastSeenBadge } from "./LastSeenBadge";
+import { ConnectionButton, ConnectionStatus } from "./ConnectionButton";
 
 // ─── Unique QR per username (same canvas logic but seeded on username) ───
 function generateUniqueQR(username: string, size = 160): string {
@@ -78,9 +79,12 @@ interface UserProfileModalProps {
   onBlock: () => void;
   isChatLocked?: boolean;
   onToggleLock?: () => void;
+  connectionStatus?: ConnectionStatus;
+  requestId?: number;
+  onConnectionChange?: (newStatus: ConnectionStatus) => void;
 }
 
-export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall, onVideoCall, onBlock, isChatLocked, onToggleLock }: UserProfileModalProps) {
+export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall, onVideoCall, onBlock, isChatLocked, onToggleLock, connectionStatus = "friends", requestId, onConnectionChange }: UserProfileModalProps) {
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrUrl, setQrUrl] = useState("");
@@ -243,23 +247,51 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
 
             {/* Action buttons */}
             <div className="flex flex-col gap-4">
-              <div className={`grid gap-3 ${friend.username === "nexora_31" ? "grid-cols-1" : "grid-cols-3"}`}>
-                {[
-                  { label: "Message", icon: MessageSquare, color: "#6c5ce7", bg: isDark ? "rgba(108,92,231,0.15)" : "rgba(108,92,231,0.08)", action: onChat },
-                  { label: "Voice", icon: Phone, color: "#2ed573", bg: isDark ? "rgba(46,213,115,0.15)" : "rgba(46,213,115,0.08)", action: onVoiceCall },
-                  { label: "Video", icon: Video, color: "#00d4ff", bg: isDark ? "rgba(0,212,255,0.15)" : "rgba(0,212,255,0.08)", action: onVideoCall },
-                ]
-                  .filter(btn => !(friend.username === 'nexora_31' && (btn.label === 'Voice' || btn.label === 'Video')))
-                  .map(btn => (
-                    <motion.button key={btn.label} whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
-                      onClick={btn.action}
-                      className="flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all border border-transparent hover:border-current"
-                      style={{ background: btn.bg, color: btn.color }}>
-                      <btn.icon className="w-6 h-6" />
-                      <span className="text-[11px] font-black uppercase tracking-widest">{btn.label}</span>
-                    </motion.button>
-                  ))}
-              </div>
+              {/* Friends: show Message / Voice / Video */}
+              {connectionStatus === "friends" && (
+                <div className={`grid gap-3 ${friend.username === "nexora_31" ? "grid-cols-1" : "grid-cols-3"}`}>
+                  {[
+                    { label: "Message", icon: MessageSquare, color: "#6c5ce7", bg: isDark ? "rgba(108,92,231,0.15)" : "rgba(108,92,231,0.08)", action: onChat },
+                    { label: "Voice", icon: Phone, color: "#2ed573", bg: isDark ? "rgba(46,213,115,0.15)" : "rgba(46,213,115,0.08)", action: onVoiceCall },
+                    { label: "Video", icon: Video, color: "#00d4ff", bg: isDark ? "rgba(0,212,255,0.15)" : "rgba(0,212,255,0.08)", action: onVideoCall },
+                  ]
+                    .filter(btn => !(friend.username === 'nexora_31' && (btn.label === 'Voice' || btn.label === 'Video')))
+                    .map(btn => (
+                      <motion.button key={btn.label} whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}
+                        onClick={btn.action}
+                        className="flex flex-col items-center justify-center gap-2 py-4 rounded-[1.5rem] transition-all border border-transparent hover:border-current"
+                        style={{ background: btn.bg, color: btn.color }}>
+                        <btn.icon className="w-6 h-6" />
+                        <span className="text-[11px] font-black uppercase tracking-widest">{btn.label}</span>
+                      </motion.button>
+                    ))}
+                </div>
+              )}
+
+              {/* Not friends: show ConnectionButton + gating message */}
+              {connectionStatus !== "friends" && friend.username !== "nexora_31" && (
+                <div className="flex flex-col gap-3">
+                  <ConnectionButton
+                    targetUsername={friend.username}
+                    initialStatus={connectionStatus}
+                    requestId={requestId}
+                    size="lg"
+                    fullWidth
+                    onStatusChange={(newStatus, peerData) => {
+                      onConnectionChange?.(newStatus, peerData);
+                      if (newStatus === "friends") {
+                        // Instantly unlock chat/call in this modal
+                        onConnectionChange?.("friends");
+                      }
+                    }}
+                  />
+                  <div className="flex items-center justify-center gap-2 py-3 rounded-2xl"
+                    style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: "1px dashed rgba(255,255,255,0.1)" }}>
+                    <Shield className="w-3.5 h-3.5 opacity-30" />
+                    <p className="text-[11px] font-bold uppercase tracking-widest opacity-30">Become friends to chat &amp; call</p>
+                  </div>
+                </div>
+              )}
 
               {friend.username !== "nexora_31" && (
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}

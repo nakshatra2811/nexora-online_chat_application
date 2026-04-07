@@ -12,6 +12,7 @@ import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 import { socketService } from "@/lib/socket";
 import { Avatar } from "@/components/Avatar";
+import { ConnectionButton } from "@/components/ConnectionButton";
 
 // ─── Instagram-style Profile Preview Modal ────────────────────────────────────
 function ProfileModal({
@@ -200,35 +201,37 @@ function ProfileModal({
 
             {/* Action buttons */}
             <div className="w-full flex gap-2">
-              {!requested && !profile?.isFriend && !profile?.requestSent ? (
+              <ConnectionButton
+                targetUsername={user.username}
+                initialStatus={
+                  profile?.isFriend
+                    ? "friends"
+                    : requested
+                    ? "pending_sent"
+                    : profile?.requestReceived
+                    ? "pending_received"
+                    : "none"
+                }
+                requestId={profile?.requestId}
+                size="lg"
+                fullWidth
+                onStatusChange={(newStatus) => {
+                  if (newStatus === "friends" || newStatus === "pending_sent") {
+                    onConnect(user.username);
+                  }
+                }}
+              />
+
+              {profile?.isFriend && (
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => { onConnect(user.username); }}
-                  className="flex-[2] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest text-white shadow-lg shadow-[#6c5ce7]/30"
-                  style={{ background: "linear-gradient(135deg, #6c5ce7, #00d4ff)" }}
+                  onClick={() => { router.push(`/dashboard/chats?u=${user.username}`); }}
+                  className="flex-1 py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest bg-[#6c5ce7] text-white shadow-lg"
                 >
-                  <UserPlus className="w-4 h-4" /> {profile?.requestReceived ? "Request Back" : "Connect"}
+                  <MessageSquare className="w-4 h-4" /> Message
                 </motion.button>
-              ) : (
-                <div className={`flex-[2] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest ${
-                  profile?.isFriend 
-                    ? "text-green-500 bg-green-500/10 border border-green-500/20" 
-                    : "text-amber-500 bg-amber-500/10 border border-amber-500/20"
-                }`}>
-                  {profile?.isFriend ? <><Shield className="w-4 h-4" /> Connected</> : <><UserCheck className="w-4 h-4" /> Request Sent</>}
-                </div>
               )}
-              
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => { router.push(`/dashboard/chats?u=${user.username}`); }}
-                className="flex-1 py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] uppercase tracking-widest bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
-                style={{ color: "var(--text-primary)" }}
-              >
-                <MessageSquare className="w-4 h-4" />
-              </motion.button>
             </div>
           </div>
         </motion.div>
@@ -317,14 +320,34 @@ export default function DiscoverPage() {
       ));
     };
 
+    // When a connection is accepted/established, update the affected card
+    const handleFriendshipEstablished = (data: { peer: any }) => {
+      const peerUsername = data?.peer?.username;
+      if (!peerUsername) return;
+      setSuggestions(prev => prev.filter(s =>
+        s.username?.toLowerCase() !== peerUsername.toLowerCase()
+      ));
+    };
+
+    const handleConnectionAccepted = (data: { by: string }) => {
+      // Remove from suggestions when they accept our request (we're now friends)
+      setSuggestions(prev => prev.filter(s =>
+        s.username?.toLowerCase() !== data.by?.toLowerCase()
+      ));
+    };
+
     socket.on("suggestions_update", handleSuggestionsUpdate);
     socket.on("user_status", handleUserStatus);
     socket.on("connection_request", handleConnectionRequest);
+    socket.on("friendship_established", handleFriendshipEstablished);
+    socket.on("connection_accepted", handleConnectionAccepted);
 
     return () => {
       socket.off("suggestions_update", handleSuggestionsUpdate);
       socket.off("user_status", handleUserStatus);
       socket.off("connection_request", handleConnectionRequest);
+      socket.off("friendship_established", handleFriendshipEstablished);
+      socket.off("connection_accepted", handleConnectionAccepted);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [fetchSuggestions]);
@@ -523,22 +546,31 @@ export default function DiscoverPage() {
                         </div>
 
                         {/* Connect button */}
-                        <motion.button
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={e => { e.stopPropagation(); handleConnect(user.username); }}
-                          disabled={requested[user.username]}
-                          className={`w-full py-2.5 rounded-xl flex items-center justify-center gap-1.5 font-black text-[9px] uppercase tracking-widest transition-all ${requested[user.username]
-                              ? "text-green-400 border border-green-400/20 bg-green-400/5"
-                              : "bg-[#6c5ce7] text-white shadow-md shadow-[#6c5ce7]/20 hover:shadow-[#6c5ce7]/40"
-                            }`}
-                        >
-                          {requested[user.username] ? (
-                            <><UserCheck className="w-3 h-3" /><span>Sent</span></>
-                          ) : (
-                            <><UserPlus className="w-3 h-3" /><span>Connect</span></>
-                          )}
-                        </motion.button>
+                        <ConnectionButton
+                          targetUsername={user.username}
+                          initialStatus={
+                            user.isFriend
+                              ? "friends"
+                              : requested[user.username]
+                              ? "pending_sent"
+                              : user.requestReceived
+                              ? "pending_received"
+                              : "none"
+                          }
+                          requestId={user.requestId}
+                          size="sm"
+                          fullWidth
+                          onStatusChange={(newStatus) => {
+                            if (newStatus === "pending_sent") {
+                              setRequested(prev => ({ ...prev, [user.username]: true }));
+                            } else if (newStatus === "none") {
+                              setRequested(prev => ({ ...prev, [user.username]: false }));
+                            } else if (newStatus === "friends") {
+                              // Remove from suggestions — they're now a friend
+                              setSuggestions(prev => prev.filter(s => s.username !== user.username));
+                            }
+                          }}
+                        />
                       </div>
                     </div>
                   </motion.div>

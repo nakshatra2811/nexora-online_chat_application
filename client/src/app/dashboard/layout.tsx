@@ -226,7 +226,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setGeneralNotifications(prev => [{
         id: Date.now() + Math.random(),
         type: 'request_accepted',
-        message: `${data.byName || data.by} accepted your follow request.`,
+        message: `${data.byName || data.by} accepted your friend request.`,
         from_username: data.by,
         time: formatToIndianTime()
       }, ...prev]);
@@ -346,8 +346,43 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.location.href = `/auth?reason=${encodeURIComponent(data.reason || "Session Terminated")}`;
     };
 
+    // ─── friendship_established: instantly add peer to thread list for BOTH sides
+    const handleFriendshipEstablished = (data: { peer: any }) => {
+      const peer = data?.peer;
+      if (!peer?.username) return;
+      const username = localStorage.getItem("nexora_signup_username") || "";
+      if (!username) return;
+
+      const storageKey = `${username}_secure_connections`;
+      const existing: any[] = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      const alreadyExists = existing.find((t: any) => t.username?.toLowerCase() === peer.username.toLowerCase());
+      if (!alreadyExists) {
+        const newThread = {
+          id: peer.id || Date.now(),
+          username: peer.username,
+          name: peer.name || peer.username,
+          color: peer.color || "from-purple-500 to-indigo-500",
+          avatarUrl: peer.avatarUrl || "",
+          online: true,
+          preview: "Connected! Start chatting.",
+          unread: 0,
+          lastMessageTime: Date.now(),
+        };
+        const updated = [newThread, ...existing];
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        // Fire storage event so chats page picks up immediately
+        window.dispatchEvent(new Event("storage"));
+        // Also dispatch custom event for single-page sync
+        window.dispatchEvent(new CustomEvent("friendship_changed", { detail: { peer } }));
+      }
+      // Remove from sent/pending if applicable
+      setPendingRequests(prev => prev.filter(r => r.from?.toLowerCase() !== peer.username.toLowerCase()));
+      setSentRequests(prev => prev.filter(r => r.to?.toLowerCase() !== peer.username.toLowerCase()));
+    };
+
     socket.on("connection_request", handleNewRequest);
     socket.on("connection_accepted", handleAccepted);
+    socket.on("friendship_established", handleFriendshipEstablished);
     socket.on("new_notification", handleNewNotification);
     socket.on("dm:message", handleGlobalMessage);
     socket.on("dm:media", handleGlobalMessage);
@@ -359,6 +394,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       socket.off("connect", doRegister);
       socket.off("connection_request", handleNewRequest);
       socket.off("connection_accepted", handleAccepted);
+      socket.off("friendship_established", handleFriendshipEstablished);
       socket.off("new_notification", handleNewNotification);
       socket.off("dm:message", handleGlobalMessage);
       socket.off("dm:media", handleGlobalMessage);
@@ -379,26 +415,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleFollowBack = async (targetUsername: string) => {
-    const me = localStorage.getItem("nexora_signup_username") || "";
-    try {
-      await nexoraFetch("/api/connections/request", {
-        method: "POST",
-        body: JSON.stringify({ from: me, fromName: me, to: targetUsername }),
-      });
-      alert(`Follow request sent to @${targetUsername}`);
-      // Add to actioned to animate out
-      const notifId = generalNotifications.find(n => n.from_username === targetUsername && n.type === 'request_back_prompt')?.id;
-      if (notifId) setActionedIds(prev => [...prev, notifId]);
 
-      setTimeout(() => {
-        setGeneralNotifications(prev => prev.filter(n => n.from_username !== targetUsername || n.type !== 'request_back_prompt'));
-        if (notifId) setActionedIds(prev => prev.filter(id => id !== notifId));
-      }, 400);
-    } catch (err) {
-      ((..._args: any[]) => { })("Follow back failed");
-    }
-  };
 
   const handleRespond = async (req: typeof pendingRequests[0], action: "accept" | "decline") => {
     const username = localStorage.getItem("nexora_signup_username") || "";
@@ -406,38 +423,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       await nexoraFetch("/api/connections/respond", {
         method: "POST",
-        body: JSON.stringify({ username, requestId: req.id, action }),
+        body: JSON.stringify({ requestId: req.id, action }),
       });
       if (action === "accept") {
-        // Show follow back prompt immediately in activity
+        // Show accepted notification in activity feed
         setGeneralNotifications(prev => [{
           id: Date.now() + Math.random(),
-          type: 'request_back_prompt',
-          message: `${req.fromName} started following you.`,
+          type: 'request_accepted',
+          message: `You and ${req.fromName || req.from} are now friends.`,
           from_username: req.from,
           time: formatToIndianTime()
         }, ...prev]);
 
-        // Add to secure connections in localStorage so chats page picks it up
-        const colors = [
-          "from-purple-500 to-indigo-500", "from-cyan-500 to-blue-500",
-          "from-green-400 to-teal-500", "from-pink-500 to-rose-500",
-          "from-orange-400 to-red-500"
-        ];
-        const existing = JSON.parse(localStorage.getItem(`${username}_secure_connections`) || "[]");
+        // Optimistically add the thread so chats page is ready instantly
+        const storageKey = `${username}_secure_connections`;
+        const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
         const alreadyExists = existing.find((t: any) => t.username === req.from);
         if (!alreadyExists) {
           const newThread = {
             id: req.id,
             username: req.from,
             name: req.fromName || req.from,
-            color: req.fromColor || colors[req.id % colors.length],
+            color: req.fromColor || "from-purple-500 to-indigo-500",
+            avatarUrl: req.avatarUrl || "",
             online: true,
             preview: "Connected! Start chatting.",
-            unread: 1,
+            unread: 0,
+            lastMessageTime: Date.now(),
           };
-          localStorage.setItem(`${username}_secure_connections`, JSON.stringify([...existing, newThread]));
+          localStorage.setItem(storageKey, JSON.stringify([newThread, ...existing]));
           window.dispatchEvent(new Event("storage"));
+          window.dispatchEvent(new CustomEvent("friendship_changed", { detail: { peer: newThread } }));
         }
       }
     } catch { }
@@ -894,8 +910,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                   <p className="text-[11px] opacity-40 mt-0.5">{req.time}</p>
                                 </div>
                                 <div className="flex flex-col gap-1.5 shrink-0">
-                                  <button onClick={() => handleRespond(req, "accept")} className="px-5 py-1.5 rounded-lg text-[12px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white transition-colors">Confirm</button>
-                                  <button onClick={() => handleRespond(req, "decline")} className="px-5 py-1.5 rounded-lg text-[12px] font-bold transition-colors" style={{ background: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", color: "var(--text-primary)" }}>Delete</button>
+                                  <button onClick={() => handleRespond(req, "accept")} className="px-5 py-1.5 rounded-lg text-[12px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white transition-colors">Accept</button>
+                                  <button onClick={() => handleRespond(req, "decline")} className="px-5 py-1.5 rounded-lg text-[12px] font-bold transition-colors" style={{ background: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", color: "var(--text-primary)" }}>Decline</button>
                                 </div>
                               </motion.div>
                             ))}
@@ -931,8 +947,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                       <span className="text-[11px] opacity-40 ml-1">{notif.time || "1w"}</span>
                                     </p>
                                   </div>
-                                  {notif.type === 'request_back_prompt' && (
-                                    <button onClick={() => handleFollowBack(notif.from_username)} className="shrink-0 px-4 py-1.5 rounded-lg text-[12px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white transition-colors">Follow Back</button>
+                                  {notif.type === 'request_accepted' && (
+                                    <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full" style={{ background: "rgba(46,213,115,0.12)" }}>
+                                      <Check className="w-4 h-4 text-[#2ed573]" />
+                                    </div>
                                   )}
                                 </motion.div>
                               );

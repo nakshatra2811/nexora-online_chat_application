@@ -28,6 +28,7 @@ import { Avatar } from "@/components/Avatar";
 import { LastSeenBadge } from "@/components/LastSeenBadge";
 import { ShareProfileModal } from "@/components/ShareProfileModal";
 import { ReportModal } from "@/components/ReportModal";
+import { ConnectionButton } from "@/components/ConnectionButton";
 
 const TUNNEL_ID = "nexora_secure_room_1";
 const TUNNEL_PASSWORD = "super_secret_e2e_password_123";
@@ -1706,9 +1707,35 @@ function ChatsPageContent() {
         setPendingRequests(prev => prev.filter(req => req.from !== data.by));
         pushService.showLocalNotification(
           "Connection Accepted!",
-          `${data.byName || data.by} accepted your follow request 🎉`,
+          `${data.byName || data.by} accepted your friend request 🎉`,
           {}
         );
+      });
+
+      // friendship_established: instantly add the new friend thread without full refetch
+      socket.on("friendship_established", (data: { peer: any }) => {
+        const peer = data?.peer;
+        if (!peer?.username) return;
+        setThreads(prev => {
+          const exists = prev.find(t => t.username?.toLowerCase() === peer.username?.toLowerCase());
+          if (exists) return prev;
+          const newThread = {
+            id: peer.id || Date.now(),
+            username: peer.username,
+            name: peer.name || peer.username,
+            color: peer.color || "from-purple-500 to-indigo-500",
+            avatarUrl: peer.avatarUrl || "",
+            online: true,
+            preview: "Connected! Start chatting.",
+            unread: 0,
+            lastMessageTime: Date.now(),
+          };
+          const updated = [newThread, ...prev];
+          localStorage.setItem(sKey("secure_connections"), JSON.stringify(updated));
+          return updated;
+        });
+        setSentRequests(prev => prev.filter(r => r !== peer.username));
+        setPendingRequests(prev => prev.filter(r => r.from !== peer.username));
       });
 
       socket.on("new_notification", (data: any) => {
@@ -1735,7 +1762,7 @@ function ChatsPageContent() {
         });
         // Show local notification
         pushService.showLocalNotification(
-          `New Follow Request`,
+          `New Friend Request`,
           `${data.fromName || data.from} wants to connect with you`,
           {}
         );
@@ -2806,8 +2833,8 @@ function ChatsPageContent() {
                           </div>
                         </div>
                         <div className="flex flex-col gap-1.5 shrink-0">
-                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="px-4 py-1.5 rounded-lg text-[11px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white">Confirm</button>
-                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="px-4 py-1.5 rounded-lg text-[11px] font-bold bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10" style={{ color: "var(--text-primary)" }}>Delete</button>
+                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'accept'); }} className="px-4 py-1.5 rounded-lg text-[11px] font-bold bg-[#6c5ce7] hover:bg-[#5a4cdb] text-white">Accept</button>
+                          <button onClick={(e) => { e.stopPropagation(); handleRespond(req.id, req.from, 'decline'); }} className="px-4 py-1.5 rounded-lg text-[11px] font-bold bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10" style={{ color: "var(--text-primary)" }}>Decline</button>
                         </div>
                       </div>
                     ))}
@@ -4149,7 +4176,7 @@ function ChatsPageContent() {
                                         >
                                           <span className="relative z-10 flex items-center gap-2">
                                             <Plus className="w-3.5 h-3.5" />
-                                            Connect
+                                            Request
                                           </span>
                                           <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
                                         </motion.button>
@@ -4495,46 +4522,95 @@ function ChatsPageContent() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-3 w-full">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                      onClick={() => {
-                        const thread = threads.find(t => t.username === selectedProfileUser.username);
-                        if (thread) { handleOpenThread(thread); setSelectedProfileUser(null); }
-                      }}
-                      className="flex-1 py-4.5 rounded-[28px] bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      Message
-                    </motion.button>
+                  <div className="flex flex-col gap-3 w-full">
+                    {(() => {
+                      const isFriend = threads.some(t => t.username === selectedProfileUser.username);
+                      const isRequested = sentRequests.includes(selectedProfileUser.username);
+                      const pendReq = pendingRequests.find(r => r.from === selectedProfileUser.username);
+                      const isMe = selectedProfileUser.username.toLowerCase() === myProfile.username.toLowerCase();
+                      const isNexoraAdmin = selectedProfileUser.username.toLowerCase() === 'nexora_31';
 
-                    {selectedProfileUser.username.toLowerCase() === 'nexora_31' ? (
-                      <div className="flex-1 py-4 rounded-[28px] bg-[#00d4ff]/10 border border-[#00d4ff]/20 flex items-center justify-center">
-                        <span className="text-[9px] font-black text-[#00d4ff] uppercase tracking-widest">Protocol Channel</span>
-                      </div>
-                    ) : selectedProfileUser.username.toLowerCase() === myProfile.username.toLowerCase() ? (
-                      <div className="flex-1 py-4 rounded-[28px] bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-                        <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest">Personal Profile</span>
-                      </div>
-                    ) : (
-                      blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
+                      if (isMe) return (
+                        <div className="py-4 rounded-[28px] bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                          <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest">Personal Profile</span>
+                        </div>
+                      );
+
+                      if (isNexoraAdmin) return (
                         <motion.button
                           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                          onClick={() => handleUnblockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
-                          className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
+                          onClick={() => {
+                            const thread = threads.find(t => t.username === selectedProfileUser.username);
+                            if (thread) { handleOpenThread(thread); setSelectedProfileUser(null); }
+                          }}
+                          className="w-full py-4.5 rounded-[28px] bg-[#00d4ff] text-white font-black uppercase text-[11px] tracking-widest shadow-lg"
                         >
-                          Unblock
+                          Message Protocol
                         </motion.button>
-                      ) : (
-                        <motion.button
-                          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                          onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
-                          className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
-                        >
-                          Block
-                        </motion.button>
-                      )
-                    )}
+                      );
+
+                      return (
+                        <>
+                          <div className="flex gap-3 w-full">
+                            {isFriend ? (
+                              <motion.button
+                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                                onClick={() => {
+                                  const thread = threads.find(t => t.username === selectedProfileUser.username);
+                                  if (thread) { handleOpenThread(thread); setSelectedProfileUser(null); }
+                                }}
+                                className="flex-1 py-4.5 rounded-[28px] bg-gradient-to-r from-[#6c5ce7] to-[#8c7ae6] text-white font-black uppercase text-[11px] tracking-widest shadow-xl"
+                              >
+                                Message
+                              </motion.button>
+                            ) : (
+                              <div className="flex-1">
+                                <ConnectionButton
+                                  targetUsername={selectedProfileUser.username}
+                                  initialStatus={
+                                    pendReq ? "pending_received"
+                                    : isRequested ? "pending_sent"
+                                    : "none"
+                                  }
+                                  requestId={pendReq?.id}
+                                  size="md"
+                                  fullWidth
+                                  onStatusChange={(newStatus) => {
+                                    if (newStatus === "friends") {
+                                      // Re-fetch connections to add thread
+                                      fetchConnections();
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
+
+                            {blockedThreads.includes(selectedProfileUser.id || 0) || blockedThreads.includes(threads.find(t => t.username === selectedProfileUser.username)?.id || -1) ? (
+                              <motion.button
+                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                                onClick={() => handleUnblockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
+                                className="px-8 py-4.5 rounded-[28px] bg-green-500/10 text-green-500 font-black uppercase text-[11px] tracking-widest border border-green-500/20"
+                              >
+                                Unblock
+                              </motion.button>
+                            ) : (
+                              <motion.button
+                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                                onClick={() => handleBlockUser(selectedProfileUser.id || threads.find(t => t.username === selectedProfileUser.username)?.id || 0)}
+                                className="px-8 py-4.5 rounded-[28px] bg-red-500/10 text-red-500 font-black uppercase text-[11px] tracking-widest border border-red-500/20"
+                              >
+                                Block
+                              </motion.button>
+                            )}
+                          </div>
+                          {!isFriend && (
+                            <p className="text-[10px] font-bold opacity-40 text-center uppercase tracking-widest mt-1">
+                              Connections are required to start a chat
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -5001,10 +5077,10 @@ function ChatsPageContent() {
                                       <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.95 }}
                                         onClick={() => { if (pendReq) handleRespond(pendReq.id, pendReq.from, 'accept'); }}
                                         className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider text-white"
-                                        style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>Confirm</motion.button>
+                                        style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)" }}>Accept</motion.button>
                                       <button onClick={() => { if (pendReq) handleRespond(pendReq.id, pendReq.from, 'decline'); }}
                                         className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
-                                        style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: "var(--text-secondary)" }}>Delete</button>
+                                        style={{ background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)", color: "var(--text-secondary)" }}>Decline</button>
                                     </div>
                                   ) : isRequested ? (
                                     <div className="px-4 py-2.5 rounded-2xl border border-yellow-500/30 bg-yellow-500/5">
@@ -5015,7 +5091,7 @@ function ChatsPageContent() {
                                       onClick={(e) => { e.stopPropagation(); handleSendConnectionRequest(user, e); }}
                                       className="px-5 py-3 sm:px-6 sm:py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-2xl relative overflow-hidden group/btn"
                                       style={{ background: "linear-gradient(135deg,#6c5ce7,#00d4ff)", boxShadow: "0 10px 30px rgba(108,92,231,0.3)" }}>
-                                      <span className="relative z-10 flex items-center gap-2"><Plus className="w-3.5 h-3.5" />Connect</span>
+                                      <span className="relative z-10 flex items-center gap-2"><Plus className="w-3.5 h-3.5" />Request</span>
                                       <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
                                     </motion.button>
                                   )}

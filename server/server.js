@@ -243,7 +243,9 @@ let pgPool;
                 phone_hash TEXT,
                 last_visit ${dbType === 'postgres' ? 'BIGINT' : 'INTEGER'},
                 google_uid TEXT,
-                avatar_url TEXT
+                avatar_url TEXT,
+                privacy_last_seen TEXT DEFAULT 'everyone',
+                privacy_online TEXT DEFAULT 'everyone'
             );
 
             CREATE TABLE IF NOT EXISTS connection_requests (
@@ -366,6 +368,9 @@ let pgPool;
         try { await db.run("ALTER TABLE connections ADD COLUMN wallpaper TEXT"); } catch (e) { }
         // Migration for Google OAuth (google_uid links Firebase UID to account)
         try { await db.run("ALTER TABLE users ADD COLUMN google_uid TEXT DEFAULT NULL"); } catch (e) { }
+        // Migration for Privacy Settings
+        try { await db.run("ALTER TABLE users ADD COLUMN privacy_last_seen TEXT DEFAULT 'everyone'"); } catch (e) { }
+        try { await db.run("ALTER TABLE users ADD COLUMN privacy_online TEXT DEFAULT 'everyone'"); } catch (e) { }
 
         // Migration for Avatar System (Modernization)
         // Clear old static logo from existing users so they get the new premium dynamic avatars
@@ -1191,11 +1196,22 @@ io.on('connection', (socket) => {
         const normalizedId = userId.toLowerCase();
         socketToUser.set(socket.id, normalizedId);
 
+        // Fetch user privacy settings on registration
+        let userPrivacy = { last_seen: 'everyone', online: 'everyone' };
+        try {
+            const user = await db.get('SELECT privacy_last_seen, privacy_online FROM users WHERE LOWER(username) = ?', [normalizedId]);
+            if (user) {
+                userPrivacy = { 
+                    last_seen: user.privacy_last_seen || 'everyone', 
+                    online: user.privacy_online || 'everyone' 
+                };
+            }
+        } catch (e) { }
+
         const updateActivity = async (uid) => {
             const now = Date.now();
             try {
                 await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, uid]);
-                // io.emit('user_activity', { userId: uid, last_visit: now }); // Optionally broadcast online activity
             } catch (e) { }
         };
 
@@ -1204,16 +1220,64 @@ io.on('connection', (socket) => {
             if (uid) updateActivity(uid);
         });
 
-        // Joining a room named after the userId allows us to emit to all of their devices
         socket.join(normalizedId);
-        console.log(`[+] Registered: ${normalizedId} → Channel Sync Active`);
+        console.log(`[+] Registered: ${normalizedId} (Online: ${userPrivacy.online}, LastSeen: ${userPrivacy.last_seen})`);
 
-        // 1. Broadcast online status to others
-        socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
+        // Get list of friends to filter broadcasts if needed
+        const myFriends = [];
+        try {
+            const connections = await db.all(
+                'SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?',
+                [normalizedId, normalizedId]
+            );
+            connections.forEach(c => {
+                myFriends.push(c.user_a.toLowerCase() === normalizedId ? c.user_b.toLowerCase() : c.user_a.toLowerCase());
+            });
+        } catch (e) { }
+
+        // 1. Broadcast online status to others respecting privacy
+        if (userPrivacy.online === 'everyone') {
+            socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
+        } else if (userPrivacy.online === 'same_as_last_seen') {
+            if (userPrivacy.last_seen === 'everyone') {
+                socket.broadcast.emit('user_status', { userId: normalizedId, status: 'online' });
+            } else if (userPrivacy.last_seen === 'contacts') {
+                myFriends.forEach(f => io.to(f).emit('user_status', { userId: normalizedId, status: 'online' }));
+            }
+            // if 'nobody', don't emit online status
+        }
 
         // 2. Send INITIAL list of online users to the registering user
-        const onlineUsernames = Array.from(new Set(Array.from(socketToUser.values())));
-        socket.emit('current_online_users', onlineUsernames);
+        // We must filter this list as well: only show users who are online AND whose privacy allows us to see them
+        const allConnectedUsernames = Array.from(new Set(Array.from(socketToUser.values())));
+        const visibleOnlineUsers = [];
+        
+        for (const targetId of allConnectedUsernames) {
+            if (targetId === normalizedId) {
+                visibleOnlineUsers.push(targetId);
+                continue;
+            }
+            try {
+                const targetUser = await db.get('SELECT privacy_online, privacy_last_seen FROM users WHERE LOWER(username) = ?', [targetId]);
+                if (!targetUser) continue;
+                
+                const tP = { online: targetUser.privacy_online || 'everyone', last_seen: targetUser.privacy_last_seen || 'everyone' };
+                
+                if (tP.online === 'everyone') {
+                    visibleOnlineUsers.push(targetId);
+                } else if (tP.online === 'same_as_last_seen') {
+                    if (tP.last_seen === 'everyone') {
+                        visibleOnlineUsers.push(targetId);
+                    } else if (tP.last_seen === 'contacts' && myFriends.includes(targetId)) {
+                        visibleOnlineUsers.push(targetId);
+                    }
+                }
+            } catch (e) {
+                visibleOnlineUsers.push(targetId); // Fallback to visible
+            }
+        }
+        
+        socket.emit('current_online_users', visibleOnlineUsers);
 
         // Update last visit just in case server restarts while online
         try {
@@ -1610,10 +1674,43 @@ io.on('connection', (socket) => {
             const userRoom = io.sockets.adapter.rooms.get(userId);
             if (!userRoom || userRoom.size === 0) {
                 const now = Date.now();
+                let userPrivacy = { last_seen: 'everyone', online: 'everyone' };
                 try {
+                    const user = await db.get('SELECT privacy_last_seen, privacy_online FROM users WHERE LOWER(username) = ?', [userId]);
+                    if (user) {
+                        userPrivacy = { 
+                            last_seen: user.privacy_last_seen || 'everyone', 
+                            online: user.privacy_online || 'everyone' 
+                        };
+                    }
                     await db.run('UPDATE users SET last_visit = ? WHERE username = ?', [now, userId]);
                 } catch (e) { }
-                io.emit('user_status', { userId, status: 'offline', last_visit: now });
+
+                // Broadcast offline status respecting privacy
+                const broadcastOffline = () => {
+                    io.emit('user_status', { userId, status: 'offline', last_visit: now });
+                };
+
+                if (userPrivacy.online === 'everyone') {
+                    broadcastOffline();
+                } else if (userPrivacy.online === 'same_as_last_seen') {
+                    if (userPrivacy.last_seen === 'everyone') {
+                        broadcastOffline();
+                    } else if (userPrivacy.last_seen === 'contacts') {
+                        // Only friends should see them go offline
+                        try {
+                            const connections = await db.all(
+                                'SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?',
+                                [userId, userId]
+                            );
+                            connections.forEach(c => {
+                                const friend = c.user_a.toLowerCase() === userId ? c.user_b.toLowerCase() : c.user_a.toLowerCase();
+                                io.to(friend).emit('user_status', { userId, status: 'offline', last_visit: now });
+                            });
+                        } catch (e) { }
+                    }
+                }
+                
                 console.log(`[-] Registered Identity Fully Logged Off: ${userId}`);
             }
         }
@@ -2206,7 +2303,11 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
             email: user.email,
             avatarUrl: (user.avatar_url && user.avatar_url !== 'null') ? user.avatar_url : null,
             color: user.color,
-            phoneNumber: decryptField(user.phone_number)
+            phoneNumber: decryptField(user.phone_number),
+            privacy: {
+                lastSeen: user.privacy_last_seen || 'everyone',
+                online: user.privacy_online || 'everyone'
+            }
         });
     } catch (err) {
         console.error("[AUTH ME] Protocol Error:", err);
@@ -3088,41 +3189,69 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
         if (!user) return res.status(404).json({ error: "User not found" });
 
         // PII Fields will be decrypted in cleanUser mapping below
+        
+        // 1. Check if they are friends to apply privacy rules
+        const connection = await db.get(
+            'SELECT id FROM connections WHERE (LOWER(user_a) = ? AND LOWER(user_b) = ?) OR (LOWER(user_a) = ? AND LOWER(user_b) = ?)',
+            [myUsername, targetUsername, targetUsername, myUsername]
+        );
+        const isFriend = !!connection;
 
+        // Apply Privacy Rules
+        let lastVisit = user.last_visit;
+        let onlineStatusVisibility = true;
+
+        const privacyLastSeen = user.privacy_last_seen || 'everyone';
+        const privacyOnline = user.privacy_online || 'everyone';
+
+        if (privacyLastSeen === 'nobody' && targetUsername !== myUsername) {
+            lastVisit = null;
+        } else if (privacyLastSeen === 'contacts' && !isFriend && targetUsername !== myUsername) {
+            lastVisit = null;
+        }
+
+        // Check if user is currently connected (online)
+        const allConnectedUsernames = Array.from(new Set(Array.from(socketToUser.values())));
+        const isCurrentlyConnected = allConnectedUsernames.includes(targetUsername);
+        
+        let displayOnline = isCurrentlyConnected;
+        if (targetUsername !== myUsername) {
+            if (privacyOnline === 'same_as_last_seen') {
+                if (privacyLastSeen === 'nobody') displayOnline = false;
+                else if (privacyLastSeen === 'contacts' && !isFriend) displayOnline = false;
+            }
+        }
 
         // Calculate Mutual Friends
         let mutualFriends = [];
         if (targetUsername !== myUsername) {
-            const mutualsSql = `
-                SELECT u.username, u.full_name AS "fullName", u.avatar_url AS "avatarUrl", u.color
-                FROM connections c1
-                JOIN connections c2 ON (
-                    (LOWER(c1.user_a) = LOWER(c2.user_a) AND LOWER(c1.user_a) != LOWER(?) AND LOWER(c1.user_a) != LOWER(?)) OR
-                    (LOWER(c1.user_a) = LOWER(c2.user_b) AND LOWER(c1.user_a) != LOWER(?) AND LOWER(c1.user_a) != LOWER(?)) OR
-                    (LOWER(c1.user_b) = LOWER(c2.user_a) AND LOWER(c1.user_b) != LOWER(?) AND LOWER(c1.user_b) != LOWER(?)) OR
-                    (LOWER(c1.user_b) = LOWER(c2.user_b) AND LOWER(c1.user_b) != LOWER(?) AND LOWER(c1.user_b) != LOWER(?))
-                )
-                JOIN users u ON LOWER(u.username) = 
-                    CASE 
-                        WHEN LOWER(c1.user_a) = LOWER(? ) OR LOWER(c1.user_a) = LOWER(?) THEN LOWER(c1.user_b)
-                        ELSE LOWER(c1.user_a)
-                    END
-                WHERE (LOWER(c1.user_a) = LOWER(?) OR LOWER(c1.user_b) = LOWER(?))
-                  AND (LOWER(c2.user_a) = LOWER(?) OR LOWER(c2.user_b) = LOWER(?))
-                GROUP BY u.username
-            `;
-            // Simplified approach for better clarity: Get my friends, get their friends, find intersection
-            const myFriendsRows = await db.all('SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', [myUsername, myUsername]);
-            const targetFriendsRows = await db.all('SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', [targetUsername, targetUsername]);
+            // Get my friends
+            const myFriendsRows = await db.all(
+                'SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?', 
+                [myUsername, myUsername]
+            );
+            const myFriendsSet = new Set(
+                myFriendsRows.map(r => r.user_a.toLowerCase() === myUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase())
+            );
 
-            const myFriends = new Set(myFriendsRows.map(r => r.user_a.toLowerCase() === myUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase()));
-            const targetFriends = new Set(targetFriendsRows.map(r => r.user_a.toLowerCase() === targetUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase()));
+            // Get target's friends
+            const targetFriendsRows = await db.all(
+                'SELECT user_a, user_b FROM connections WHERE LOWER(user_a) = ? OR LOWER(user_b) = ?',
+                [targetUsername, targetUsername]
+            );
+            const targetFriendsSet = new Set(
+                targetFriendsRows.map(r => r.user_a.toLowerCase() === targetUsername ? r.user_b.toLowerCase() : r.user_a.toLowerCase())
+            );
 
-            const mutualUsernames = [...myFriends].filter(u => targetFriends.has(u));
+            // Find Intersection
+            const mutualUsernames = [...myFriendsSet].filter(u => targetFriendsSet.has(u));
 
             if (mutualUsernames.length > 0) {
                 const placeholders = mutualUsernames.map(() => '?').join(',');
-                const mutualDetails = await db.all(`SELECT username, full_name AS "fullName", avatar_url AS "avatarUrl", color FROM users WHERE LOWER(username) IN (${placeholders})`, mutualUsernames);
+                const mutualDetails = await db.all(
+                    `SELECT username, full_name AS "fullName", avatar_url AS "avatarUrl", color FROM users WHERE LOWER(username) IN (${placeholders})`, 
+                    mutualUsernames
+                );
                 mutualFriends = mutualDetails.map(m => ({
                     ...m,
                     fullName: decryptField(m.fullName),
@@ -3131,24 +3260,60 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
             }
         }
 
-        // Finalize user object with clean field naming
-        const cleanUser = {
-            ...user,
+        res.json({
+            username: user.username,
             fullName: decryptField(user.fullName),
             email: user.email,
+            role: user.role,
+            createdAt: user.created_at,
+            color: user.color,
             phoneNumber: decryptField(user.phoneNumber),
-            avatarUrl: (user.avatarUrl && user.avatarUrl !== 'null') ? user.avatarUrl : null,
-            bio: decryptField(user.bio),
-            mutualFriends,
-            isFriend: !!isFriend,
-            requestSent: !!sentRequest,
-            requestReceived: !!receivedRequest
-        };
-
-        res.json({ user: cleanUser });
+            avatarUrl: user.avatarUrl,
+            bio: user.bio,
+            lastVisit: lastVisit,
+            isOnline: displayOnline,
+            isFriend: isFriend,
+            mutualFriends: mutualFriends
+        });
     } catch (err) {
         console.error("Profile fetch error:", err);
-        res.status(500).json({ error: "Server error" });
+        res.status(500).json({ error: "Failed to fetch profile info" });
+    }
+});
+
+// Update Privacy Settings
+app.post('/api/user/privacy', authenticateToken, async (req, res) => {
+    const { lastSeen, online } = req.body;
+    const { username } = req.user;
+
+    try {
+        if (!db) return res.status(500).json({ error: "DB offline" });
+        
+        const sets = [];
+        const params = [];
+        if (lastSeen) {
+            sets.push("privacy_last_seen = ?");
+            params.push(lastSeen);
+        }
+        if (online) {
+            sets.push("privacy_online = ?");
+            params.push(online);
+        }
+
+        if (sets.length === 0) return res.status(400).json({ error: "No update payload" });
+
+        params.push(username.toLowerCase());
+        await db.run(`UPDATE users SET ${sets.join(', ')} WHERE LOWER(username) = ?`, params);
+
+        // Immediate broadcast: If user set online to 'nobody', tell everyone they are offline now
+        if (online === 'nobody' || (lastSeen === 'nobody' && online === 'same_as_last_seen')) {
+            io.emit('user_status', { userId: username.toLowerCase(), status: 'offline', last_visit: Date.now() });
+        }
+
+        res.json({ status: "success", message: "Privacy settings synchronization complete." });
+    } catch (err) {
+        console.error("Privacy update error:", err);
+        res.status(500).json({ error: "Failed to update privacy settings" });
     }
 });
 
@@ -3221,7 +3386,7 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         const existingReqToMe = await db.get('SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = \'pending\'', [to, from]);
 
         if (existingReqToMe) {
-            // BACK-ACTION: Cross-request exists, auto-accept it!
+            // CROSS-REQUEST: Both users requested each other — auto-accept!
             await db.run('UPDATE connection_requests SET status = \'accepted\' WHERE id = ?', [existingReqToMe.id]);
 
             const [u1, u2] = [from.toLowerCase(), to.toLowerCase()].sort();
@@ -3229,27 +3394,36 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
                 await db.run('INSERT INTO connections (user_a, user_b) VALUES (?, ?)', [u1, u2]);
             } catch (err) { /* already exists */ }
 
-            // Save notifications for both users
+            // Notifications for both — no 'request_back_prompt' needed
             await db.run(
                 'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
-                [to.toLowerCase(), from.toLowerCase(), 'request_accepted', `${fromName || from} accepted your follow request.`]
+                [to.toLowerCase(), from.toLowerCase(), 'request_accepted', `${fromName || from} is now your friend.`]
             );
             await db.run(
                 'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
-                [from.toLowerCase(), to.toLowerCase(), 'request_back_prompt', `${to} started following you back.`]
+                [from.toLowerCase(), to.toLowerCase(), 'request_accepted', `${to} is now your friend.`]
             );
 
-            // Notify both via socket
+            // Fetch full peer data for both sides
+            const toUser = await db.get('SELECT id, username, full_name as name, color, avatar_url as avatarUrl FROM users WHERE LOWER(username) = ?', [to.toLowerCase()]);
+            const fromUser = await db.get('SELECT id, username, full_name as name, color, avatar_url as avatarUrl FROM users WHERE LOWER(username) = ?', [from.toLowerCase()]);
+
             const senderId = from.toLowerCase();
             const receiverId = to.toLowerCase();
 
-            // Notify Receiver (the person who was REQUESTED)
+            // Notify receiver: they are now friends with the requester
             io.to(receiverId).emit('connection_accepted', { by: senderId, byName: fromName || senderId });
-            io.to(receiverId).emit('new_notification', { type: 'request_accepted', message: `${fromName || senderId} accepted your follow request.`, from_username: senderId });
+            io.to(receiverId).emit('friendship_established', {
+                peer: { ...toUser ? { id: fromUser?.id, username: from, name: decryptField(fromUser?.name) || from, color: fromUser?.color, avatarUrl: decryptField(fromUser?.avatarUrl) } : {} }
+            });
+            io.to(receiverId).emit('new_notification', { type: 'request_accepted', message: `${fromName || senderId} is now your friend.`, from_username: senderId });
 
-            // Notify Sender (the person who REQUESTED BACK)
-            io.to(senderId).emit('connection_accepted', { by: receiverId, byName: receiverId });
-            io.to(senderId).emit('new_notification', { type: 'request_back_prompt', message: `${receiverId} started following you back.`, from_username: receiverId });
+            // Notify sender: they are now friends with the receiver
+            io.to(senderId).emit('connection_accepted', { by: receiverId, byName: to });
+            io.to(senderId).emit('friendship_established', {
+                peer: { ...toUser ? { id: toUser.id, username: to, name: decryptField(toUser.name) || to, color: toUser.color, avatarUrl: decryptField(toUser.avatarUrl) } : {} }
+            });
+            io.to(senderId).emit('new_notification', { type: 'request_accepted', message: `${to} is now your friend.`, from_username: receiverId });
 
             return res.json({ status: 'accepted', message: 'Bidirectional request: Connected!' });
         }
@@ -3432,27 +3606,51 @@ app.post('/api/connections/respond', authenticateToken, async (req, res) => {
                 await db.run('INSERT INTO connections (user_a, user_b) VALUES (?, ?)', [first, second]);
             } catch (err) { /* already connected */ }
 
-            // Insert notification for Sender (User X)
+            // Notification for the original sender (request was accepted)
             await db.run(
                 'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
-                [req_.from_username.toLowerCase(), username.toLowerCase(), 'request_accepted', `${username} accepted your follow request.`]
+                [u1, u2, 'request_accepted', `${decryptField(req_.from_name) || u2} is now your friend.`]
             );
 
-            // Insert notification for Receiver (User Y)
-            await db.run(
-                'INSERT INTO notifications (owner_username, from_username, type, message) VALUES (?, ?, ?, ?)',
-                [username.toLowerCase(), req_.from_username.toLowerCase(), 'request_back_prompt', `${req_.from_name} started following you.`]
+            // Fetch full peer data for real-time thread creation on both sides
+            const accepterUser = await db.get(
+                'SELECT id, username, full_name as name, color, avatar_url as avatarUrl FROM users WHERE LOWER(username) = ?',
+                [username.toLowerCase()]
+            );
+            const requesterUser = await db.get(
+                'SELECT id, username, full_name as name, color, avatar_url as avatarUrl FROM users WHERE LOWER(username) = ?',
+                [req_.from_username.toLowerCase()]
             );
 
-            // Notify the sender via socket
             const senderId = req_.from_username.toLowerCase();
-            io.to(senderId).emit('connection_accepted', { by: username.toLowerCase(), byName: username });
-            io.to(senderId).emit('new_notification', { type: 'request_accepted', message: `${username} accepted your follow request.`, from_username: username.toLowerCase() });
+            const receiverId = username.toLowerCase();
 
-            // Notify the receiver via socket
-            io.to(username.toLowerCase()).emit('new_notification', { type: 'request_back_prompt', message: `${req_.from_name} started following you.`, from_username: req_.from_username.toLowerCase() });
+            // Notify the original sender: their request was accepted
+            io.to(senderId).emit('connection_accepted', { by: receiverId, byName: username });
+            io.to(senderId).emit('friendship_established', {
+                peer: {
+                    id: accepterUser?.id,
+                    username: accepterUser?.username || username,
+                    name: decryptField(accepterUser?.name) || username,
+                    color: accepterUser?.color,
+                    avatarUrl: decryptField(accepterUser?.avatarUrl)
+                }
+            });
+            io.to(senderId).emit('new_notification', { type: 'request_accepted', message: `${username} accepted your friend request.`, from_username: receiverId });
 
-            // Broadcast mutual friend graph change to update suggestions for all clients organically
+            // Notify the accepter: confirm friendship is live
+            io.to(receiverId).emit('friendship_established', {
+                peer: {
+                    id: requesterUser?.id,
+                    username: requesterUser?.username || senderId,
+                    name: decryptField(requesterUser?.name) || senderId,
+                    color: requesterUser?.color,
+                    avatarUrl: decryptField(requesterUser?.avatarUrl)
+                }
+            });
+            io.to(receiverId).emit('new_notification', { type: 'request_accepted', message: `${decryptField(req_.from_name) || senderId} is now your friend.`, from_username: senderId });
+
+            // Broadcast global suggestion refresh
             io.emit('suggestions_update', { timestamp: Date.now() });
         } else {
             await db.run('UPDATE connection_requests SET status = \'declined\' WHERE id = ?', [requestId]);
@@ -3462,6 +3660,43 @@ app.post('/api/connections/respond', authenticateToken, async (req, res) => {
     } catch (err) {
         console.log("Respond Error:", err);
         res.status(500).json({ error: "Server Error" });
+    }
+});
+
+// ─── Lightweight connection status check ────────────────────────────────────
+app.get('/api/connections/status/:targetUsername', authenticateToken, async (req, res) => {
+    const me = req.user.username;
+    const target = req.params.targetUsername;
+    if (!me || !target) return res.json({ status: 'none' });
+    try {
+        if (!db) return res.json({ status: 'none' });
+
+        // Check existing friendship
+        const conn = await db.get(
+            `SELECT id FROM connections
+             WHERE (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))
+                OR (LOWER(user_a) = LOWER(?) AND LOWER(user_b) = LOWER(?))`,
+            [me, target, target, me]
+        );
+        if (conn) return res.json({ status: 'friends' });
+
+        // Check sent by me
+        const sent = await db.get(
+            `SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = 'pending'`,
+            [me, target]
+        );
+        if (sent) return res.json({ status: 'pending_sent', requestId: sent.id });
+
+        // Check received by me
+        const received = await db.get(
+            `SELECT id FROM connection_requests WHERE LOWER(from_username) = LOWER(?) AND LOWER(to_username) = LOWER(?) AND status = 'pending'`,
+            [target, me]
+        );
+        if (received) return res.json({ status: 'pending_received', requestId: received.id });
+
+        return res.json({ status: 'none' });
+    } catch (err) {
+        res.json({ status: 'none' });
     }
 });
 

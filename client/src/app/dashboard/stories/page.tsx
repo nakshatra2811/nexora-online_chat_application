@@ -7,6 +7,7 @@ import { Play, X, Clock, Eye, Plus, Heart, Send, Camera, Zap, ImageIcon, Trash2,
 import { useTheme } from "@/lib/theme";
 import { nexoraFetch } from "@/lib/config";
 import { Avatar } from "@/components/Avatar";
+import { ConnectionButton } from "@/components/ConnectionButton";
 
 const SNAP_REACTIONS = ["🔥", "❤️", "😮", "👏", "💎", "🚀"];
 
@@ -1570,30 +1571,38 @@ export default function StoriesPage() {
                     </p>
                   </div>
 
-                  <div className="w-full mb-6 flex gap-2">
-                    <motion.button 
-                      whileHover={{ scale: profileData?.isFriend || profileData?.requestSent ? 1 : 1.02 }} 
-                      whileTap={{ scale: profileData?.isFriend || profileData?.requestSent ? 1 : 0.96 }}
-                      onClick={() => !profileData?.isFriend && !profileData?.requestSent && handleAddFriend(selectedProfileUser.username)}
-                      disabled={profileData?.isFriend || profileData?.requestSent}
-                      className={`flex-[2] py-3.5 rounded-xl font-black uppercase text-[11px] tracking-widest transition-all shadow-lg ${
-                        profileData?.isFriend 
-                          ? 'bg-green-500/20 text-green-500 shadow-none border border-green-500/20' 
-                          : profileData?.requestSent 
-                            ? 'bg-amber-500/20 text-amber-500 shadow-none border border-amber-500/20' 
-                            : 'bg-[#6c5ce7] text-white shadow-purple-500/20'
-                      }`}
-                    >
-                      {profileData?.isFriend ? "Connected" : profileData?.requestSent ? "Pending..." : profileData?.requestReceived ? "Request Back" : "Connect"}
-                    </motion.button>
-                    <motion.button 
-                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
-                      onClick={() => { router.push(`/dashboard/chats?u=${selectedProfileUser.username}`); }}
-                      className="flex-1 py-3.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-black uppercase text-[11px] tracking-widest transition-all"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      Message
-                    </motion.button>
+                  <div className="w-full mb-6 flex flex-col gap-2">
+                    <ConnectionButton
+                      targetUsername={selectedProfileUser.username}
+                      initialStatus={
+                        profileData?.isFriend
+                          ? "friends"
+                          : profileData?.requestSent
+                          ? "pending_sent"
+                          : profileData?.requestReceived
+                          ? "pending_received"
+                          : "none"
+                      }
+                      requestId={profileData?.requestId}
+                      size="md"
+                      fullWidth
+                      onStatusChange={(newStatus) => {
+                        if (newStatus === "friends") {
+                          // Refresh profile data to show message button
+                          setSelectedProfileUser((prev: any) => prev ? { ...prev, is_friend: true } : prev);
+                        }
+                      }}
+                    />
+                    {profileData?.isFriend && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.96 }}
+                        onClick={() => { router.push(`/dashboard/chats?u=${selectedProfileUser.username}`); }}
+                        className="w-full py-3.5 rounded-xl font-black uppercase text-[11px] tracking-widest transition-all"
+                        style={{ background: "rgba(108,92,231,0.12)", color: "#6c5ce7" }}
+                      >
+                        Message
+                      </motion.button>
+                    )}
                   </div>
 
                   <div className="flex gap-2 w-full">

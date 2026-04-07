@@ -374,13 +374,58 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState(SETTINGS_SECTIONS);
   const { isDark, toggleTheme } = useTheme();
   const [confirmSetting, setConfirmSetting] = useState<{ si: number; ii: number; label: string; isDanger?: boolean } | null>(null);
-  
+  const [privacy, setPrivacy] = useState<{ lastSeen: string; online: string }>({ lastSeen: 'everyone', online: 'everyone' });
+  const [isSyncingPrivacy, setIsSyncingPrivacy] = useState(false);
   const [userRole, setUserRole] = useState<string>("Normal User");
   
   useEffect(() => {
     const match = document.cookie.match(new RegExp('(^| )nexora_role=([^;]+)'));
     setUserRole(match ? match[2] : "Normal User");
+
+    // Fetch account settings & privacy
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('nexora_token')}` }
+        });
+        const data = await res.json();
+        if (data.privacy) {
+          setPrivacy({
+            lastSeen: data.privacy.lastSeen || 'everyone',
+            online: data.privacy.online || 'everyone'
+          });
+        }
+      } catch (e) {
+        console.error("Failed to fetch settings", e);
+      }
+    };
+    fetchSettings();
   }, []);
+
+  const updatePrivacy = async (key: 'lastSeen' | 'online', value: string) => {
+    const newPrivacy = { ...privacy, [key]: value };
+    setPrivacy(newPrivacy);
+    setIsSyncingPrivacy(true);
+    try {
+      const res = await fetch('/api/user/privacy', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('nexora_token')}` 
+        },
+        body: JSON.stringify(newPrivacy)
+      });
+      if (res.ok) {
+        window.alert("Privacy synchronized success");
+      } else {
+        window.alert("Handshake denied error");
+      }
+    } catch (e) {
+      window.alert("Network connection failure error");
+    } finally {
+      setIsSyncingPrivacy(false);
+    }
+  };
 
   const toggleSetting = (sectionIdx: number, itemIdx: number, label: string) => {
     setConfirmSetting({ si: sectionIdx, ii: itemIdx, label });
@@ -495,6 +540,78 @@ export default function SettingsPage() {
             </div>
             <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" style={{ color: "var(--text-muted)" }} />
           </motion.div>
+        </div>
+      </motion.div>
+
+      {/* ─── PRIVACY CONTROLS (WhatsApp Style) ─── */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+        className="relative z-10 mb-8 max-w-5xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-[#6c5ce7] to-[#00d4ff] shadow-lg">
+            <Eye className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="font-extrabold text-lg" style={{ color: "var(--text-primary)" }}>Account Visibility</h2>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Control who can see your activity status</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+          {/* Last Seen Privacy */}
+          <div className="p-6 rounded-3xl glass-panel relative overflow-hidden border border-white/5 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <RefreshCw className={`w-4 h-4 text-[#6c5ce7] ${isSyncingPrivacy ? 'animate-spin' : ''}`} />
+              <p className="text-sm font-black uppercase tracking-widest text-[#6c5ce7]">Who can see my Last Seen</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {[
+                { id: 'everyone', label: 'Everyone', desc: 'Anyone on Nexora can see your last activity' },
+                { id: 'contacts', label: 'My Contacts', desc: 'Only your mutual connections' },
+                { id: 'nobody', label: 'Nobody', desc: 'Hide your activity from everyone' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => updatePrivacy('lastSeen', opt.id)}
+                  className={`flex flex-col p-4 rounded-2xl text-left transition-all border ${privacy.lastSeen === opt.id ? 'border-[#6c5ce7] bg-[#6c5ce7]/10' : 'border-transparent hover:bg-white/5'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm" style={{ color: privacy.lastSeen === opt.id ? '#6c5ce7' : 'var(--text-primary)' }}>{opt.label}</span>
+                    {privacy.lastSeen === opt.id && <Check className="w-4 h-4 text-[#6c5ce7]" />}
+                  </div>
+                  <p className="text-[10px] opacity-60 mt-1">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Online Privacy */}
+          <div className="p-6 rounded-3xl glass-panel relative overflow-hidden border border-white/5 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Zap className={`w-4 h-4 text-[#00d4ff] ${isSyncingPrivacy ? 'animate-pulse' : ''}`} />
+              <p className="text-sm font-black uppercase tracking-widest text-[#00d4ff]">Who can see when I'm Online</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {[
+                { id: 'everyone', label: 'Everyone', desc: 'Broadcast your live status to all users' },
+                { id: 'same_as_last_seen', label: 'Same as Last Seen', desc: 'Mirror your last seen visibility rules' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => updatePrivacy('online', opt.id)}
+                  className={`flex flex-col p-4 rounded-2xl text-left transition-all border ${privacy.online === opt.id ? 'border-[#00d4ff] bg-[#00d4ff]/10' : 'border-transparent hover:bg-white/5'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm" style={{ color: privacy.online === opt.id ? '#00d4ff' : 'var(--text-primary)' }}>{opt.label}</span>
+                    {privacy.online === opt.id && <Check className="w-4 h-4 text-[#00d4ff]" />}
+                  </div>
+                  <p className="text-[10px] opacity-60 mt-1">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+            <p className="mt-4 text-[10px] leading-relaxed p-3 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20">
+              Note: If you don't share your Last Seen or Online status, you won't be able to see other people's Last Seen or Online status.
+            </p>
+          </div>
         </div>
       </motion.div>
 
