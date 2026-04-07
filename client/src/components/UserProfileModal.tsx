@@ -81,13 +81,14 @@ interface UserProfileModalProps {
   onToggleLock?: () => void;
   connectionStatus?: ConnectionStatus;
   requestId?: number;
-  onConnectionChange?: (newStatus: ConnectionStatus) => void;
+  onConnectionChange?: (newStatus: ConnectionStatus, peerData?: any) => void;
 }
 
-export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall, onVideoCall, onBlock, isChatLocked, onToggleLock, connectionStatus = "friends", requestId, onConnectionChange }: UserProfileModalProps) {
+export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall, onVideoCall, onBlock, isChatLocked, onToggleLock, connectionStatus: initialConnectionStatus = "friends", requestId, onConnectionChange }: UserProfileModalProps) {
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrUrl, setQrUrl] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(initialConnectionStatus);
   const [shareMode, setShareMode] = useState(false);
 
   useEffect(() => {
@@ -278,11 +279,8 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
                     size="lg"
                     fullWidth
                     onStatusChange={(newStatus, peerData) => {
+                      setConnectionStatus(newStatus);
                       onConnectionChange?.(newStatus, peerData);
-                      if (newStatus === "friends") {
-                        // Instantly unlock chat/call in this modal
-                        onConnectionChange?.("friends");
-                      }
                     }}
                   />
                   <div className="flex items-center justify-center gap-2 py-3 rounded-2xl"
