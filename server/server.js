@@ -4796,7 +4796,7 @@ app.patch('/api/admin/users/:username/status', async (req, res) => {
 Sentry.setupExpressErrorHandler(app);
 
 // --- SPA Fallback Routing ---
-app.get('(.*)', (req, res) => {
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
