@@ -10,8 +10,8 @@ export const SOCKET_URL = API_BASE_URL;
 
 // Production app domain — ALWAYS the real URL (used in share links, OG tags, emails)
 // Never localhost — share links must open on the real site, not the dev server
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nexora31.vercel.app';
-export const APP_DOMAIN = 'nexora31.vercel.app';
+export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nexora-online-chat-application.vercel.app';
+export const APP_DOMAIN = 'nexora-online-chat-application.vercel.app';
 
 export const APP_NAME = "Nexora";
 export const BRAND_TAGLINE = "The Privacy Protocol";

@@ -6,7 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   try {
     const configPath = path.join(process.cwd(), "src/config/seo.json");
     const seo = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const siteUrl = seo.siteUrl || "https://nexora31.vercel.app";
+    const siteUrl = seo.siteUrl || "https://nexora-online-chat-application.vercel.app";
 
     return [
       {
@@ -31,13 +31,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   } catch {
     return [
       {
-        url: "https://nexora31.vercel.app",
+        url: "https://nexora-online-chat-application.vercel.app",
         lastModified: new Date(),
         changeFrequency: "weekly",
         priority: 1.0,
       },
       {
-        url: "https://nexora31.vercel.app/blog",
+        url: "https://nexora-online-chat-application.vercel.app/blog",
         lastModified: new Date(),
         changeFrequency: "daily",
         priority: 0.9,

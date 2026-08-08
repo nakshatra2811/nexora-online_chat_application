@@ -527,7 +527,7 @@ app.use(helmet({
 
 // CORS — allow Vercel domain + localhost
 const ALLOWED_ORIGINS = [
-    'https://nexora31.vercel.app',
+    'https://nexora-online-chat-application.vercel.app',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:3002',
@@ -645,7 +645,7 @@ async function nexoraMailProtocol(type, to, data) {
             '{{username}}': data.username || 'User',
             '{{otp}}': data.otp || '------',
             '{{APP_LOGO}}': APP_LOGO,
-            '{{CLIENT_URL}}': process.env.CLIENT_URL || 'https://nexora31.vercel.app',
+            '{{CLIENT_URL}}': process.env.CLIENT_URL || 'https://nexora-online-chat-application.vercel.app',
             '{{YEAR}}': new Date().toLocaleString('en-IN', { year: 'numeric', timeZone: 'Asia/Kolkata' }),
             '{{TIMESTAMP}}': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         };
@@ -751,7 +751,7 @@ async function nexoraMailProtocol(type, to, data) {
                       <!-- CTA -->
                       <tr>
                         <td align="center" style="padding:35px;">
-                          <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" 
+                          <a href="${process.env.CLIENT_URL || 'https://nexora-online-chat-application.vercel.app'}/auth" 
                              style="background:linear-gradient(135deg,#6c5ce7 0%,#00d4ff 100%); color:#ffffff; padding:22px 50px; border-radius:100px; text-decoration:none; font-size:16px; font-weight:800; display:inline-block; box-shadow:0 20px 40px rgba(108,92,231,0.25); letter-spacing:0.5px;">
                             🚀 LAUNCH YOUR ACCOUNT
                           </a>
@@ -950,7 +950,7 @@ async function nexoraMailProtocol(type, to, data) {
                           <p style="color:#64748b; font-size:14px; line-height:1.6; margin-bottom:25px;">
                             If this was not you, lock your terminal immediately and initiate the secure password reset protocol.
                           </p>
-                          <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" 
+                          <a href="${process.env.CLIENT_URL || 'https://nexora-online-chat-application.vercel.app'}/auth" 
                              style="background:#e11d48; color:#ffffff; padding:18px 40px; border-radius:100px; text-decoration:none; font-size:14px; font-weight:800; display:inline-block; box-shadow:0 15px 30px rgba(225,29,72,0.2);">
                             🔒 LOCK ACCOUNT
                           </a>
@@ -2674,7 +2674,7 @@ app.post('/api/admin/approve', async (req, res) => {
                                 </div>
                             </div>
      
-                            <a href="${process.env.CLIENT_URL || 'https://nexora31.vercel.app'}/auth" class="action-btn">START SURFING</a>
+                            <a href="${process.env.CLIENT_URL || 'https://nexora-online-chat-application.vercel.app'}/auth" class="action-btn">START SURFING</a>
                         </div>
 
                         <div class="footer">
@@ -4547,7 +4547,7 @@ app.patch('/api/admin/users/:username/password', authenticateToken, isAdmin, asy
 // GET /api/admin/email-templates — Get all customizable templates
 app.get('/api/admin/email-templates', authenticateToken, isAdmin, (req, res) => {
     const APP_LOGO = "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg";
-    const CLIENT_URL = process.env.CLIENT_URL || 'https://nexora31.vercel.app';
+    const CLIENT_URL = process.env.CLIENT_URL || 'https://nexora-online-chat-application.vercel.app';
 
     // Default templates (what the system uses if no override exists)
     const defaults = {

@@ -115,8 +115,8 @@ export function UserProfileModal({ friend, isDark, onClose, onChat, onVoiceCall,
     };
   }, [friend.username]);
 
-  const [profileUrl, setProfileUrl] = useState(`https://nexora31.vercel.app/auth?connect=${friend.username}`);
-  const [displayUrl, setDisplayUrl] = useState(`https://nexora31.vercel.app/auth?connect=********`);
+  const [profileUrl, setProfileUrl] = useState(`https://nexora-online-chat-application.vercel.app/auth?connect=${friend.username}`);
+  const [displayUrl, setDisplayUrl] = useState(`https://nexora-online-chat-application.vercel.app/auth?connect=********`);
 
   useEffect(() => {
     const APP_URL = window.location.origin;

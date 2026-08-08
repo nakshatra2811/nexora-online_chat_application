@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
   try {
     const configPath = path.join(process.cwd(), "src/config/seo.json");
     const seo = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const siteUrl = seo.siteUrl || "https://nexora31.vercel.app";
+    const siteUrl = seo.siteUrl || "https://nexora-online-chat-application.vercel.app";
     const indexing = seo.indexing !== false;
 
     if (!indexing) {
@@ -29,7 +29,7 @@ export default function robots(): MetadataRoute.Robots {
   } catch {
     return {
       rules: { userAgent: "*", allow: "/" },
-      sitemap: "https://nexora31.vercel.app/sitemap.xml",
+      sitemap: "https://nexora-online-chat-application.vercel.app/sitemap.xml",
     };
   }
 }
