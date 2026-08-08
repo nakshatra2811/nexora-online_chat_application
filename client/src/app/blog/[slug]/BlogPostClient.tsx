@@ -62,7 +62,7 @@ export default function BlogPostClient({ post, slug }: { post: any; slug: string
   const [copied, setCopied] = useState(false);
   
   // Use current origin if available, fallback to hardcoded production URL
-  const [siteUrl, setSiteUrl] = useState("https://nexora-online-chat-application.vercel.app");
+  const [siteUrl, setSiteUrl] = useState("https://nexora-online-chat-application-liart.vercel.app");
   
   useEffect(() => {
     if (typeof window !== "undefined") {

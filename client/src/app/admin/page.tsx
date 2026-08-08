@@ -432,7 +432,7 @@ function EmailTemplatesTab() {
       "{{username}}": "sample_user",
       "{{otp}}": "847291",
       "{{APP_LOGO}}": "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg",
-      "{{CLIENT_URL}}": "https://nexora-online-chat-application.vercel.app",
+      "{{CLIENT_URL}}": "https://nexora-online-chat-application-liart.vercel.app",
       "{{YEAR}}": new Date().getFullYear().toString(),
       "{{TIMESTAMP}}": new Date().toLocaleString(),
     };

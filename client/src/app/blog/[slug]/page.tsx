@@ -18,7 +18,7 @@ async function fetchPost(slug: string) {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const post = await fetchPost(slug);
-  const siteUrl = "https://nexora-online-chat-application.vercel.app";
+  const siteUrl = "https://nexora-online-chat-application-liart.vercel.app";
 
   if (!post) {
     return { title: "Blog | Nexora", description: "Nexora Blog" };

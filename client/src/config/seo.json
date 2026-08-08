@@ -3,7 +3,7 @@
   "titleTemplate": "%s | Nexora Private App",
   "description": "Nexora is the world's most advanced encrypted private chat platform. Securely send messages, voice notes, and media with zero-knowledge end-to-end encryption. Join the fast, safe, and modern real-time secure communication protocol.",
   "keywords": "nexora, private chat, best encrypted messaging, secure chat app, end-to-end encryption, e2e messaging, privacy focused app, secret chat, untraceable messenger, nexora app, best chat app 2024, nextjs chat app, encrypted voice calls, secure private communication",
-  "siteUrl": "https://nexora-online-chat-application.vercel.app",
+  "siteUrl": "https://nexora-online-chat-application-liart.vercel.app",
   "ogImage": "https://res.cloudinary.com/dzpci7b5j/image/upload/v1774956459/logo_zsgzf2.svg",
   "twitterHandle": "@nexoraapp",
   "themeColor": "#6c5ce7",
@@ -12,6 +12,6 @@
   "category": "Technology, Communication, Privacy",
   "language": "en",
   "robots": "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
-  "canonicalUrl": "https://nexora-online-chat-application.vercel.app",
+  "canonicalUrl": "https://nexora-online-chat-application-liart.vercel.app",
   "googleVerification": "-Im1onwbd-wlvLi_CP8FUhDJ3ZkV76NX5mW1GfYa5Es"
 }

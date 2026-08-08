@@ -47,7 +47,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const keywords =
     seo.keywords ||
     "nexora, private chat, encrypted messaging, secure messenger, e2e encryption, privacy chat";
-  const siteUrl = seo.siteUrl || "https://nexora-online-chat-application.vercel.app";
+  const siteUrl = seo.siteUrl || "https://nexora-online-chat-application-liart.vercel.app";
   const ogImage =
     seo.ogImage ||
     `${siteUrl}/icon.png`;
@@ -151,7 +151,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const seo = loadSeo();
-  const siteUrl = seo.siteUrl || "https://nexora-online-chat-application.vercel.app";
+  const siteUrl = seo.siteUrl || "https://nexora-online-chat-application-liart.vercel.app";
 
   // JSON-LD Structured Data
   const jsonLd = {
