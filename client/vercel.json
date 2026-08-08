@@ -16,7 +16,6 @@
     {
       "source": "/api/:path*",
       "destination": "https://nexora-core.onrender.com/api/:path*"
-    },
-    { "source": "/(.*)", "destination": "/" }
+    }
   ]
 }
