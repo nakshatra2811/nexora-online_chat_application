@@ -2678,7 +2678,7 @@ app.post('/api/admin/approve', async (req, res) => {
                         </div>
 
                         <div class="footer">
-                            <span class="footer-brand">Nexora Systems</span>
+                            <span class="footer-brand">Hiral Chudasama</span>
                             <div class="privacy-policy">
                                 <p class="privacy-text">
                                     <strong>IDENTITY VERIFIED:</strong> This is a secure transmission from Nexora Core. All sessions are protected by industry-leading end-to-end encryption. Our zero-knowledge policy ensures that your private data remains your own.
@@ -2807,7 +2807,7 @@ app.post('/api/profile/request-email-change', async (req, res) => {
                                 This is an automated identity verification transmission from Nexora Core. All identity updates are strictly synchronized across your encrypted device graph.
                             </div>
                             <div class="copyright">
-                                &copy; ${new Date().getFullYear()} NEXORA SYSTEMS &bull; PRIVACY PROTOCOL
+                                &copy; ${new Date().getFullYear()} HIRAL CHUDASAMA &bull; PRIVACY PROTOCOL
                             </div>
                         </div>
                     </div>

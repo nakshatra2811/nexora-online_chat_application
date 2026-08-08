@@ -85,7 +85,7 @@ export default function Dashboard() {
         
         <div className="max-w-6xl mx-auto px-6 pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderColor: "rgba(108,92,231,0.08)" }}>
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#94a3b8]">
-            &copy; 2026 Nexora Systems. Deeply Encrypted &bull; Privacy by Design.
+            &copy; 2026 Hiral Chudasama. Deeply Encrypted &bull; Privacy by Design.
           </p>
           <div className="flex items-center gap-6">
              <span onClick={() => router.push("/policies")} className="text-[11px] font-bold cursor-pointer hover:text-[#6c5ce7] transition-colors text-[#64748b]">Privacy Policy</span>

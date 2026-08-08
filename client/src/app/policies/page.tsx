@@ -213,7 +213,7 @@ You acknowledge that Nexora does not actively monitor private communications. Yo
           
           <div className="mt-20 pt-8 border-t border-[#6c5ce7]/5 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-[11px] font-bold text-[#94a3b8] uppercase tracking-widest">
-              &copy; 2026 Nexora Systems. Secure &bull; Privacy by Design.
+              &copy; 2026 Hiral Chudasama. Secure &bull; Privacy by Design.
             </p>
             <div className="flex items-center gap-6">
                <span className="text-[11px] font-bold text-[#64748b] cursor-pointer hover:text-[#6c5ce7]">Privacy Policy</span>

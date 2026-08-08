@@ -245,7 +245,7 @@ export default function LandingPage() {
           style={{ background: "rgba(255,255,255,0.3)", backdropFilter: "blur(10px)" }}>
           <div className="flex items-center gap-3">
             <img src={APP_LOGO} alt="Nexora Logo" className="w-6 h-6 opacity-60" />
-            <p>&copy; 2026 Nexora Systems. Secure &bull; Privacy by Design.</p>
+            <p>&copy; 2026 Hiral Chudasama. Secure &bull; Privacy by Design.</p>
           </div>
           <div className="flex items-center gap-6">
             <motion.a whileHover={{ color: "#6c5ce7", scale: 1.05 }} onClick={() => router.push("/policies")} className="hover:underline transition-all cursor-pointer">Privacy Policy</motion.a>

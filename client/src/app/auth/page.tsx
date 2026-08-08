@@ -775,7 +775,7 @@ function AuthContent() {
               <p className="leading-relaxed max-w-sm" style={{ color: "var(--text-secondary)" }}>Secure real-time communication, unifying the world in a seamless glass interface.</p>
             </div>
           </div>
-          <div className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>&copy; {new Date().getFullYear()} Nexora Systems. Deeply Encrypted.</div>
+          <div className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>&copy; {new Date().getFullYear()} Hiral Chudasama. Deeply Encrypted.</div>
         </div>
 
         {/* Right Side: Auth Form */}

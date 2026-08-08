@@ -65,9 +65,9 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description,
     keywords: keywords.split(",").map((k: string) => k.trim()),
-    authors: [{ name: seo.author || "Nexora Systems", url: siteUrl }],
-    creator: seo.author || "Nexora Systems",
-    publisher: "Nexora Systems",
+    authors: [{ name: seo.author || "Hiral Chudasama", url: siteUrl }],
+    creator: seo.author || "Hiral Chudasama",
+    publisher: "Hiral Chudasama",
     category: seo.category || "Technology",
 
     // ── Indexing / Robots ──
@@ -169,7 +169,7 @@ export default function RootLayout({
     },
     author: {
       "@type": "Organization",
-      name: "Nexora Systems",
+      name: "Hiral Chudasama",
       url: siteUrl,
     },
     keywords: seo.keywords || "nexora, private chat, encrypted messaging",
